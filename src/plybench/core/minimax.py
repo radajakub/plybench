@@ -10,6 +10,9 @@ from plybench.common.enums import StateClass
 from plybench.common.serializable import Saveable, Serializable
 from plybench.core.game import TurnBasedGame, TurnBasedState
 
+# a depth-limited search's memo table, keyed by (player to move, position, remaining plies)
+type DepthMemo = dict[tuple[int, str, int], float]
+
 
 class AVQ(Serializable):
     @classmethod
@@ -108,10 +111,7 @@ def _minimax(state: sp.State, cache: AVQCache) -> float:
     q_star: dict[int, float] = {}
 
     for a in legal_actions:
-        child = state.clone()
-        child.apply_action(a.number)
-
-        v0 = _minimax(child, cache)
+        v0 = _minimax(TurnBasedState.child(state, a.number), cache)
         v = v0 if player == 0 else -v0
         q_star[a.number] = v
 
@@ -123,3 +123,25 @@ def _minimax(state: sp.State, cache: AVQCache) -> float:
 
     cache[player, observation.state] = AVQ(A=a_star, V=v_star, Q=q_star)
     return v_star if player == 0 else -v_star
+
+
+def depth_limited_value(state: sp.State, depth: int, memo: DepthMemo) -> float:
+    if TurnBasedState.is_terminal(state):
+        return TurnBasedState.get_rewards(state)[0]
+    if depth <= 0:
+        return 0.0
+
+    player = TurnBasedState.get_player(state)
+    # the observation string alone, not TurnBasedState.get_observation: the action histories that carries
+    # are not part of the key, and building them per node per depth is most of the cost of the search
+    key = (player, state.observation_string(player), depth)
+    cached = memo.get(key)
+    if cached is not None:
+        return cached
+
+    values = [depth_limited_value(TurnBasedState.child(state, action), depth - 1, memo) for action in state.legal_actions()]
+    # player 0's units, like _minimax's return value and unlike the AVQ it stores, which is the mover's. So
+    # player 1 minimises here rather than maximising, which holds only because these games are zero sum
+    value = max(values) if player == 0 else min(values)
+    memo[key] = value
+    return value

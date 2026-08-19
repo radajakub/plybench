@@ -13,6 +13,7 @@ import asyncio
 import httpx
 import pytest
 from openai import APIConnectionError, APIStatusError, APITimeoutError, RateLimitError
+from pydantic import BaseModel, ValidationError
 
 from plybench.llm.concurrency import safe_call
 from plybench.llm.errors import FailureKind, LLMCallError, LLMRateLimited, LLMTimedOut, as_call_error
@@ -52,6 +53,24 @@ def test_a_wrapped_error_is_catchable_without_importing_anyones_sdk():
     assert wrapped.__cause__ is original, "the SDK's own object stays reachable for anything that wants it"
     assert isinstance(as_call_error(APITimeoutError(request=REQUEST), FailureKind.TIMEOUT), LLMTimedOut)
     assert as_call_error(ValueError("x"), FailureKind.OTHER).kind is FailureKind.OTHER
+
+
+def test_a_schema_mismatch_is_unparseable_whatever_the_provider_guessed():
+    """The SDKs validate structured output inside the call, so the pydantic error is raised below
+    `error_kind`, which only knows transport types and falls through to OTHER. Observed live: 132 qwen
+    calls lost to a constrained-decoding loop, all filed as `other`, hiding the one distinction the kinds
+    exist to make -- a transport fault is retried, a schema fault needs a different prompt."""
+
+    class Answer(BaseModel):
+        labels: list[str]
+
+    with pytest.raises(ValidationError) as caught:
+        Answer.model_validate({"labels": "not a list"})
+    failure = caught.value
+
+    wrapped = as_call_error(failure, FailureKind.OTHER)
+    assert wrapped.kind is FailureKind.UNPARSEABLE
+    assert wrapped.__cause__ is failure
 
 
 def test_an_already_wrapped_error_is_not_wrapped_twice():

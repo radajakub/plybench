@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+import warnings
 from typing import Any
 
 from openai import APIConnectionError, APIError, APITimeoutError, AsyncOpenAI, RateLimitError
@@ -59,6 +60,10 @@ def _json_body(text: str) -> str:
     return _FENCE.sub("", text).strip()
 
 
+def silence_proxy_serializer_warnings() -> None:
+    warnings.filterwarnings("ignore", message="Pydantic serializer warnings", category=UserWarning)
+
+
 class MetacentrumLLMClient(LLMClient[MetacentrumLLMModel]):
     provider_key = Provider.METACENTRUM
 
@@ -70,6 +75,7 @@ class MetacentrumLLMClient(LLMClient[MetacentrumLLMModel]):
     def build(cls, config: LLMConfig) -> MetacentrumLLMClient | None:
         if config.metacentrum is None:
             return None
+        silence_proxy_serializer_warnings()
         client = AsyncOpenAI(
             api_key=config.metacentrum.api_key,
             base_url=config.metacentrum.base_url,

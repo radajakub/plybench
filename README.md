@@ -357,6 +357,10 @@ uv run python scripts/export.py --experiment ttt --out ttt.tar.gz   # export res
 uv run python scripts/play.py --game tic_tac_toe: --i human: --o optimal:stochastic=True  # play interactively
 ```
 
+For the solver-backed action-error, trace-consistency, and reasoning-mistake pipeline, including the
+recommended discovery/evaluation protocol and exact commands, see
+[Reasoning and action-error analysis](docs/reasoning-analysis.md).
+
 The full result set is large (tens of thousands of game transcripts) and is not stored in this
 repository. <!-- TODO: link the archived dataset (Zenodo DOI / Hugging Face) once published. -->
 

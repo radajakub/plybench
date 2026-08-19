@@ -10,37 +10,11 @@ from plybench.core.game import TurnBasedGame
 from plybench.core.interface import InterfaceAction, InterfaceObservation
 from plybench.core.output_strategy import OutputStrategy
 from plybench.core.prompt_adapter import PromptAdapter
-from plybench.llm import LLM, LLMCallOptions, LLMMessage, LLMResponse, ModelConfig, Provider
+from plybench.llm import LLM, LLMMessage, LLMResponse, ModelConfig, Provider
+from plybench.llm.model_config import options_to_string, parse_options
 from plybench.player.player import Player, PlayerIdentifier, PlayerOutput
 from plybench.trackers.player_tracker import PlayerTracker
 from plybench.trackers.step_data import StepData
-from plybench.utils.text import extract_params, to_bool
-
-
-def _parse_options(options_string: str) -> LLMCallOptions:
-    params = extract_params(options_string)
-    reasoning_effort = params.get("reasoning_effort")
-    if reasoning_effort is not None and reasoning_effort not in ("minimal", "low", "medium", "high", "xhigh", "max"):
-        raise ValueError(f"Invalid reasoning effort: {reasoning_effort}")
-    return LLMCallOptions(
-        reasoning_effort=reasoning_effort,
-        thinking_enabled=to_bool(params.get("thinking_enabled", False)),
-        max_tokens=int(params["max_tokens"]) if "max_tokens" in params else None,
-        temperature=float(params["temperature"]) if "temperature" in params else None,
-    )
-
-
-def options_to_string(options: LLMCallOptions) -> str:
-    parts: list[str] = []
-    if options.thinking_enabled:
-        parts.append("thinking_enabled=True")
-    if options.reasoning_effort is not None:
-        parts.append(f"reasoning_effort={options.reasoning_effort}")
-    if options.temperature is not None:
-        parts.append(f"temperature={options.temperature}")
-    if options.max_tokens is not None:
-        parts.append(f"max_tokens={options.max_tokens}")
-    return ",".join(parts)
 
 
 @dataclass(frozen=True, eq=True)
@@ -59,7 +33,9 @@ class LLMParams(PlayerParams):
         output_strategy = OutputStrategies.from_value(parts[1])
         if observation_type is None or output_strategy is None:
             raise ValueError(f"Invalid observation/strategy in {params_string!r}")
-        options = _parse_options(":".join(parts[4:]))
+        options = parse_options(":".join(parts[4:]))
+        if options.reasoning_effort is not None and options.reasoning_effort not in ("minimal", "low", "medium", "high", "xhigh", "max"):
+            raise ValueError(f"Invalid reasoning effort: {options.reasoning_effort}")
         provider = Provider.from_value(parts[2])
         if provider is None:
             raise ValueError(f"Invalid provider in {params_string!r}")

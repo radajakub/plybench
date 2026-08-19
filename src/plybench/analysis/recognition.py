@@ -91,7 +91,3 @@ def step_reasoning_trace(step: GameStep) -> str | None:
         return None
     trace = step.data.get("reasoning_trace")
     return trace if isinstance(trace, str) and trace else None
-
-
-def step_recognized(step: GameStep, game_key: str) -> bool:
-    return trace_mentions_original_game(step_reasoning_trace(step), game_key)

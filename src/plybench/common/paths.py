@@ -81,6 +81,27 @@ class TrainingHarnessPathBuilder(ExperimentPathBuilder):
         return self.results_dir / experiment
 
 
+class ReasoningPathBuilder(BasePathBuilder):
+    def __init__(self) -> None:
+        super().__init__()
+        self.key = "reasoning"
+
+    def experiment_dir(self, experiment: str) -> Path:
+        return _build_dir(self.base_analysis_dir / experiment / self.key)
+
+    def codebook(self, experiment: str, label: str = "") -> Path:
+        return self.experiment_dir(experiment) / (f"codebook.{label}.json" if label else "codebook.json")
+
+    def annotations(self, experiment: str) -> Path:
+        return self.experiment_dir(experiment) / "annotations.jsonl"
+
+    def consistency(self, experiment: str) -> Path:
+        return self.experiment_dir(experiment) / "consistency.jsonl"
+
+    def responses(self) -> Path:
+        return _build_dir(self.base_cache_dir / self.key / "responses")
+
+
 class MinimaxPathBuilder(BasePathBuilder):
     def __init__(self) -> None:
         super().__init__()

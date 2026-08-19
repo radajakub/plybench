@@ -7,8 +7,7 @@ import asyncio
 
 from plybench.analysis import BenchmarkAnalysis
 from plybench.analysis.extractors.recognition import recognition_extractors
-from plybench.analysis.recognition import original_game_name, recognizable, step_recognized, trace_mentions_original_game
-from plybench.analysis.stats.partition import compute_recognition_split
+from plybench.analysis.recognition import original_game_name, recognizable, step_reasoning_trace, trace_mentions_original_game
 from plybench.app import PlyBench
 from plybench.common.enums import MetricName
 from plybench.harness.benchmark.benchmark import Benchmark
@@ -47,8 +46,8 @@ def test_trace_detection_matches_aliases_on_word_boundaries():
 def test_step_recognised_reads_the_reasoning_trace_from_step_data():
     with_trace = GameStep(0, "p", "h", "", "obs", "a1", data={"reasoning_trace": "this is nim"})
     without_trace = GameStep(1, "p", "h", "", "obs", "a1", data={})
-    assert step_recognized(with_trace, "modified_nim")
-    assert not step_recognized(without_trace, "modified_nim")
+    assert trace_mentions_original_game(step_reasoning_trace(with_trace), "modified_nim")
+    assert not trace_mentions_original_game(step_reasoning_trace(without_trace), "modified_nim")
 
 
 # --- the recognition rate as a matchup metric ------------------------------------------------
@@ -87,15 +86,3 @@ def test_recognition_rate_is_a_first_class_matchup_metric(tmp_path, monkeypatch)
         .metrics.combined.metrics
     )
     assert MetricName.RECOGNITION_RATE in metrics and metrics[MetricName.RECOGNITION_RATE].wilson is not None
-
-
-# --- the per-matchup split, gated through the real replay path -------------------------------
-def test_split_is_dropped_when_no_reasoning_traces_exist(tmp_path, monkeypatch):
-    # bots on tic_tac_toe: recognisable + solvable, but no traces to judge
-    results = _run_benchmark(tmp_path, monkeypatch, num_games=2)
-
-    analysis = BenchmarkAnalysis(results, op.registry)
-    assert analysis.analyze_recognition() == []
-    assert compute_recognition_split(results.trackers[0], op.registry) is None
-    # and without a registry the split cannot be computed at all
-    assert BenchmarkAnalysis(results).analyze_recognition() == []

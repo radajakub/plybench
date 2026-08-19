@@ -11,7 +11,7 @@ from plybench.llm.llm_config import (
 )
 from plybench.llm.message import LLMMessage, MessageRole
 from plybench.llm.model import EmbeddingModel, EmbeddingTask, LLMModel
-from plybench.llm.model_config import EmbeddingModelConfig, ModelConfig
+from plybench.llm.model_config import EmbeddingModelConfig, ModelConfig, options_to_string, parse_options
 from plybench.llm.options import LLMCallOptions, ReasoningEffort
 from plybench.llm.providers.providers import Provider
 from plybench.llm.rate_limit import ModelLimits
@@ -44,6 +44,8 @@ __all__ = [
     "EmbeddingTask",
     "ModelConfig",
     "EmbeddingModelConfig",
+    "options_to_string",
+    "parse_options",
     "ModelLimits",
     "LLMCallOptions",
     "Provider",

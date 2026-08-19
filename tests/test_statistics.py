@@ -1,20 +1,13 @@
-"""The general statistical primitives: family dispatch, between-group tests, summary-level combination
-and single-predictor regression. Nothing here knows about games or moves."""
+"""The general statistical primitives: family dispatch and the between-group tests. Nothing here knows
+about games or moves."""
 
 from __future__ import annotations
 
 import pytest
 
 from plybench.analysis.statistics.bundle import bundle_for_family
-from plybench.analysis.statistics.comparison import (
-    combine_comparisons,
-    combine_independent,
-    compare_for_family,
-    mean_difference_test,
-    two_proportion_test,
-)
+from plybench.analysis.statistics.comparison import compare_for_family, mean_difference_test, two_proportion_test
 from plybench.analysis.statistics.distribution import Distribution
-from plybench.analysis.statistics.regression import fit_difference, linear_fit
 from plybench.common.enums import CIFamily
 
 
@@ -82,48 +75,3 @@ def test_family_dispatch_selects_the_right_intervals_and_test():
 
     assert compare_for_family(CIFamily.RATIO, Distribution([1, 1, 0]), Distribution([0, 0, 1])).test == "two_proportion_z"
     assert compare_for_family(CIFamily.MEAN, Distribution([1.0, 2.0, 3.0]), Distribution([4.0, 5.0, 6.0])).test == "welch_t"
-
-
-# --- combining independent estimates ---------------------------------------------------------
-def test_combine_independent_averages_values_and_propagates_error():
-    combined = combine_independent([(1.0, 0.5), (3.0, 0.5)])
-    assert combined.value == pytest.approx(2.0) and combined.k == 2
-    assert combined.se == pytest.approx((0.25 + 0.25) ** 0.5 / 2)  # sqrt(sum se^2) / k
-
-    assert combine_independent([]).value is None and combine_independent([]).k == 0
-
-
-def test_combine_comparisons_drops_the_undefined_ones():
-    usable = mean_difference_test(Distribution([10.0, 11.0, 12.0]), Distribution([1.0, 2.0, 3.0]))
-    unusable = mean_difference_test(Distribution([1.0]), Distribution([2.0, 3.0]))  # too small -> no diff/se
-    assert combine_comparisons([usable, unusable]).k == 1
-    assert combine_comparisons([unusable, unusable]).value is None
-
-
-# --- single-predictor regression --------------------------------------------------------------
-def test_linear_fit_recovers_a_known_slope():
-    fit = linear_fit([1.0, 2.0, 3.0, 4.0], [12.0, 14.0, 16.0, 18.0])  # y = 10 + 2x
-    assert fit.slope == pytest.approx(2.0) and fit.intercept == pytest.approx(10.0)
-    assert fit.r == pytest.approx(1.0) and fit.n == 4 and fit.defined
-
-
-def test_linear_fit_is_undefined_without_spread_or_enough_points():
-    assert not linear_fit([1.0, 1.0, 1.0, 1.0], [1.0, 2.0, 3.0, 4.0]).defined  # no x spread
-    assert not linear_fit([1.0, 2.0], [1.0, 2.0]).defined  # fewer than 3 points
-
-
-def test_linear_fit_rejects_unpaired_samples():
-    # guards the misalignment that silently drops observations when x and y are filtered differently
-    with pytest.raises(ValueError, match="paired observations"):
-        linear_fit([1.0, 2.0, 3.0], [1.0, 2.0])
-
-
-def test_fit_difference_signs_and_tests_the_slope_gap():
-    steep = linear_fit([1.0, 2.0, 3.0, 4.0], [10.0, 20.0, 30.0, 40.0])  # slope 10
-    shallow = linear_fit([1.0, 2.0, 3.0, 4.0], [1.0, 2.0, 3.0, 4.0])  # slope 1
-    shift = fit_difference(steep, shallow)
-    assert shift.delta_slope == pytest.approx(9.0) and shift.se == 0.0
-    assert shift.p_value is None  # both fits are exact, so the gap has no sampling error
-
-    undefined = fit_difference(steep, linear_fit([1.0, 1.0, 1.0], [1.0, 2.0, 3.0]))
-    assert undefined.delta_slope is None and not undefined.significant

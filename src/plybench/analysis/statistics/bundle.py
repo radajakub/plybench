@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import Any
 
 from plybench.analysis.statistics.distribution import Distribution
@@ -35,6 +36,15 @@ class CIBundle(Serializable):
 
         return cls(data["value"], data["n"], wilson=ci("wilson"), sem=ci("sem"), t=ci("t"), bootstrap=ci("bootstrap"))
 
+    def fmt(self, width: int = 8, interval: bool = False, count: bool = False) -> str:
+        if self.n == 0:
+            return f"{'NaN':>{width}s} (n=0)" if count else f"{'NaN':>{width}s}"
+
+        ci = (self.wilson or self.t or self.sem or self.bootstrap) if interval else None
+        bounds = f" [{ci.lower:.3f}, {ci.upper:.3f}]" if ci is not None else ""
+        suffix = f" (n={self.n})" if count else ""
+        return f"{self.value:{width}.4f}{bounds}{suffix}"
+
     def to_dict(self) -> dict[str, Any]:
         result: dict[str, Any] = {"value": self.value, "n": self.n}
         for key, interval in (("wilson", self.wilson), ("sem", self.sem), ("t", self.t), ("bootstrap", self.bootstrap)):
@@ -45,6 +55,10 @@ class CIBundle(Serializable):
 
 def ratio_bundle(distribution: Distribution, confidence: float = 0.95) -> CIBundle:
     return CIBundle(distribution.ratio, distribution.n, wilson=wilson_ci(distribution, confidence))
+
+
+def rate(indicators: Sequence[bool], confidence: float = 0.95) -> CIBundle:
+    return ratio_bundle(Distribution.from_values(indicators), confidence)
 
 
 def mean_bundle(distribution: Distribution, confidence: float = 0.95) -> CIBundle:

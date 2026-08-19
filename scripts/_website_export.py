@@ -127,7 +127,7 @@ def game_stats_json(game: GameTracker, player: PlayerConfig, replayer: TurnBased
         out["steps"] = [_raw_step_stats(step) for step in player_steps]
         return out
 
-    step_stats = replayer.replay_steps(game, player)
+    step_stats = replayer.replay_stats(game, player)
     optimality = Distribution([1.0 if s.is_optimal else 0.0 for s in step_stats])
     non_trivial = Distribution([1.0 if s.is_optimal else 0.0 for s in step_stats if s.state_class == StateClass.DECISION])
     regret = Distribution([s.regret for s in step_stats])

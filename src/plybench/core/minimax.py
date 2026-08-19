@@ -108,10 +108,7 @@ def _minimax(state: sp.State, cache: AVQCache) -> float:
     q_star: dict[int, float] = {}
 
     for a in legal_actions:
-        child = state.clone()
-        child.apply_action(a.number)
-
-        v0 = _minimax(child, cache)
+        v0 = _minimax(TurnBasedState.child(state, a.number), cache)
         v = v0 if player == 0 else -v0
         q_star[a.number] = v
 

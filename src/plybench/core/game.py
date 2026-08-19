@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from abc import ABC
+from collections.abc import Iterator
 from typing import Any
 
 import pyspiel as sp
@@ -57,6 +58,16 @@ class TurnBasedState:
     @staticmethod
     def get_legal_moves(state: sp.State, player: int) -> list[OpenSpielAction]:
         return [TurnBasedState._to_openspiel_action(state, player, number) for number in state.legal_actions(player)]
+
+    @staticmethod
+    def child(state: sp.State, action: int) -> sp.State:
+        successor = state.clone()
+        successor.apply_action(action)
+        return successor
+
+    @staticmethod
+    def children(state: sp.State) -> Iterator[sp.State]:
+        return (TurnBasedState.child(state, action) for action in state.legal_actions())
 
     @staticmethod
     def action_histories(state: sp.State, player: int) -> tuple[list[OpenSpielAction], list[OpenSpielAction]]:

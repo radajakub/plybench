@@ -6,6 +6,36 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+### Added
+
+- `ModelConfig.from_string` / `to_string` / `slug`, using the `<provider>:<model>[:<options>]` tail of a
+  player config, and `parse_options` / `options_to_string` exported from `plybench.llm`. An unknown
+  `reasoning_effort` now fails when the config is parsed rather than at the provider.
+- `ReplayedStep` carries the legal and optimal move strings of each replayed move; `TurnBasedReplayer`
+  gains `reward_range` and `probe`, and `ReplayerCache` builds one replayer per game config.
+- `CIBundle.fmt`, and `TurnBasedState.child` / `children`.
+
+### Changed
+
+- **Breaking:** `JudgedStep` is renamed to `ReplayedStep`; `TurnBasedReplayer.replay_steps` (which
+  returned `StepStats`) is renamed to `replay_stats`, and `replay_judged` to `replay_steps`.
+  `MoveRecord.from_replayed` replaces `collect_moves`.
+- A pydantic `ValidationError` raised inside a provider SDK is now classified as
+  `FailureKind.UNPARSEABLE`. New benchmark runs may therefore count some failures under a different
+  kind than runs recorded before this release.
+- `qwen-3.8-27b` on the Metacentrum provider is marked `weak_structured_output`, and the proxy's
+  repeated pydantic serializer warnings are silenced.
+
+### Removed
+
+- **Breaking:** partitioned analysis (`stats/partition.py`, `stats/move_features.py`,
+  `BenchmarkAnalysis.analyze_partition` / `analyze_recognition`, `--partition` / `--bins` in
+  `scripts/analyze.py`), the `analysis/studies/` package (scaling and cross-game comparison) with
+  `scripts/analyze_scaling.py` and `scripts/compare_games.py`, `statistics/regression.py`,
+  `CombinedEstimate` / `combine_independent` / `combine_comparisons`, and `recognition.step_recognized`.
+- The reasoning-trace and action-error analysis is no longer part of PlyBench; it lives in the
+  separate `plybench_analysis` package, which depends on this one.
+
 ## [2.0.1] - 2026-09-24
 
 ### Added

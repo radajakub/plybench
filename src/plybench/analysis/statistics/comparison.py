@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import math
-from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any
 
@@ -44,42 +43,6 @@ class GroupComparison:
 
 def _insufficient(test: str, n_a: int, n_b: int) -> GroupComparison:
     return GroupComparison(None, None, None, None, False, test, n_a, n_b)
-
-
-@dataclass(frozen=True)
-class CombinedEstimate:
-    """The unweighted mean of k independent point estimates (e.g. per-opponent or per-bin differences),
-    each with its own standard error, plus a two-sided z-test on that mean. The estimates are combined
-    at the summary level (never pooling the underlying samples): SE_mean = sqrt(sum(SE_i^2)) / k."""
-
-    value: float | None
-    se: float | None
-    p_value: float | None
-    significant: bool
-    k: int
-
-
-def combine_independent(estimates: list[tuple[float, float]], confidence: float = 0.95) -> CombinedEstimate:
-    """Combine independent (value, se) estimates by averaging the values and propagating their standard
-    errors as if independent. `estimates` should already exclude any entry whose value/se is undefined."""
-    if not estimates:
-        return CombinedEstimate(None, None, None, False, 0)
-
-    k = len(estimates)
-    mean = sum(value for value, _ in estimates) / k
-    se_mean = math.sqrt(sum(se**2 for _, se in estimates)) / k
-    if se_mean == 0:
-        return CombinedEstimate(mean, se_mean, None, False, k)
-
-    z = mean / se_mean
-    p_value = 2.0 * float(stats.norm.sf(abs(z)))
-    return CombinedEstimate(mean, se_mean, p_value, p_value < (1 - confidence), k)
-
-
-def combine_comparisons(comparisons: Sequence[GroupComparison], confidence: float = 0.95) -> CombinedEstimate:
-    """Average several independent differences (one per opponent, per bin, ...) at the summary level.
-    Comparisons whose difference or SE is undefined carry no information and are dropped."""
-    return combine_independent([(c.difference, c.se) for c in comparisons if c.difference is not None and c.se is not None], confidence)
 
 
 def two_proportion_test(a: Distribution, b: Distribution, confidence: float = 0.95) -> GroupComparison:

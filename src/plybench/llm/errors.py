@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
+from pydantic import ValidationError
+
 from plybench.utils.enums import ExtendedEnum
 
 
@@ -41,6 +43,10 @@ _SUBCLASSES: dict[FailureKind, Callable[[str], LLMCallError]] = {
 def as_call_error(error: Exception, kind: FailureKind) -> LLMCallError:
     if isinstance(error, LLMCallError):
         return error
+    if isinstance(error, ValidationError):
+        # the SDKs parse structured output themselves, so this is raised inside the call and never
+        # reaches a provider's `error_kind`, which only knows that SDK's own transport types
+        kind = FailureKind.UNPARSEABLE
     message = f"{type(error).__name__}: {error}"
     subclass = _SUBCLASSES.get(kind)
     wrapped = subclass(message) if subclass is not None else LLMCallError(kind, message)

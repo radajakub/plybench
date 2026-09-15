@@ -25,26 +25,24 @@
     { "value": "llm:state:text:gemini:gemini-3-flash:thinking_enabled=True", "enabled": true },
     { "value": "llm:state:text:gemini:gemini-3.1-pro:thinking_enabled=True", "enabled": true },
 
-    { "value": "llm:state:text:grok:grok-4.5:thinking_enabled=True,reasoning_effort=high", "enabled": true },
-    { "value": "llm:state:text:grok:grok-4.3:thinking_enabled=True,reasoning_effort=high", "enabled": true },
-    { "value": "llm:state:text:grok:grok-4.20-reasoning:thinking_enabled=True,reasoning_effort=high", "enabled": true },
+    { "value": "llm:state:text:grok:grok-4.5:thinking_enabled=True,reasoning_effort=high", "enabled": false },
+    { "value": "llm:state:text:grok:grok-4.3:thinking_enabled=True,reasoning_effort=high", "enabled": false },
+    { "value": "llm:state:text:grok:grok-4.20-reasoning:thinking_enabled=True,reasoning_effort=high", "enabled": false },
+    { "value": "llm:state:text:claude:claude-haiku-4.5:thinking_enabled=True,reasoning_effort=high", "enabled": false },
+    { "value": "llm:state:text:claude:claude-sonnet-4.6:thinking_enabled=True,reasoning_effort=high", "enabled": false },
+    { "value": "llm:state:text:claude:claude-sonnet-5:thinking_enabled=True,reasoning_effort=high", "enabled": false },
+    { "value": "llm:state:text:claude:claude-opus-4.8:thinking_enabled=True,reasoning_effort=high", "enabled": false },
+    { "value": "llm:state:text:claude:claude-opus-5:thinking_enabled=True,reasoning_effort=high", "enabled": false },
+    { "value": "llm:state:text:claude:claude-fable-5:thinking_enabled=True,reasoning_effort=high", "enabled": false },
+    { "value": "llm:state:text:mistral:mistral-medium-3.5:thinking_enabled=True,reasoning_effort=high", "enabled": false },
+    { "value": "llm:state:text:mistral:mistral-small-4:thinking_enabled=True,reasoning_effort=high", "enabled": false },
 
-    { "value": "llm:state:text:claude:claude-haiku-4.5:thinking_enabled=True,reasoning_effort=high", "enabled": true },
-    { "value": "llm:state:text:claude:claude-sonnet-4.6:thinking_enabled=True,reasoning_effort=high", "enabled": true },
-    { "value": "llm:state:text:claude:claude-sonnet-5:thinking_enabled=True,reasoning_effort=high", "enabled": true },
-    { "value": "llm:state:text:claude:claude-opus-4.8:thinking_enabled=True,reasoning_effort=high", "enabled": true },
-    { "value": "llm:state:text:claude:claude-opus-5:thinking_enabled=True,reasoning_effort=high", "enabled": true },
-    { "value": "llm:state:text:claude:claude-fable-5:thinking_enabled=True,reasoning_effort=high", "enabled": true },
-
-    { "value": "llm:state:text:mistral:mistral-medium-3.5:thinking_enabled=True,reasoning_effort=high", "enabled": true },
-    { "value": "llm:state:text:mistral:mistral-small-4:thinking_enabled=True,reasoning_effort=high", "enabled": true },
-
-    { "value": "llm:actions:text:metacentrum:gemma-4:thinking_enabled=True,reasoning_effort=high", "enabled": true },
+    { "value": "llm:state:text:metacentrum:gemma-4:thinking_enabled=True,reasoning_effort=high", "enabled": true },
     { "value": "llm:state:text:metacentrum:gpt-oss-120b:thinking_enabled=True,reasoning_effort=high", "enabled": true },
     { "value": "llm:state:text:metacentrum:qwen-3.5-122b:thinking_enabled=True", "enabled": true },
     { "value": "llm:state:text:metacentrum:glm-5.2:thinking_enabled=True", "enabled": true },
     { "value": "llm:state:text:metacentrum:kimi-k3:thinking_enabled=True,reasoning_effort=max", "enabled": true },
-    { "value": "llm:actions:text:metacentrum:qwen-3.8-27b:thinking_enabled=True,reasoning_effort=xhigh", "enabled": true }
+    { "value": "llm:state:text:metacentrum:qwen-3.8-27b:thinking_enabled=True,reasoning_effort=xhigh", "enabled": true }
   ],
   "num_games": 100
 }

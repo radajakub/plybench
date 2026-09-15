@@ -2,11 +2,16 @@
   "game_configs": [{ "value": "connect_four:", "enabled": true }],
   "player_configs": [
     { "value": "llm:actions:text:openai:gpt-5.4:thinking_enabled=True,reasoning_effort=high", "enabled": true },
+
     { "value": "llm:actions:text:gemini:gemini-3.1-pro:thinking_enabled=True", "enabled": true },
-    { "value": "llm:actions:text:grok:grok-4.5:thinking_enabled=True,reasoning_effort=high", "enabled": true },
-    { "value": "llm:actions:text:claude:claude-opus-5:thinking_enabled=True,reasoning_effort=high", "enabled": true },
-    { "value": "llm:actions:text:claude:claude-fable-5:thinking_enabled=True,reasoning_effort=high", "enabled": true },
-    { "value": "llm:actions:text:mistral:mistral-medium-3.5:thinking_enabled=True,reasoning_effort=high", "enabled": true },
+
+    { "value": "llm:actions:text:grok:grok-4.5:thinking_enabled=True,reasoning_effort=high", "enabled": false },
+
+    { "value": "llm:actions:text:claude:claude-opus-5:thinking_enabled=True,reasoning_effort=high", "enabled": false },
+    { "value": "llm:actions:text:claude:claude-fable-5:thinking_enabled=True,reasoning_effort=high", "enabled": false },
+
+    { "value": "llm:actions:text:mistral:mistral-medium-3.5:thinking_enabled=True,reasoning_effort=high", "enabled": false },
+
     { "value": "llm:actions:text:metacentrum:glm-5.2:thinking_enabled=True", "enabled": true },
     { "value": "llm:actions:text:metacentrum:kimi-k3:thinking_enabled=True,reasoning_effort=max", "enabled": true },
     { "value": "llm:actions:text:metacentrum:qwen-3.8-27b:thinking_enabled=True,reasoning_effort=xhigh", "enabled": true }

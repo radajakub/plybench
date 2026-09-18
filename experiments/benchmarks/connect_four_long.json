@@ -1,0 +1,6 @@
+{
+  "game_configs": [{ "value": "connect_four:", "enabled": true }],
+  "player_configs": [{ "value": "llm:actions:text:gemini:gemini-3.8-flash:thinking_enabled=True,reasoning_effort=high", "enabled": true }],
+  "opponents": [{ "value": "mcts:max_simulations=5000,rollout_count=1,uct_c=1.41", "enabled": true }],
+  "num_games": 100
+}

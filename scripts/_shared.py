@@ -43,11 +43,10 @@ def apply_model_limits(op: PlyBench, scale: float = 1.0) -> None:
             op.llm.set_model_limits(provider, model_name, limits.scaled(scale) if scale != 1.0 else limits)
 
 
-def build_op(notif_enabled: bool = False, concurrency: int | None = None, limit_scale: float = 1.0) -> PlyBench:
+def build_op(concurrency: int | None = None, limit_scale: float = 1.0) -> PlyBench:
     # PlyBench's env config self-disables providers whose keys are absent, so bot-only scripts work offline too
-    # notif_enabled is passed to the PlyBench constructor, which in turn passes it to the NotificationClient constructor
     # concurrency caps in-flight requests per provider -- the only limit that maps to an API rate quota
-    op = PlyBench(notif_enabled=notif_enabled, concurrency=concurrency)
+    op = PlyBench(concurrency=concurrency)
     # models are registered without limits, so quotas are applied here rather than by the package
     apply_model_limits(op, limit_scale)
     return op

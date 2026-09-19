@@ -116,7 +116,8 @@ METACENTRUM_API_KEY=...
 
 HF_TOKEN=...   # only for gated/private HuggingFace models
 
-NTFY_URL=...   # optional, enables progress notifications (see Notifications)
+NTFY_URL=...     # optional, ntfy server base url -- enables progress notifications (see Notifications)
+NTFY_TOPIC=...
 NTFY_TOKEN=...
 ```
 
@@ -177,17 +178,30 @@ it to the bootstrap list. Needs the `huggingface` extra installed.
 ### Notifications
 
 Long benchmark runs can push progress notifications to [ntfy.sh](https://ntfy.sh) (or any
-compatible endpoint) — one message per finished matchup, with elapsed time, rounds completed and an
-ETA derived from round throughput, plus a final summary. Set `NTFY_URL` (and `NTFY_TOKEN` for
-protected topics) and opt in per run:
+compatible endpoint) through [clankers](https://pypi.org/project/clankers/). Set `NTFY_URL` (the
+server base url) and `NTFY_TOPIC`, plus `NTFY_TOKEN` for protected topics, then opt in per run with
+`scripts/run.py --notify`. A run then reports:
+
+- its start, so you know the job actually launched;
+- every finished matchup, as a neutral message with elapsed time, matchups and rounds completed and
+  an ETA derived from round throughput;
+- its outcome — the matchups and rounds completed on success, or how far it got plus the exception
+  on a crash — with the total duration attached.
+
+PlyBench itself sends nothing; use clankers directly for your own messages:
 
 ```python
-op = PlyBench(notif_enabled=True)
-op.notif.notify("hello")  # no-op when disabled or unconfigured
+import clankers
+
+clankers.blastthem("halfway there")  # neutral; rogerroger succeeded, uhoh failed
+
+with clankers.Engage("my experiment", success=lambda: f"my experiment: {len(rows)} rows"):
+    ...  # reports the start, the duration and the outcome, a crash included
 ```
 
-Notifications are off unless `notif_enabled=True`, and failures are logged as warnings rather than
-interrupting the run.
+clankers reads its configuration from `.env`, `NTFY_`-prefixed environment variables and
+`~/.config/clankers/config.toml`. A missing configuration or an unreachable server is logged as a
+warning and never interrupts the run.
 
 ## Extending PlyBench
 
@@ -324,7 +338,7 @@ uv run python scripts/run.py --name smoke \
     --opponents optimal:stochastic=True \
     --num-games 10
 
-# push progress notifications for a long run (needs NTFY_URL, see Notifications)
+# push progress notifications for a long run (needs NTFY_URL and NTFY_TOPIC, see Notifications)
 uv run python scripts/run.py --experiment ttt --notify
 ```
 

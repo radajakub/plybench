@@ -6,6 +6,8 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-09-19
+
 ### Changed
 
 - Notifications are now delivered by [clankers](https://pypi.org/project/clankers/) (>= 2.0.0)

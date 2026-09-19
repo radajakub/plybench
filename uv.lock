@@ -358,6 +358,19 @@ wheels = [
 ]
 
 [[package]]
+name = "clankers"
+version = "2.0.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "python-dotenv" },
+    { name = "requests" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/98/89/7b3fd46f6d827e7552ca1ed1250af21615afe71ce841d9ff1236d312b1a6/clankers-2.0.0.tar.gz", hash = "sha256:6468b06def5e38fb9933b5d289980ccf2dffd32cec456077facf66afa08a40ec", size = 40009, upload-time = "2026-09-19T07:06:18.837Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/c2/5e/2822f79bdf5684344654e7ca0eed3265dfe66883e1f684c99c863cd72c6d/clankers-2.0.0-py3-none-any.whl", hash = "sha256:dd83eb4913705b4b3b8bb799508775d184908b7bd59ae87cf136dc4610dcf9b0", size = 14732, upload-time = "2026-09-19T07:06:17.404Z" },
+]
+
+[[package]]
 name = "click"
 version = "8.4.2"
 source = { registry = "https://pypi.org/simple" }
@@ -1747,11 +1760,11 @@ name = "plybench"
 version = "1.2.0"
 source = { editable = "." }
 dependencies = [
+    { name = "clankers" },
     { name = "numpy" },
     { name = "open-spiel" },
     { name = "pydantic" },
     { name = "python-dotenv" },
-    { name = "requests" },
     { name = "scipy" },
     { name = "tqdm" },
 ]
@@ -1807,6 +1820,7 @@ dev = [
 requires-dist = [
     { name = "anthropic", extras = ["aiohttp"], marker = "extra == 'all'", specifier = ">=0.120.2" },
     { name = "anthropic", extras = ["aiohttp"], marker = "extra == 'anthropic'", specifier = ">=0.120.2" },
+    { name = "clankers", specifier = ">=2.0.0" },
     { name = "google-genai", marker = "extra == 'all'", specifier = ">=2.14.0" },
     { name = "google-genai", marker = "extra == 'gemini'", specifier = ">=2.14.0" },
     { name = "matplotlib", marker = "extra == 'all'", specifier = ">=3.10.0" },
@@ -1821,7 +1835,6 @@ requires-dist = [
     { name = "openai", marker = "extra == 'openai'", specifier = ">=2.48.0" },
     { name = "pydantic", specifier = ">=2.13.4" },
     { name = "python-dotenv", specifier = ">=1.2.2" },
-    { name = "requests", specifier = ">=2.34.2" },
     { name = "scipy", specifier = ">=1.18.0" },
     { name = "torch", marker = "extra == 'all'", specifier = ">=2.4.0" },
     { name = "torch", marker = "extra == 'huggingface'", specifier = ">=2.4.0" },

@@ -3,23 +3,14 @@ from __future__ import annotations
 import time
 from dataclasses import dataclass, field
 
+import clankers
+from clankers.core.context import MessageBuilder
+from clankers.core.models import format_duration
+
 from plybench.callbacks.benchmark_callbacks import BenchmarkCallbacks
 from plybench.configs.game_config import GameConfig
 from plybench.configs.player_config import PlayerConfig
-from plybench.harness.results import BenchmarkResults
-from plybench.observability.notifications import NotificationClient
 from plybench.trackers.result_tracker import ResultTracker
-
-
-def _format_duration(seconds: float) -> str:
-    total = int(seconds)
-    hours, remainder = divmod(total, 3600)
-    minutes, secs = divmod(remainder, 60)
-    if hours:
-        return f"{hours}h{minutes:02d}m"
-    if minutes:
-        return f"{minutes}m{secs:02d}s"
-    return f"{secs}s"
 
 
 @dataclass
@@ -32,9 +23,22 @@ class _NotificationProgress:
     start: float = 0.0
     preexisting: dict[tuple[str, str, str], set[int]] = field(default_factory=dict)
 
+    def eta(self, elapsed: float) -> float | None:
+        rounds_left = self.fresh_rounds_total - self.fresh_rounds_done
+        if rounds_left <= 0 or self.fresh_rounds_done <= 0 or elapsed <= 0:
+            return None
+        return rounds_left / (self.fresh_rounds_done / elapsed)
 
-def notification_benchmark_callbacks(notif: NotificationClient, experiment: str) -> BenchmarkCallbacks:
-    # push a notification as each matchup finishes and a final summary. matchups all share the per-provider
+    def describe(self) -> str:
+        parts = [f"{self.done_matchups}/{self.total_matchups} matchups"]
+        if self.fresh_rounds_total:
+            parts.append(f"{self.fresh_rounds_done}/{self.fresh_rounds_total} rounds")
+        return ", ".join(parts)
+
+
+def notification_benchmark_callbacks(experiment: str) -> tuple[BenchmarkCallbacks, MessageBuilder]:
+    # push a neutral notification as each matchup finishes; the returned builder renders the progress so far, so the
+    # `clankers.Engage` wrapper in run.py can report it on success *and* on a crash. matchups all share the per-provider
     # LLM-call semaphore and finish clustered near the end, so the ETA is derived from *round* throughput
     # (rounds drain through that pipe steadily) rather than from matchup completions.
     state = _NotificationProgress()
@@ -62,27 +66,19 @@ def notification_benchmark_callbacks(notif: NotificationClient, experiment: str)
 
     def on_matchup_end(result_tracker: ResultTracker) -> None:
         state.done_matchups += 1
-        remaining = max(state.total_matchups - state.done_matchups, 0)
         elapsed = time.monotonic() - state.start
         label = f"{result_tracker.game.path}: {result_tracker.i.path} vs {result_tracker.o.path}"
-        parts = [f"[{experiment}] matchup done ({state.done_matchups}/{state.total_matchups}, {remaining} left): {label}", f"elapsed {_format_duration(elapsed)}"]
-        rounds_left = state.fresh_rounds_total - state.fresh_rounds_done
-        if rounds_left > 0 and state.fresh_rounds_done > 0 and elapsed > 0:
-            eta = rounds_left / (state.fresh_rounds_done / elapsed)
-            parts.append(f"est. {_format_duration(eta)} left")
-        if state.fresh_rounds_total:
-            parts.append(f"{state.fresh_rounds_done}/{state.fresh_rounds_total} rounds done")
-        notif.notify(" | ".join(parts))
+        parts = [f"[{experiment}] matchup done ({state.describe()}): {label}"]
+        eta = state.eta(elapsed)
+        if eta is not None:
+            parts.append(f"est. {format_duration(eta)} left")
+        # clankers renders the elapsed time itself from `duration`
+        clankers.blastthem(" | ".join(parts), elapsed)
 
-    def on_benchmark_end(results: BenchmarkResults) -> None:
-        complete = sum(1 for tracker in results.trackers if tracker.is_complete())
-        elapsed = time.monotonic() - state.start
-        notif.notify(f"[{experiment}] benchmark finished: {complete}/{len(results.trackers)} matchups complete in {_format_duration(elapsed)}")
-
-    return BenchmarkCallbacks(
+    callbacks = BenchmarkCallbacks(
         benchmark_start_callback=on_benchmark_start,
         matchup_start_callback=on_matchup_start,
         round_complete_callback=on_round_complete,
         matchup_end_callback=on_matchup_end,
-        benchmark_end_callback=on_benchmark_end,
     )
+    return callbacks, state.describe

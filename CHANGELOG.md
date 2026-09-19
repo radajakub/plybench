@@ -6,6 +6,27 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+### Changed
+
+- Notifications are now delivered by [clankers](https://pypi.org/project/clankers/) (>= 2.0.0)
+  instead of the in-repo `NotificationClient`. `NTFY_URL` is now the _server base_ url (e.g.
+  `https://ntfy.sh`) and the new `NTFY_TOPIC` is required; a token still comes from `NTFY_TOKEN` and
+  an optional request timeout from `NTFY_TIMEOUT`. clankers also reads
+  `~/.config/clankers/config.toml`, and its `.env` values take precedence over the process
+  environment (the reverse of the old client).
+- `scripts/run.py --notify` wraps the run in `clankers.Engage`, which announces the start and reports
+  the duration and outcome at the end. Both closing messages are built from the live progress, so a
+  success reports the matchups and rounds completed and a crash reports how far the run got before
+  the exception.
+- Per-matchup progress is sent as a neutral `blastthem` message rather than a success one; only the
+  finished run reports success.
+
+### Removed
+
+- `plybench.observability.notifications` (`NotificationClient`), the `PlyBench.notif` property and
+  the `PlyBench(notif_enabled=...)` argument. Send notifications with `clankers` directly.
+- `requests` as a direct dependency; it now arrives through clankers.
+
 ## [1.2.0]
 
 ### Added

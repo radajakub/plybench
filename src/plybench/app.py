@@ -2,13 +2,12 @@ from __future__ import annotations
 
 from plybench.games.builtins import register_builtin_games
 from plybench.llm import LLM, LLMConfig
-from plybench.observability.notifications import NotificationClient
 from plybench.player.builtins import register_builtin_players
 from plybench.registry import Registry
 
 
 class PlyBench:
-    def __init__(self, llm_config: LLMConfig | None = None, hf_models: list[str] | None = None, notif_enabled: bool = False, concurrency: int | None = None) -> None:
+    def __init__(self, llm_config: LLMConfig | None = None, hf_models: list[str] | None = None, concurrency: int | None = None) -> None:
         self._registry = Registry()
         # hf_models declares which local HuggingFace models this environment uses, and concurrency caps
         # each provider's in-flight requests; both feed the default env config only (an explicit
@@ -17,8 +16,6 @@ class PlyBench:
         self._llm = LLM(config)
         # download/verify any provider-local resources (e.g. HuggingFace models) up front
         self._llm.bootstrap()
-
-        self._notification_client = NotificationClient.from_env(enabled=notif_enabled)
 
         register_builtin_games(self._registry)
         register_builtin_players(self._registry, self._llm)
@@ -30,7 +27,3 @@ class PlyBench:
     @property
     def llm(self) -> LLM:
         return self._llm
-
-    @property
-    def notif(self) -> NotificationClient:
-        return self._notification_client

@@ -127,10 +127,10 @@ class ResultTracker(Saveable):
             raise
 
     def get_completed_games(self) -> list[int]:
-        return list(self.completed)
+        return sorted(self.completed)
 
     def get_missing_games(self) -> list[int]:
-        return list(set(range(1, self.n + 1)) - self.completed)
+        return sorted(set(range(1, self.n + 1)) - self.completed)
 
     def is_game_complete(self, game_round: int) -> bool:
         return game_round in self.completed

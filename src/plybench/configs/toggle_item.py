@@ -12,6 +12,10 @@ class ToggleItem(Serializable):
     value: str
     enabled: bool
 
+    @staticmethod
+    def extract_values(items: list[ToggleItem]) -> list[str]:
+        return [item.value for item in items if item.enabled]
+
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> ToggleItem:
         return cls(data["value"], to_bool(data["enabled"]))

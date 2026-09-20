@@ -10,8 +10,8 @@ from plybench.common.paths import BenchmarkPathBuilder
 from plybench.common.progress import track
 from plybench.configs.benchmark_config import BenchmarkConfig
 from plybench.configs.matchup import Matchup
-from plybench.harness.matchup import run_matchup
 from plybench.harness.benchmark.results import BenchmarkResults
+from plybench.harness.matchup import run_matchup_concurrent
 from plybench.trackers.result_tracker import ResultTracker
 
 
@@ -97,11 +97,11 @@ class Benchmark:
             self.num_games,
         )
 
-        tracker = await run_matchup(
+        tracker = await run_matchup_concurrent(
             self.op,
             matchup,
             game_callbacks=game_callbacks,
-            benchmark_callbacks=benchmark_callbacks,
+            matchup_callbacks=benchmark_callbacks,
             path_builder=self.path_builder,
             experiment=self.experiment,
             max_concurrent=concurrency,

@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
+from abc import ABC
 from pathlib import Path
 from typing import Any
 
 from plybench.configs.game_config import GameConfig
 from plybench.configs.player_config import PlayerConfig
+from plybench.configs.training_run import EpochPhase, TrainingRun
 
 
 def _build_dir(dir_name: str | Path) -> Path:
@@ -24,27 +25,9 @@ class BasePathBuilder(ABC):
 
 
 class ExperimentPathBuilder(BasePathBuilder):
-    @abstractmethod
-    def experiment_path(self, experiment_name: str) -> Path:
-        raise NotImplementedError
-
-    @abstractmethod
-    def game_base(self, experiment: str, game: GameConfig, i: PlayerConfig, o: PlayerConfig, num_games: int) -> Path:
-        raise NotImplementedError
-
-    @abstractmethod
-    def game_file(self, base: Path, game_round: int) -> Path:
-        raise NotImplementedError
-
-    @abstractmethod
-    def metadata(self, base: Path) -> Path:
-        raise NotImplementedError
-
-
-class BenchmarkPathBuilder(ExperimentPathBuilder):
-    def __init__(self) -> None:
+    def __init__(self, key: str) -> None:
         super().__init__()
-        self.key = "benchmarks"
+        self.key = key
         self.experiments_dir = _build_dir(self.base_experiments_dir / self.key)
         self.results_dir = _build_dir(self.base_results_dir / self.key)
         self.plots_dir = _build_dir(self.base_plots_dir / self.key)
@@ -62,6 +45,40 @@ class BenchmarkPathBuilder(ExperimentPathBuilder):
 
     def metadata(self, base: Path) -> Path:
         return base / "metadata.json"
+
+
+class BenchmarkPathBuilder(ExperimentPathBuilder):
+    def __init__(self) -> None:
+        super().__init__("benchmarks")
+
+
+class TrainingHarnessPathBuilder(ExperimentPathBuilder):
+    def __init__(self) -> None:
+        super().__init__("training")
+
+    def run_dir(self, experiment: str, run: TrainingRun) -> Path:
+        return self.results_dir / experiment / run.game.path / f"{run.trainee.path}_vs_{run.trainer.path}" / f"replicate_{run.replicate}"
+
+    def manifest(self, experiment: str, run: TrainingRun) -> Path:
+        return self.run_dir(experiment, run) / "run.json"
+
+    def epoch_dir(self, experiment: str, run: TrainingRun, epoch: int) -> Path:
+        return self.run_dir(experiment, run) / f"epoch_{epoch}"
+
+    def learner_dir(self, experiment: str, run: TrainingRun, epoch: int) -> Path:
+        return self.epoch_dir(experiment, run, epoch) / "learner"
+
+    def checkpoint(self, experiment: str, run: TrainingRun, epoch: int) -> Path:
+        return self.epoch_dir(experiment, run, epoch) / "checkpoint"
+
+    def scope(self, experiment: str, phase: EpochPhase) -> str:
+        # every phase of every epoch is an ordinary matchup; the run coordinates ride along in the
+        # experiment segment so ResultTracker keeps its per-game resume without knowing about training
+        return str((self.epoch_dir(experiment, phase.run, phase.epoch.index) / phase.dir_name).relative_to(self.results_dir))
+
+    def game_base(self, experiment: str, game: GameConfig, i: PlayerConfig, o: PlayerConfig, num_games: int) -> Path:
+        # `experiment` is a scope(), which already names the game, the players and the phase
+        return self.results_dir / experiment
 
 
 class MinimaxPathBuilder(BasePathBuilder):

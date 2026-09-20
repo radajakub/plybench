@@ -16,7 +16,7 @@ from plybench.configs.benchmark_config import BenchmarkConfig, ToggleItem
 from plybench.configs.matchup import Matchup
 from plybench.configs.player_params import PlayerParams
 from plybench.harness.benchmark.benchmark import Benchmark
-from plybench.harness.matchup import run_matchup
+from plybench.harness.matchup import run_matchup_concurrent
 from plybench.llm import LLMConfig
 from plybench.player.player import Player, PlayerOutput
 from plybench.player.spec import PlayerSpec
@@ -35,7 +35,7 @@ def test_run_matchup_persists_and_resumes(tmp_path, monkeypatch):
     starts: list[int] = []
     callbacks = BenchmarkCallbacks(round_start_callback=lambda gc, i, o, rnd: starts.append(rnd))
 
-    tracker = asyncio.run(run_matchup(op, Matchup(game, i, o, 2), benchmark_callbacks=callbacks, experiment="exp", max_concurrent=1))
+    tracker = asyncio.run(run_matchup_concurrent(op, Matchup(game, i, o, 2), matchup_callbacks=callbacks, experiment="exp", max_concurrent=1))
 
     assert tracker.is_complete()
     assert sorted(starts) == [1, 2]
@@ -45,7 +45,7 @@ def test_run_matchup_persists_and_resumes(tmp_path, monkeypatch):
 
     # re-run the identical matchup: already complete, so no round is played again
     starts.clear()
-    resumed = asyncio.run(run_matchup(op, Matchup(game, i, o, 2), benchmark_callbacks=callbacks, experiment="exp", max_concurrent=1))
+    resumed = asyncio.run(run_matchup_concurrent(op, Matchup(game, i, o, 2), matchup_callbacks=callbacks, experiment="exp", max_concurrent=1))
     assert resumed.is_complete()
     assert starts == []
 
@@ -193,6 +193,6 @@ def test_external_agent_plays_through_registry(tmp_path, monkeypatch):
     agent = agent_op.registry.player_config("firstmove:")
     baseline = agent_op.registry.player_config("random:distribution=uniform")
 
-    tracker = asyncio.run(run_matchup(agent_op, Matchup(game, agent, baseline, 2), experiment="agent_exp", max_concurrent=1))
+    tracker = asyncio.run(run_matchup_concurrent(agent_op, Matchup(game, agent, baseline, 2), experiment="agent_exp", max_concurrent=1))
     assert tracker.is_complete()
     assert all(not step.move.startswith("FAIL") for game_tracker in tracker.games if game_tracker for step in game_tracker.steps)

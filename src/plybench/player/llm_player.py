@@ -13,6 +13,7 @@ from plybench.core.prompt_adapter import PromptAdapter
 from plybench.llm import LLM, LLMCallOptions, LLMMessage, LLMResponse, ModelConfig, Provider
 from plybench.player.player import Player, PlayerIdentifier, PlayerOutput
 from plybench.trackers.player_tracker import PlayerTracker
+from plybench.trackers.step_data import StepData
 from plybench.utils.text import extract_params, to_bool
 
 
@@ -123,13 +124,4 @@ class LLMPlayer(Player):
 
 class LLMPlayerTracker(PlayerTracker):
     def record(self, player_output: PlayerOutput) -> dict[str, Any]:
-        data: dict[str, Any] = {}
-        if player_output.reasoning_trace:
-            data["reasoning_trace"] = player_output.reasoning_trace
-        if player_output.full_output:
-            data["full_output"] = player_output.full_output
-        if player_output.system_message:
-            data["system_message"] = player_output.system_message
-        if player_output.prompt_message:
-            data["prompt_message"] = player_output.prompt_message
-        return data
+        return StepData.from_output(player_output).to_dict()

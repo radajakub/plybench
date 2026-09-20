@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from pathlib import Path
 
 
 class PlayerParams(ABC):
@@ -16,5 +17,15 @@ class PlayerParams(ABC):
     @property
     @abstractmethod
     def path_suffix(self) -> str:
-        """The player-specific part of the result path (may be empty); PlayerConfig prefixes the key."""
+        raise NotImplementedError
+
+
+class CheckpointedParams(PlayerParams):
+    @property
+    @abstractmethod
+    def checkpoint(self) -> Path | None:
+        raise NotImplementedError
+
+    @abstractmethod
+    def with_checkpoint(self, checkpoint: Path) -> CheckpointedParams:
         raise NotImplementedError

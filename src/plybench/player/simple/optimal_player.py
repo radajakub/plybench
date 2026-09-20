@@ -28,11 +28,15 @@ class OptimalParams(PlayerParams):
         return cls(stochastic=to_bool(params.get("stochastic", False)), eps=float(params.get("eps", 0)))
 
     def to_string(self) -> str:
-        return f"stochastic={self.stochastic}"
+        # eps is part of what this opponent IS, so it has to round-trip and land in every record; it is
+        # appended only when set, which keeps every existing `stochastic=...` string and path unchanged
+        base = f"stochastic={self.stochastic}"
+        return f"{base},eps={self.eps}" if self.eps else base
 
     @property
     def path_suffix(self) -> str:
-        return "stochastic" if self.stochastic else "deterministic"
+        base = "stochastic" if self.stochastic else "deterministic"
+        return f"{base}_eps{self.eps}" if self.eps else base
 
 
 class Judgeable(ABC):

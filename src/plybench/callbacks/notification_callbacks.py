@@ -8,8 +8,11 @@ from clankers.core.context import MessageBuilder
 from clankers.core.models import format_duration
 
 from plybench.callbacks.benchmark_callbacks import BenchmarkCallbacks
+from plybench.callbacks.console_callbacks import PhaseKey
+from plybench.callbacks.training_callbacks import TrainingCallbacks
 from plybench.configs.game_config import GameConfig
 from plybench.configs.player_config import PlayerConfig
+from plybench.configs.training_run import Epoch, EpochPhase, TrainingRun
 from plybench.trackers.result_tracker import ResultTracker
 
 
@@ -80,5 +83,89 @@ def notification_benchmark_callbacks(experiment: str) -> tuple[BenchmarkCallback
         matchup_start_callback=on_matchup_start,
         round_complete_callback=on_round_complete,
         matchup_end_callback=on_matchup_end,
+    )
+    return callbacks, state.describe
+
+
+@dataclass
+class _TrainingProgress:
+    num_testers: int = 0
+    epochs_done: int = 0
+    # every round the matrix will ever play, known exactly per run the moment the run starts
+    total_rounds: int = 0
+    # rounds already on disk, so the ETA paces on what this process actually plays
+    resumed_rounds: int = 0
+    fresh_rounds_done: int = 0
+    start: float = 0.0
+    preexisting: dict[PhaseKey, set[int]] = field(default_factory=dict)
+
+    @property
+    def playable(self) -> int:
+        return self.total_rounds - self.resumed_rounds
+
+    def eta(self, elapsed: float) -> float | None:
+        rounds_left = self.playable - self.fresh_rounds_done
+        if rounds_left <= 0 or self.fresh_rounds_done <= 0 or elapsed <= 0:
+            return None
+        return rounds_left / (self.fresh_rounds_done / elapsed)
+
+    def describe(self) -> str:
+        return f"{self.epochs_done} epoch(s), {self.fresh_rounds_done}/{self.playable} rounds"
+
+
+def notification_training_callbacks(experiment: str) -> tuple[TrainingCallbacks, MessageBuilder]:
+    # push a notification as each epoch finishes -- the unit a training run makes progress in, and the
+    # point at which a checkpoint exists to resume from. Unlike a benchmark the denominator is exact:
+    # a run's schedule says how many rounds it will ever play, so the ETA is honest from the first epoch
+    state = _TrainingProgress()
+
+    def key(phase: EpochPhase) -> PhaseKey:
+        return (phase.run.key, phase.epoch.index, phase.dir_name)
+
+    def on_training_start(game_configs: list[str], player_configs: list[str], trainer_configs: list[str], tester_configs: list[str]) -> None:
+        del game_configs, player_configs, trainer_configs
+        state.num_testers = len(tester_configs)
+        state.epochs_done = 0
+        state.total_rounds = 0
+        state.resumed_rounds = 0
+        state.fresh_rounds_done = 0
+        state.start = time.monotonic()
+        state.preexisting.clear()
+
+    def on_run_start(run: TrainingRun) -> None:
+        schedule = run.training_config
+        # epoch 0 is evaluated but never trained, so there is one more evaluation round than training one
+        training = schedule.num_epochs * schedule.num_training_games
+        testing = (schedule.num_epochs + 1) * state.num_testers * schedule.num_test_games
+        state.total_rounds += training + testing
+
+    def on_phase_start(result_tracker: ResultTracker, phase: EpochPhase) -> None:
+        preexisting = set(result_tracker.get_completed_games())
+        state.preexisting[key(phase)] = preexisting
+        state.resumed_rounds += len(preexisting)
+
+    def on_round_complete(phase: EpochPhase, game_round: int) -> None:
+        if game_round in state.preexisting.get(key(phase), set()):
+            return  # resumed round — completes instantly, must not inflate the throughput estimate
+        state.fresh_rounds_done += 1
+
+    def on_epoch_end(epoch: Epoch) -> None:
+        state.epochs_done += 1
+        elapsed = time.monotonic() - state.start
+        run = epoch.run
+        label = f"{run.game.path}: {run.trainee.path} vs {run.trainer.path} rep{run.replicate} epoch {epoch.index}/{run.training_config.num_epochs}"
+        parts = [f"[{experiment}] epoch done ({state.describe()}): {label}"]
+        eta = state.eta(elapsed)
+        if eta is not None:
+            parts.append(f"est. {format_duration(eta)} left")
+        # clankers renders the elapsed time itself from `duration`
+        clankers.blastthem(" | ".join(parts), elapsed)
+
+    callbacks = TrainingCallbacks(
+        training_start_callback=on_training_start,
+        run_start_callback=on_run_start,
+        phase_start_callback=on_phase_start,
+        round_complete_callback=on_round_complete,
+        epoch_end_callback=on_epoch_end,
     )
     return callbacks, state.describe

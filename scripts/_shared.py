@@ -13,6 +13,7 @@ from plybench.app import PlyBench
 from plybench.common.paths import BenchmarkPathBuilder
 from plybench.harness.benchmark.benchmark import Benchmark
 from plybench.harness.benchmark.results import BenchmarkResults
+from plybench.harness.training.training import TrainingHarness
 from plybench.llm import ModelLimits, Provider
 
 # Per-model quotas for *this* account, keyed by provider and model name (read them off the provider's
@@ -68,6 +69,35 @@ def benchmark_from_args(op: PlyBench, args: argparse.Namespace) -> Benchmark:
     if not (args.games and args.players and args.opponents):
         raise SystemExit("provide --experiment, or all of --games / --players / --opponents (+ optional --num-games)")
     return Benchmark(args.name or "benchmark", op, args.games, args.players, args.opponents, args.num_games)
+
+
+def add_training_source_args(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--experiment", help="experiment name under experiments/training/<name>.json")
+    parser.add_argument("--name", help="experiment name for an inline training run")
+    parser.add_argument("--games", nargs="+", metavar="CONFIG", help="game config strings, e.g. tic_tac_toe:")
+    parser.add_argument("--trainees", nargs="+", metavar="CONFIG", help="learnable player config strings")
+    parser.add_argument("--trainers", nargs="+", metavar="CONFIG", help="opponent config strings for the training phases")
+    parser.add_argument("--testers", nargs="+", metavar="CONFIG", help="opponent config strings for the evaluation phases")
+    parser.add_argument("--schedules", nargs="+", metavar="CONFIG", help="schedules, e.g. num_epochs=10,num_training_games=50,num_test_games=50")
+    parser.add_argument("--replicates", type=int, default=1, help="independent repeats of each run (inline only; default 1)")
+
+
+def training_from_args(op: PlyBench, args: argparse.Namespace) -> TrainingHarness:
+    if args.experiment:
+        # per-axis overrides restrict the experiment's enabled set at run time; num_replicates is not
+        # overridable, it belongs to the experiment the results are filed under
+        return TrainingHarness.load_experiment(
+            op,
+            args.experiment,
+            game_override=args.games,
+            player_override=args.trainees,
+            trainer_override=args.trainers,
+            tester_override=args.testers,
+            training_override=args.schedules,
+        )
+    if not (args.games and args.trainees and args.trainers and args.testers and args.schedules):
+        raise SystemExit("provide --experiment, or all of --games / --trainees / --trainers / --testers / --schedules (+ optional --replicates)")
+    return TrainingHarness(args.name or "training", op, args.games, args.trainees, args.trainers, args.testers, args.schedules, args.replicates)
 
 
 def discover_matchups(op: PlyBench, experiment: str, game_str: str, paths: BenchmarkPathBuilder) -> tuple[set[str], set[str], int]:

@@ -17,7 +17,7 @@ from plybench.analysis.stats.move_features import UNGUARDED_FEATURES, MoveFeatur
 from plybench.analysis.stats.moves import MoveRecord, collect_moves
 from plybench.analysis.stats.partition import QuantilePartitioner
 from plybench.configs.player_config import PlayerConfig
-from plybench.harness.results import BenchmarkResults
+from plybench.harness.benchmark.results import BenchmarkResults
 from plybench.registry import Registry
 
 

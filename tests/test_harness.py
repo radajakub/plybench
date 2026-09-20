@@ -15,7 +15,7 @@ from plybench.common.paths import BenchmarkPathBuilder
 from plybench.configs.benchmark_config import BenchmarkConfig, ToggleItem
 from plybench.configs.matchup import Matchup
 from plybench.configs.player_params import PlayerParams
-from plybench.harness.benchmark import Benchmark
+from plybench.harness.benchmark.benchmark import Benchmark
 from plybench.harness.matchup import run_matchup
 from plybench.llm import LLMConfig
 from plybench.player.player import Player, PlayerOutput

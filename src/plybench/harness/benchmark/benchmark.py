@@ -11,7 +11,7 @@ from plybench.common.progress import track
 from plybench.configs.benchmark_config import BenchmarkConfig
 from plybench.configs.matchup import Matchup
 from plybench.harness.matchup import run_matchup
-from plybench.harness.results import BenchmarkResults
+from plybench.harness.benchmark.results import BenchmarkResults
 from plybench.trackers.result_tracker import ResultTracker
 
 

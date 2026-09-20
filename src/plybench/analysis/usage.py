@@ -18,7 +18,7 @@ from typing import TypeVar
 from plybench.common.progress import track
 from plybench.configs.game_config import GameConfig
 from plybench.configs.player_config import PlayerConfig
-from plybench.harness.results import BenchmarkResults
+from plybench.harness.benchmark.results import BenchmarkResults
 from plybench.llm.model_config import ModelConfig
 from plybench.llm.router import LLM
 from plybench.llm.tokens import LLMTokens

@@ -15,7 +15,7 @@ from plybench.analysis.stats.move_metrics import DEFAULT_MOVE_METRICS, MoveMetri
 from plybench.analysis.stats.moves import MoveRecord, collect_moves
 from plybench.common.enums import MetricName
 from plybench.configs.player_config import PlayerConfig
-from plybench.harness.results import BenchmarkResults
+from plybench.harness.benchmark.results import BenchmarkResults
 from plybench.registry import Registry
 from plybench.trackers.result_tracker import ResultTracker
 

@@ -67,7 +67,7 @@ from plybench.common.enums import MetricName  # noqa: E402
 from plybench.common.paths import BenchmarkPathBuilder  # noqa: E402
 from plybench.configs.benchmark_config import BenchmarkConfig  # noqa: E402
 from plybench.configs.player_config import PlayerConfig  # noqa: E402
-from plybench.harness.results import BenchmarkResults  # noqa: E402
+from plybench.harness.benchmark.results import BenchmarkResults  # noqa: E402
 from plybench.registry import Registry  # noqa: E402
 from plybench.utils.enums import ExtendedEnum  # noqa: E402
 

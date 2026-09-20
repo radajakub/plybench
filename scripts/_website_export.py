@@ -31,7 +31,7 @@ from plybench.analysis.stats.matchup_stats import MatchupMetrics, MatchupStats
 from plybench.app import PlyBench
 from plybench.common.enums import GameResults, MetricName, StateClass
 from plybench.configs.player_config import PlayerConfig
-from plybench.harness.benchmark import Benchmark
+from plybench.harness.benchmark.benchmark import Benchmark
 from plybench.trackers.game_tracker import GameTracker
 from plybench.trackers.result_tracker import ResultTracker
 

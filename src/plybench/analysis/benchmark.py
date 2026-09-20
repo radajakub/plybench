@@ -8,7 +8,7 @@ from plybench.analysis.stats.partition import Partitioner, PartitionStats, compu
 from plybench.common.progress import track
 from plybench.configs.game_config import GameConfig
 from plybench.configs.player_config import PlayerConfig
-from plybench.harness.results import BenchmarkResults
+from plybench.harness.benchmark.results import BenchmarkResults
 from plybench.registry import Registry
 from plybench.trackers.result_tracker import ResultTracker
 

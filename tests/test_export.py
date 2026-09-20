@@ -11,7 +11,7 @@ import tarfile
 from pathlib import Path
 
 from plybench.app import PlyBench
-from plybench.harness.benchmark import Benchmark
+from plybench.harness.benchmark.benchmark import Benchmark
 from plybench.llm import LLMConfig
 from plybench.trackers.game_tracker import GameStep, GameTracker
 

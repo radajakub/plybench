@@ -11,7 +11,7 @@ from plybench.analysis.recognition import original_game_name, recognizable, step
 from plybench.analysis.stats.partition import compute_recognition_split
 from plybench.app import PlyBench
 from plybench.common.enums import MetricName
-from plybench.harness.benchmark import Benchmark
+from plybench.harness.benchmark.benchmark import Benchmark
 from plybench.llm import LLMConfig
 from plybench.trackers.game_tracker import GameStep, GameTracker
 

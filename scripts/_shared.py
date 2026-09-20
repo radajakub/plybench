@@ -11,8 +11,8 @@ import json
 
 from plybench.app import PlyBench
 from plybench.common.paths import BenchmarkPathBuilder
-from plybench.harness.benchmark import Benchmark
-from plybench.harness.results import BenchmarkResults
+from plybench.harness.benchmark.benchmark import Benchmark
+from plybench.harness.benchmark.results import BenchmarkResults
 from plybench.llm import ModelLimits, Provider
 
 # Per-model quotas for *this* account, keyed by provider and model name (read them off the provider's

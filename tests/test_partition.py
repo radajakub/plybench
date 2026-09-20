@@ -14,7 +14,7 @@ from plybench.analysis.stats.moves import MoveRecord
 from plybench.analysis.stats.partition import BinaryPartitioner, QuantilePartitioner, by_recognition, compute_partition_stats
 from plybench.app import PlyBench
 from plybench.common.enums import CIFamily, MetricName, StateClass
-from plybench.harness.benchmark import Benchmark
+from plybench.harness.benchmark.benchmark import Benchmark
 from plybench.llm import LLMConfig
 
 op = PlyBench(LLMConfig())

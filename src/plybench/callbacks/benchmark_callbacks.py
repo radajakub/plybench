@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from plybench.callbacks.game_callbacks import GameCallbacks
 from plybench.configs.game_config import GameConfig
 from plybench.configs.player_config import PlayerConfig
-from plybench.harness.results import BenchmarkResults
+from plybench.harness.benchmark.results import BenchmarkResults
 from plybench.player.player import Player, PlayerOutput
 from plybench.trackers.game_tracker import GameStep
 from plybench.trackers.result_tracker import ResultTracker

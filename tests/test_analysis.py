@@ -13,7 +13,7 @@ from plybench.analysis.statistics.distribution import Distribution
 from plybench.analysis.statistics.intervals import bootstrap_ci, sem_ci, t_ci, wilson_ci
 from plybench.app import PlyBench
 from plybench.common.enums import MetricName
-from plybench.harness.benchmark import Benchmark
+from plybench.harness.benchmark.benchmark import Benchmark
 from plybench.llm import LLMConfig
 
 op = PlyBench(LLMConfig())

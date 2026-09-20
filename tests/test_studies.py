@@ -13,7 +13,7 @@ from plybench.analysis.studies.cross_game import compare_games
 from plybench.analysis.studies.scaling import accuracy_buys_spend, token_slope, token_slope_shift
 from plybench.app import PlyBench
 from plybench.common.enums import MetricName, StateClass
-from plybench.harness.benchmark import Benchmark
+from plybench.harness.benchmark.benchmark import Benchmark
 from plybench.llm import LLMConfig
 
 op = PlyBench(LLMConfig())

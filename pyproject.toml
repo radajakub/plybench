@@ -78,6 +78,13 @@ target-version = "py312"
 # Minimal set: pyflakes (F), essential pycodestyle errors (E4/E7/E9), import sorting (I).
 select = ["E4", "E7", "E9", "F", "I"]
 
+[tool.pyright]
+typeCheckingMode = "standard"
+include = ["src", "tests", "scripts"]
+extraPaths = ["src"]
+venvPath = "."
+venv = ".venv"
+
 [dependency-groups]
 dev = [
     "pytest>=9.1.1",
@@ -89,4 +96,5 @@ dev = [
     "mistralai>=2.9.1",
     # the visual module is importable in tests without installing the viz extra
     "matplotlib>=3.10.0",
+    "pyright>=1.1.414",
 ]

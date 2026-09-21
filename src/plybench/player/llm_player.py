@@ -19,8 +19,11 @@ from plybench.utils.text import extract_params, to_bool
 
 def _parse_options(options_string: str) -> LLMCallOptions:
     params = extract_params(options_string)
+    reasoning_effort = params.get("reasoning_effort")
+    if reasoning_effort is not None and reasoning_effort not in ("minimal", "low", "medium", "high", "xhigh", "max"):
+        raise ValueError(f"Invalid reasoning effort: {reasoning_effort}")
     return LLMCallOptions(
-        reasoning_effort=params.get("reasoning_effort"),
+        reasoning_effort=reasoning_effort,
         thinking_enabled=to_bool(params.get("thinking_enabled", False)),
         max_tokens=int(params["max_tokens"]) if "max_tokens" in params else None,
         temperature=float(params["temperature"]) if "temperature" in params else None,
@@ -57,7 +60,10 @@ class LLMParams(PlayerParams):
         if observation_type is None or output_strategy is None:
             raise ValueError(f"Invalid observation/strategy in {params_string!r}")
         options = _parse_options(":".join(parts[4:]))
-        model = ModelConfig(Provider.from_value(parts[2]), parts[3], options)
+        provider = Provider.from_value(parts[2])
+        if provider is None:
+            raise ValueError(f"Invalid provider in {params_string!r}")
+        model = ModelConfig(provider, parts[3], options)
         return cls(observation_type, output_strategy, model)
 
     def to_string(self) -> str:

@@ -9,6 +9,7 @@ from matplotlib.axes import Axes
 from matplotlib.figure import Figure as MplFigure
 from matplotlib.lines import Line2D
 from matplotlib.patches import Patch
+from matplotlib.typing import LegendLocType
 
 from plybench.analysis.visual.core.style import SeriesStyle, Style
 
@@ -52,7 +53,7 @@ def proxy(entry: LegendEntry, spec: LegendSpec) -> Artist:
     )
 
 
-def _anchor(spec: LegendSpec) -> tuple[str, tuple[float, float] | None, int]:
+def _anchor(spec: LegendSpec) -> tuple[LegendLocType, tuple[float, float] | None, int]:
     if spec.placement == "below":
         return ("upper center", (0.5, -0.02), spec.columns)
     if spec.placement == "right":

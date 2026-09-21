@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import TypeVar
 
 from plybench.analysis.visual.core.style import Linestyle, SeriesStyle
 
@@ -14,6 +15,7 @@ CATEGORICAL: tuple[str, ...] = ("#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e8
 LINESTYLES: tuple[Linestyle, ...] = ("-", "--", ":", "-.", (0, (5, 1, 1, 1)), (0, (3, 1, 1, 1, 1, 1)), (0, (1, 1)), (0, (7, 2)))
 
 MARKERS: tuple[str, ...] = ("o", "s", "^", "D", "v", "P", "X", "*")
+ChannelT = TypeVar("ChannelT")
 
 
 @dataclass(frozen=True)
@@ -34,7 +36,7 @@ class Palette:
         )
 
     @staticmethod
-    def _pick(channel: tuple[Linestyle, ...] | tuple[str, ...], index: int, vary: bool, default: str) -> Linestyle | str:
+    def _pick(channel: tuple[ChannelT, ...], index: int, vary: bool, default: ChannelT) -> ChannelT:
         if not vary:
             return default
         if index >= len(channel):

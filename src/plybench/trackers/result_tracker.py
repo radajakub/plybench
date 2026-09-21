@@ -13,7 +13,7 @@ from plybench.configs.player_config import PlayerConfig
 from plybench.trackers.game_tracker import GameTracker
 
 
-class ResultTracker(Saveable):
+class ResultTracker(Saveable[[ConfigParser, ExperimentPathBuilder], Path, [ConfigParser, ExperimentPathBuilder]]):
     @staticmethod
     def split_games_by_starting_player(games: list[GameTracker], player: PlayerConfig) -> tuple[list[GameTracker], list[GameTracker]]:
         i_games = [game for game in games if game.i_player.hash == player.hash]

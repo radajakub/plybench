@@ -36,7 +36,8 @@ def linear_fit(xs: Sequence[float], ys: Sequence[float]) -> LinearFit:
         return LinearFit(None, None, None, None, None, len(xs))
 
     result = stats.linregress(xs, ys)
-    return LinearFit(float(result.slope), float(result.intercept), float(result.stderr), float(result.rvalue), float(result.pvalue), len(xs))
+    # SciPy builds LinregressResult dynamically; Pyright cannot see its named fields.
+    return LinearFit(float(result.slope), float(result.intercept), float(result.stderr), float(result.rvalue), float(result.pvalue), len(xs))  # pyright: ignore[reportAttributeAccessIssue]
 
 
 @dataclass(frozen=True)
@@ -71,7 +72,7 @@ class FitDifference:
 
 
 def fit_difference(a: LinearFit, b: LinearFit, confidence: float = 0.95) -> FitDifference:
-    if not a.defined or not b.defined:
+    if a.slope is None or b.slope is None or a.stderr is None or b.stderr is None:
         return FitDifference(a.slope, b.slope, None, None, None, False, None, a.n, b.n)
 
     delta = a.slope - b.slope

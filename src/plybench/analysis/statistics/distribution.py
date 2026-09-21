@@ -12,8 +12,8 @@ class Distribution(Serializable):
     """A flat sample of observations (one value per game or per move). The base container the extractors
     fill and the CI helpers consume; `ratio` is just `mean` read as a proportion of 0/1 indicators."""
 
-    def __init__(self, items: list[float] | None = None) -> None:
-        self.items: list[float] = list(items) if items is not None else []
+    def __init__(self, items: Iterable[float] | None = None) -> None:
+        self.items: list[float] = [float(value) for value in items] if items is not None else []
 
     @classmethod
     def from_values(cls, values: Iterable[float]) -> Distribution:

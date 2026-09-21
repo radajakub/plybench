@@ -88,7 +88,7 @@ def bootstrap_ci(distribution: Distribution, confidence: float = 0.95) -> Confid
             confidence_level=confidence,
             n_resamples=_BOOTSTRAP_RESAMPLES,
             method="BCa",
-            random_state=np.random.default_rng(_BOOTSTRAP_SEED),
+            rng=np.random.default_rng(_BOOTSTRAP_SEED),
         )
     except Exception:
         return ConfidenceInterval(mean, mean, mean)

@@ -20,7 +20,7 @@ class StoryMagicSquare(TurnBasedGame):
         super().__init__(game_type="story_magic_square", game_name="tic_tac_toe")
 
 
-class StoryMagicSquareTransformer(InterfaceTransformer):
+class StoryMagicSquareTransformer(InterfaceTransformer[TicTacToeAction, TicTacToeObservation, [list[list[int]]]]):
     printer = GridPrinter(row_header=GridAxisLabel.NONE, col_header=GridAxisLabel.NONE)
 
     def __init__(self, sample: bool = False) -> None:
@@ -85,7 +85,7 @@ For instance, jump:1 means jumping 1 distance, jump:7 means jumping 7 distances.
 """
 
 
-class StoryMagicSquarePromptAdapter(PromptAdapter):
+class StoryMagicSquarePromptAdapter(PromptAdapter[[]]):
     def __init__(self) -> None:
         super().__init__(head_prompt_template=STORY_MAGIC_SQUARE_HEAD_PROMPT, use_partial_state=False, position_name="jumps", order_actions=True)
         self.head_prompt = self.head_prompt_template
@@ -97,7 +97,7 @@ class StoryMagicSquarePromptAdapter(PromptAdapter):
         pass
 
 
-class StoryMagicSquareEngine(TurnBasedEngine):
+class StoryMagicSquareEngine(TurnBasedEngine[StoryMagicSquareTransformer, StoryMagicSquarePromptAdapter]):
     def __init__(self, game_config: GameConfig) -> None:
         params = cast(MagicSquareGameParams, game_config.params)
         transformer = StoryMagicSquareTransformer(sample=params.sample)

@@ -40,7 +40,7 @@ class MagicSquareGame(TurnBasedGame):
         super().__init__(game_type="magic_square", game_name="tic_tac_toe")
 
 
-class MagicSquareTransformer(InterfaceTransformer):
+class MagicSquareTransformer(InterfaceTransformer[TicTacToeAction, TicTacToeObservation, [list[list[int]]]]):
     printer = GridPrinter(row_header=GridAxisLabel.NONE, col_header=GridAxisLabel.NONE)
 
     def __init__(self, sample: bool = False, magic_constant_add: int = 0) -> None:
@@ -101,7 +101,7 @@ You are playing this game with the user (opponent).
 """
 
 
-class MagicSquarePromptAdapter(PromptAdapter):
+class MagicSquarePromptAdapter(PromptAdapter[[]]):
     def __init__(self, magic_constant_add: int = 0) -> None:
         super().__init__(head_prompt_template=MAGIC_SQUARE_HEAD_PROMPT, use_partial_state=False, position_name="numbers", order_actions=True)
         # base magic square is 1..9 summing to 15; every number shifts by the add
@@ -117,7 +117,7 @@ class MagicSquarePromptAdapter(PromptAdapter):
         pass
 
 
-class MagicSquareEngine(TurnBasedEngine):
+class MagicSquareEngine(TurnBasedEngine[MagicSquareTransformer, MagicSquarePromptAdapter]):
     def __init__(self, game_config: GameConfig) -> None:
         params = cast(MagicSquareGameParams, game_config.params)
         transformer = MagicSquareTransformer(sample=params.sample, magic_constant_add=params.magic_constant_add)

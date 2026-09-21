@@ -14,7 +14,10 @@ from plybench.trackers.player_tracker import PlayerTrackerResolver
 class GameEnding(Serializable):
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> GameEnding:
-        return cls(data["seq"], data["observation"], GameResults.from_value(data["result"]))
+        result = GameResults.from_value(data["result"])
+        if result is None:
+            raise ValueError(f"Invalid game result: {data['result']}")
+        return cls(data["seq"], data["observation"], result)
 
     def __init__(self, seq: int, observation: str, result: GameResults) -> None:
         self.seq = seq
@@ -89,7 +92,7 @@ class GameStep(Serializable):
         return res
 
 
-class GameTracker(Serializable):
+class GameTracker(Serializable[[ConfigParser]]):
     @classmethod
     def from_dict(cls, data: dict[str, Any], parser: ConfigParser) -> GameTracker:
         return cls(

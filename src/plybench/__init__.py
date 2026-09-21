@@ -1,4 +1,4 @@
-__all__ = ["PlyBench"]
+__all__ = ["PlyBench"]  # pyright: ignore[reportUnsupportedDunderAll] -- exposed by __getattr__ below
 
 
 # Lazily expose PlyBench so `from plybench import PlyBench` works (the intended entry point when using

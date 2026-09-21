@@ -16,7 +16,73 @@ class BreakthroughGame(TurnBasedGame):
         super().__init__(game_type="breakthrough", game_name="breakthrough", params={"rows": 8, "columns": 3})
 
 
-class BreakthroughTransformer(InterfaceTransformer):
+class BreakthroughAction(InterfaceAction):
+    @staticmethod
+    def from_openspiel(action: OpenSpielAction, interface_transformer: InterfaceTransformer) -> BreakthroughAction:
+        if len(action.string) < 4 or len(action.string) > 5:
+            raise ValueError(f"Invalid action string format: {action.string}")
+
+        startcol, startrow, endcol, endrow = action.string[:4]
+        taking = action.string[4] == "*" if len(action.string) == 5 else False
+
+        return BreakthroughAction(
+            action.number,
+            char_to_number_lower(startcol),
+            int(startrow) - 1,
+            char_to_number_lower(endcol),
+            int(endrow) - 1,
+            taking,
+            interface_transformer,
+        )
+
+    def __init__(self, number: int, start_col: int, start_row: int, end_col: int, end_row: int, taking: bool, interface_transformer: InterfaceTransformer) -> None:
+        super().__init__(number=number, interface_transformer=interface_transformer)
+        self.start_col = start_col
+        self.start_row = start_row
+        self.end_col = end_col
+        self.end_row = end_row
+        self.taking = taking
+
+    def to_openspiel(self) -> OpenSpielAction:
+        startcol, startrow = number_to_char_lower(self.start_col), str(self.start_row + 1)
+        endcol, endrow = number_to_char_lower(self.end_col), str(self.end_row + 1)
+        return OpenSpielAction(self.number, f"{startcol}{startrow}{endcol}{endrow}{'*' if self.taking else ''}")
+
+
+class BreakthroughObservation(InterfaceObservation):
+    @staticmethod
+    def _format_cell(cell: str) -> str:
+        if cell == "b":
+            return "B"
+        if cell == "w":
+            return "W"
+        return "."
+
+    @staticmethod
+    def _state_from_openspiel(state: str) -> list[list[str]]:
+        rows = [row for row in state.split("\n") if row.strip() != ""]
+        return [[BreakthroughObservation._format_cell(cell) for cell in row[1:]] for row in rows[:-1]][::-1]
+
+    @staticmethod
+    def from_openspiel(observation: OpenSpielObservation, interface_transformer: InterfaceTransformer) -> BreakthroughObservation:
+        state = BreakthroughObservation._state_from_openspiel(observation.state)
+        i_actions = [BreakthroughAction.from_openspiel(action, interface_transformer) for action in observation.i_actions]
+        o_actions = [BreakthroughAction.from_openspiel(action, interface_transformer) for action in observation.o_actions]
+        return BreakthroughObservation(observation, state, i_actions, o_actions, interface_transformer)
+
+    def __init__(
+        self,
+        os_observation: OpenSpielObservation,
+        state: list[list[str]],
+        i_actions: list[BreakthroughAction],
+        o_actions: list[BreakthroughAction],
+        interface_transformer: InterfaceTransformer,
+    ) -> None:
+        super().__init__(os_observation, i_actions, o_actions, interface_transformer)
+        self.state = state
+
+
+class BreakthroughTransformer(InterfaceTransformer[BreakthroughAction, BreakthroughObservation, []]):
     printer = GridPrinter(
         row_header=GridAxisLabel.NUMBERS,
         row_direction=GridAxisDirection.REVERSED,
@@ -59,72 +125,6 @@ class BreakthroughTransformer(InterfaceTransformer):
         return None
 
 
-class BreakthroughAction(InterfaceAction):
-    @staticmethod
-    def from_openspiel(action: OpenSpielAction, interface_transformer: BreakthroughTransformer) -> BreakthroughAction:
-        if len(action.string) < 4 or len(action.string) > 5:
-            raise ValueError(f"Invalid action string format: {action.string}")
-
-        startcol, startrow, endcol, endrow = action.string[:4]
-        taking = action.string[4] == "*" if len(action.string) == 5 else False
-
-        return BreakthroughAction(
-            action.number,
-            char_to_number_lower(startcol),
-            int(startrow) - 1,
-            char_to_number_lower(endcol),
-            int(endrow) - 1,
-            taking,
-            interface_transformer,
-        )
-
-    def __init__(self, number: int, start_col: int, start_row: int, end_col: int, end_row: int, taking: bool, interface_transformer: BreakthroughTransformer) -> None:
-        super().__init__(number=number, interface_transformer=interface_transformer)
-        self.start_col = start_col
-        self.start_row = start_row
-        self.end_col = end_col
-        self.end_row = end_row
-        self.taking = taking
-
-    def to_openspiel(self) -> OpenSpielAction:
-        startcol, startrow = number_to_char_lower(self.start_col), str(self.start_row + 1)
-        endcol, endrow = number_to_char_lower(self.end_col), str(self.end_row + 1)
-        return OpenSpielAction(self.number, f"{startcol}{startrow}{endcol}{endrow}{'*' if self.taking else ''}")
-
-
-class BreakthroughObservation(InterfaceObservation):
-    @staticmethod
-    def _format_cell(cell: str) -> str:
-        if cell == "b":
-            return "B"
-        if cell == "w":
-            return "W"
-        return "."
-
-    @staticmethod
-    def _state_from_openspiel(state: str) -> list[list[str]]:
-        rows = [row for row in state.split("\n") if row.strip() != ""]
-        return [[BreakthroughObservation._format_cell(cell) for cell in row[1:]] for row in rows[:-1]][::-1]
-
-    @staticmethod
-    def from_openspiel(observation: OpenSpielObservation, interface_transformer: BreakthroughTransformer) -> BreakthroughObservation:
-        state = BreakthroughObservation._state_from_openspiel(observation.state)
-        i_actions = [BreakthroughAction.from_openspiel(action, interface_transformer) for action in observation.i_actions]
-        o_actions = [BreakthroughAction.from_openspiel(action, interface_transformer) for action in observation.o_actions]
-        return BreakthroughObservation(observation, state, i_actions, o_actions, interface_transformer)
-
-    def __init__(
-        self,
-        os_observation: OpenSpielObservation,
-        state: list[list[str]],
-        i_actions: list[BreakthroughAction],
-        o_actions: list[BreakthroughAction],
-        interface_transformer: BreakthroughTransformer,
-    ) -> None:
-        super().__init__(os_observation, i_actions, o_actions, interface_transformer)
-        self.state = state
-
-
 BREAKTHROUGH_HEAD_PROMPT = """
 Breakthrough is a two-player game played on a rectangular board.
 Players take turns moving their pieces, which can move one space straight or diagonally forward if the target square is empty.
@@ -138,7 +138,7 @@ The intersection of a column and a row specifies a unique square on the board.
 """
 
 
-class BreakthroughPromptAdapter(PromptAdapter):
+class BreakthroughPromptAdapter(PromptAdapter[[]]):
     def __init__(self) -> None:
         super().__init__(head_prompt_template=BREAKTHROUGH_HEAD_PROMPT, use_partial_state=False, position_name="pieces", order_actions=False)
         self.head_prompt = self.head_prompt_template

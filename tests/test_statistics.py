@@ -26,7 +26,8 @@ def test_two_proportion_test_separates_and_signs_the_difference():
     assert comp.test == "two_proportion_z"
     assert comp.difference == pytest.approx(0.6)
     assert comp.p_value is not None and comp.significant
-    assert comp.interval is not None and comp.interval.lower < comp.difference < comp.interval.upper
+    assert comp.interval is not None and comp.difference is not None
+    assert comp.interval.lower < comp.difference < comp.interval.upper
 
 
 def test_two_proportion_test_identical_groups_are_not_significant():
@@ -68,6 +69,7 @@ def test_comparison_carries_the_unpooled_se_behind_its_interval():
     # the interval is the one that SE built: centred on the difference, t_crit wide on either side
     assert comp.interval is not None and comp.interval.value == pytest.approx(comp.difference)
     half_width = (comp.interval.upper - comp.interval.lower) / 2
+    assert comp.se is not None
     assert half_width == pytest.approx(2.4469 * comp.se, rel=1e-3)  # df ~= 6 at n=4 per group
 
     ratio = two_proportion_test(Distribution([1] * 8 + [0] * 2), Distribution([1] * 2 + [0] * 8))

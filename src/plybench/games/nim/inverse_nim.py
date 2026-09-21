@@ -22,7 +22,7 @@ class InverseNimGame(TurnBasedGame):
         super().__init__(game_type="inverse_nim", game_name="nim", params=InverseNimGame.format_params(is_misere, pile_sizes))
 
 
-class InverseNimTransformer(InterfaceTransformer):
+class InverseNimTransformer(InterfaceTransformer[NimAction, NimObservation, [list[int], int]]):
     printer = PilePrinter(column_label="pile", fixed_height=8)
 
     def __init__(self, sample: bool = False, max_pile_size: int = 8, num_piles: int = 4, pile_sum: int = 16, nim_start: Literal["winning", "losing"] = "winning") -> None:
@@ -72,7 +72,7 @@ The action is presented in <pile:x, add:y>, which means add y match(es) to the x
 """
 
 
-class InverseNimPromptAdapter(PromptAdapter):
+class InverseNimPromptAdapter(PromptAdapter[[int, list[int], int]]):
     def __init__(self, max_pile_size: int = 8) -> None:
         super().__init__(head_prompt_template=INVERSE_NIM_HEAD_PROMPT, use_partial_state=True, order_actions=False)
         self.max_pile_size = max_pile_size
@@ -85,7 +85,7 @@ class InverseNimPromptAdapter(PromptAdapter):
         self.head_prompt = self.head_prompt_template.format(num_piles=num_piles, pile_sizes=pile_sizes_string, max_pile_size=max_pile_size)
 
 
-class InverseNimEngine(TurnBasedEngine):
+class InverseNimEngine(TurnBasedEngine[InverseNimTransformer, InverseNimPromptAdapter]):
     def __init__(self, game_config: GameConfig) -> None:
         self.nim_params = cast(NimGameParams, game_config.params)
         transformer = InverseNimTransformer(

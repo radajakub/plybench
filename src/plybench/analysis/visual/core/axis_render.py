@@ -52,5 +52,5 @@ def _apply_sci(ax: Axes, axis: Axis, which: Which, style: Style) -> bool:
     offset.set_color(style.text_secondary)
     # whether an offset shows can be learned without a canvas draw, but only after the locator has run
     formatter = mpl_axis.get_major_formatter()
-    formatter.set_locs(mpl_axis.get_ticklocs())
+    formatter.set_locs(list(mpl_axis.get_ticklocs()))
     return bool(formatter.get_offset())

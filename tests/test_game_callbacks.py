@@ -8,6 +8,12 @@ from plybench.callbacks.game_callbacks import GameCallbacks
 from plybench.common.enums import GameResults
 from plybench.configs.player_config import PlayerConfig
 from plybench.configs.player_params import PlayerParams
+from plybench.core.game import OpenSpielObservation, TurnBasedGame
+from plybench.core.interface import InterfaceAction, InterfaceObservation
+from plybench.core.prompt_adapter import PromptAdapter
+from plybench.games.tic_tac_toe.tic_tac_toe import TicTacToeObservation, TicTacToeTransformer
+from plybench.player.player import Player, PlayerOutput
+from plybench.trackers.game_tracker import GameStep, GameTracker
 
 
 @dataclass(frozen=True)
@@ -28,29 +34,42 @@ class _P(PlayerParams):
 
 CFG_A = PlayerConfig("p", _P("a"))
 CFG_B = PlayerConfig("p", _P("b"))
+TRACKER = GameTracker(1, CFG_A, CFG_B, {})
+OBSERVATION = TicTacToeObservation.from_openspiel(OpenSpielObservation("...\n...\n...", [], [], 0), TicTacToeTransformer())
+STEP = GameStep(1, "", "", "", "", "")
+OUTPUT = PlayerOutput()
 
 
-class _FakePlayer:
+class _FakePlayer(Player):
     def __init__(self, player_config: PlayerConfig) -> None:
-        self.player_config = player_config
+        super().__init__(player_config, "i")
+
+    def initialize_policy(self, game: TurnBasedGame, prompt_adapter_template: PromptAdapter) -> None:
+        pass
+
+    async def __call__(self, game: TurnBasedGame, observation: InterfaceObservation, legal_moves: list[InterfaceAction]) -> PlayerOutput:
+        raise AssertionError("Callback tests do not request a move")
+
+    def format_llm_output(self, player_output: PlayerOutput) -> str:
+        return ""
 
 
 def _recording_bundle(log: list[str], tag: str) -> GameCallbacks:
     return GameCallbacks(
         game_start_callback=lambda tracker: log.append(f"{tag}:start"),
-        before_move_callback=lambda player, obs, moves: log.append(f"{tag}:before:{player.player_config.params.label}"),
-        after_move_callback=lambda player, out, step: log.append(f"{tag}:after:{player.player_config.params.label}"),
+        before_move_callback=lambda player, obs, moves: log.append(f"{tag}:before:{player.player_config.params.to_string()}"),
+        after_move_callback=lambda player, out, step: log.append(f"{tag}:after:{player.player_config.params.to_string()}"),
         game_end_callback=lambda tracker, results: log.append(f"{tag}:end"),
     )
 
 
 def _fire(cb: GameCallbacks) -> None:
-    cb.on_game_start(None)
-    cb.on_before_move(_FakePlayer(CFG_A), None, [])
-    cb.on_after_move(_FakePlayer(CFG_A), None, None)
-    cb.on_before_move(_FakePlayer(CFG_B), None, [])
-    cb.on_after_move(_FakePlayer(CFG_B), None, None)
-    cb.on_game_end(None, (GameResults.WIN, GameResults.LOSS))
+    cb.on_game_start(TRACKER)
+    cb.on_before_move(_FakePlayer(CFG_A), OBSERVATION, [])
+    cb.on_after_move(_FakePlayer(CFG_A), OUTPUT, STEP)
+    cb.on_before_move(_FakePlayer(CFG_B), OBSERVATION, [])
+    cb.on_after_move(_FakePlayer(CFG_B), OUTPUT, STEP)
+    cb.on_game_end(TRACKER, (GameResults.WIN, GameResults.LOSS))
 
 
 def test_combine_fans_out_to_all_bundles_in_order():
@@ -59,7 +78,7 @@ def test_combine_fans_out_to_all_bundles_in_order():
         _recording_bundle(log, "log"),
         _recording_bundle(log, "x"),
     )
-    combined.on_game_start(None)
+    combined.on_game_start(TRACKER)
     # both bundles fire, in the order given
     assert log == ["log:start", "x:start"]
 

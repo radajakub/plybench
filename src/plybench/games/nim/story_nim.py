@@ -22,7 +22,7 @@ class StoryNimGame(TurnBasedGame):
         super().__init__(game_type="story_nim", game_name="nim", params=StoryNimGame.format_params(is_misere, pile_sizes))
 
 
-class StoryNimTransformer(InterfaceTransformer):
+class StoryNimTransformer(InterfaceTransformer[NimAction, NimObservation, [list[int], int]]):
     names = ["alice", "bob", "charlie", "dave"]
     printer = CharacterPrinter(fixed_width=8)
 
@@ -82,7 +82,7 @@ The chosen character and the number of squares to move it are formatted as <char
 """
 
 
-class StoryNimPromptAdapter(PromptAdapter):
+class StoryNimPromptAdapter(PromptAdapter[[list[str], int]]):
     def __init__(self, max_pile_size: int = 8) -> None:
         super().__init__(head_prompt_template=STORY_NIM_HEAD_PROMPT, use_partial_state=True, order_actions=False)
         self.max_pile_size = max_pile_size
@@ -94,7 +94,7 @@ class StoryNimPromptAdapter(PromptAdapter):
         self.head_prompt = self.head_prompt_template.format(names=", ".join(names), num_squares=max_pile_size)
 
 
-class StoryNimEngine(TurnBasedEngine):
+class StoryNimEngine(TurnBasedEngine[StoryNimTransformer, StoryNimPromptAdapter]):
     def __init__(self, game_config: GameConfig) -> None:
         self.nim_params = cast(NimGameParams, game_config.params)
         transformer = StoryNimTransformer(

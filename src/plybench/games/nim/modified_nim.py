@@ -17,7 +17,7 @@ class ModifiedNimGame(TurnBasedGame):
         super().__init__(game_type="modified_nim", game_name="nim")
 
 
-class ModifiedNimTransformer(InterfaceTransformer):
+class ModifiedNimTransformer(InterfaceTransformer[NimAction, NimObservation, []]):
     printer = PilePrinter(column_label="lamp")
 
     def _inner_llm_action(self, action: NimAction) -> str:
@@ -58,7 +58,7 @@ The action is formatted as <lamp:x, decrease:y>, which means decrease the bright
 """
 
 
-class ModifiedNimPromptAdapter(PromptAdapter):
+class ModifiedNimPromptAdapter(PromptAdapter[[]]):
     def __init__(self) -> None:
         super().__init__(head_prompt_template=MODIFIED_NIM_HEAD_PROMPT, use_partial_state=True, order_actions=False)
         self.head_prompt = self.head_prompt_template
@@ -70,7 +70,7 @@ class ModifiedNimPromptAdapter(PromptAdapter):
         pass
 
 
-class ModifiedNimEngine(TurnBasedEngine):
+class ModifiedNimEngine(TurnBasedEngine[ModifiedNimTransformer, ModifiedNimPromptAdapter]):
     def __init__(self, game_config: GameConfig) -> None:
         super().__init__(game_config, ModifiedNimGame(), ModifiedNimTransformer(), ModifiedNimPromptAdapter(), NimAction, NimObservation)
 

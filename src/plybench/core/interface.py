@@ -1,58 +1,63 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Any
+from collections.abc import Sequence
+from typing import Any, Generic, ParamSpec, TypeVar
 
 from plybench.common.enums import PlayerOrder
 from plybench.core.game import OpenSpielAction, OpenSpielObservation
 from plybench.core.llm_interface import LLMAction, LLMObservation, LLMPartialState, LLMPosition
 
+ActionT = TypeVar("ActionT", bound="InterfaceAction")
+ObservationT = TypeVar("ObservationT", bound="InterfaceObservation")
+StateArgs = ParamSpec("StateArgs")
 
-class InterfaceTransformer(ABC):
+
+class InterfaceTransformer(ABC, Generic[ActionT, ObservationT, StateArgs]):
     @abstractmethod
-    def _inner_llm_action(self, action: InterfaceAction) -> str:
+    def _inner_llm_action(self, action: ActionT) -> str:
         raise NotImplementedError
 
-    def llm_action(self, action: InterfaceAction) -> LLMAction:
+    def llm_action(self, action: ActionT) -> LLMAction:
         inner_llm_action = self._inner_llm_action(action)
         return LLMAction(f"<{inner_llm_action}>")
 
     @abstractmethod
-    def display_action(self, action: InterfaceAction) -> str:
+    def display_action(self, action: ActionT) -> str:
         raise NotImplementedError
 
     @abstractmethod
-    def _inner_llm_state(self, observation: InterfaceObservation) -> str:
+    def _inner_llm_state(self, observation: ObservationT) -> str:
         raise NotImplementedError
 
     @abstractmethod
-    def _inner_llm_partial_states(self, observation: InterfaceObservation) -> list[str]:
+    def _inner_llm_partial_states(self, observation: ObservationT) -> list[str]:
         raise NotImplementedError
 
-    def llm_partial_states(self, observation: InterfaceObservation) -> list[LLMPartialState]:
+    def llm_partial_states(self, observation: ObservationT) -> list[LLMPartialState]:
         return [LLMPartialState(partial_state) for partial_state in self._inner_llm_partial_states(observation)]
 
     @abstractmethod
-    def _inner_llm_positions(self, observation: InterfaceObservation) -> tuple[list[str], list[str]]:
+    def _inner_llm_positions(self, observation: ObservationT) -> tuple[list[str], list[str]]:
         raise NotImplementedError
 
-    def llm_positions(self, observation: InterfaceObservation) -> tuple[list[LLMPosition], list[LLMPosition]]:
+    def llm_positions(self, observation: ObservationT) -> tuple[list[LLMPosition], list[LLMPosition]]:
         i_positions, o_positions = self._inner_llm_positions(observation)
         return [LLMPosition(pos) for pos in i_positions], [LLMPosition(pos) for pos in o_positions]
 
-    def llm_observation(self, observation: InterfaceObservation) -> LLMObservation:
+    def llm_observation(self, observation: ObservationT) -> LLMObservation:
         state = self._inner_llm_state(observation)
         partial_states = self.llm_partial_states(observation)
-        i_actions = [self.llm_action(action) for action in observation.i_actions]
-        o_actions = [self.llm_action(action) for action in observation.o_actions]
+        i_actions = [action.to_llm() for action in observation.i_actions]
+        o_actions = [action.to_llm() for action in observation.o_actions]
         i_positions, o_positions = self.llm_positions(observation)
         return LLMObservation(state, partial_states, i_actions, o_actions, i_positions, o_positions, observation.player_order)
 
     @abstractmethod
-    def _inner_display_state(self, observation: InterfaceObservation) -> str:
+    def _inner_display_state(self, observation: ObservationT) -> str:
         raise NotImplementedError
 
-    def display_observation(self, observation: InterfaceObservation) -> str:
+    def display_observation(self, observation: ObservationT) -> str:
         state = self._inner_display_state(observation)
         i_actions = ", ".join(f"{action}" for action in observation.i_actions)
         o_actions = ", ".join(f"{action}" for action in observation.o_actions)
@@ -67,14 +72,14 @@ class InterfaceTransformer(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def set_state(self) -> None:
+    def set_state(self, *args: StateArgs.args, **kwargs: StateArgs.kwargs) -> None:
         raise NotImplementedError
 
 
 class InterfaceAction(ABC):
     @staticmethod
     @abstractmethod
-    def from_openspiel(action: OpenSpielAction, game_transformer: InterfaceTransformer) -> InterfaceAction:
+    def from_openspiel(action: OpenSpielAction, interface_transformer: InterfaceTransformer) -> InterfaceAction:
         raise NotImplementedError
 
     def __init__(self, number: int, interface_transformer: InterfaceTransformer) -> None:
@@ -102,7 +107,7 @@ class InterfaceObservation(ABC):
         raise NotImplementedError
 
     def __init__(
-        self, os_observation: OpenSpielObservation, i_actions: list[InterfaceAction], o_actions: list[InterfaceAction], interface_transformer: InterfaceTransformer
+        self, os_observation: OpenSpielObservation, i_actions: Sequence[InterfaceAction], o_actions: Sequence[InterfaceAction], interface_transformer: InterfaceTransformer
     ) -> None:
         # keep the original observation for the MCTS/optimal players to use
         self.os_observation = os_observation

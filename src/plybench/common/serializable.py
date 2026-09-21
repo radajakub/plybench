@@ -5,21 +5,25 @@ import json
 import os
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Any
+from typing import Any, Generic, ParamSpec, Self, TypeVar
+
+DeserializeArgs = ParamSpec("DeserializeArgs")
+LoadArgs = ParamSpec("LoadArgs")
+LoadPath = TypeVar("LoadPath", str, Path)
 
 
-class Serializable(ABC):
+class Serializable(ABC, Generic[DeserializeArgs]):
     @abstractmethod
     def to_dict(self) -> dict[str, Any]:
         raise NotImplementedError
 
     @classmethod
     @abstractmethod
-    def from_dict(cls, data: dict[str, Any]) -> Serializable:
+    def from_dict(cls, data: dict[str, Any], *args: DeserializeArgs.args, **kwargs: DeserializeArgs.kwargs) -> Self:
         raise NotImplementedError
 
 
-class Saveable(Serializable):
+class Saveable(Serializable[DeserializeArgs], Generic[DeserializeArgs, LoadPath, LoadArgs]):
     def save(self, filepath: str) -> None:
         path = Path(filepath)
         if not path.parent.exists():
@@ -29,11 +33,11 @@ class Saveable(Serializable):
 
     @classmethod
     @abstractmethod
-    def load(cls, filepath: str) -> Serializable:
+    def load(cls, filepath: LoadPath, *args: LoadArgs.args, **kwargs: LoadArgs.kwargs) -> Self:
         raise NotImplementedError
 
 
-class ThreadSafeSaveable(Serializable):
+class ThreadSafeSaveable(Serializable[[]]):
     def save(self, filepath: str) -> None:
         lock_path = Path(filepath).with_suffix(".lock")
         tmp_path = Path(filepath).with_suffix(".tmp")

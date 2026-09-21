@@ -96,6 +96,9 @@ def main() -> None:
         results = asyncio.run(harness.run(sync=args.sync, concurrency=rounds_concurrency, runs_concurrency=args.runs_concurrency, training_callbacks=callbacks))
 
     metric = MetricName.from_value(args.metric)
+    if metric is None:
+        parser.error(f"Invalid metric: {args.metric}")
+
     report_curves(results, op.registry, harness.tester_configs, metric)
     print(f"\nresults under results/training/{harness.experiment}/")
 

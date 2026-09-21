@@ -1,9 +1,10 @@
 from enum import Enum
+from typing import Self
 
 
 class ExtendedEnum(Enum):
     @classmethod
-    def from_value(cls, value: str | int) -> Enum | None:
+    def from_value(cls, value: str | int) -> Self | None:
         return next((e for e in cls if str(e.value).lower() == str(value).lower()), None)
 
     @classmethod

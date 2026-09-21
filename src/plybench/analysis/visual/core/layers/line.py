@@ -49,7 +49,7 @@ class LineLayer:
         style = ctx.styles[0]
         ax.plot(
             list(self.positions()),
-            list(self.y),
+            [float("nan") if value is None else value for value in self.y],
             color=style.color,
             linestyle=style.linestyle,
             marker=style.marker if self.show_markers else "none",

@@ -16,7 +16,61 @@ class TicTacToeGame(TurnBasedGame):
         super().__init__(game_type="tic_tac_toe", game_name="tic_tac_toe")
 
 
-class TicTacToeTransformer(InterfaceTransformer):
+class TicTacToeAction(InterfaceAction):
+    @staticmethod
+    def from_openspiel(action: OpenSpielAction, interface_transformer: InterfaceTransformer) -> TicTacToeAction:
+        match = re.match(r"([ox])\((\d+),\s*(\d+)\)", action.string)
+        if not match:
+            raise ValueError(f"Invalid action string format: {action.string}")
+        symbol = match.group(1)
+        row = int(match.group(2))
+        col = int(match.group(3))
+        return TicTacToeAction(symbol, row, col, action.number, interface_transformer)
+
+    def __init__(self, symbol: str, row: int, col: int, number: int, interface_transformer: InterfaceTransformer) -> None:
+        super().__init__(number=number, interface_transformer=interface_transformer)
+        self.symbol = symbol
+        self.row = row
+        self.col = col
+
+    def to_openspiel(self) -> OpenSpielAction:
+        return OpenSpielAction(self.number, f"{self.symbol.lower()}({self.row},{self.col})")
+
+
+class TicTacToeObservation(InterfaceObservation):
+    @staticmethod
+    def _format_cell(cell: str) -> str:
+        if cell == "x":
+            return "X"
+        if cell == "o":
+            return "O"
+        return "."
+
+    @staticmethod
+    def _state_from_openspiel(state: str) -> list[list[str]]:
+        rows = state.split("\n")
+        return [[TicTacToeObservation._format_cell(cell) for cell in row] for row in rows]
+
+    @staticmethod
+    def from_openspiel(observation: OpenSpielObservation, interface_transformer: InterfaceTransformer) -> TicTacToeObservation:
+        state = TicTacToeObservation._state_from_openspiel(observation.state)
+        i_actions = [TicTacToeAction.from_openspiel(action, interface_transformer) for action in observation.i_actions]
+        o_actions = [TicTacToeAction.from_openspiel(action, interface_transformer) for action in observation.o_actions]
+        return TicTacToeObservation(observation, state, i_actions, o_actions, interface_transformer)
+
+    def __init__(
+        self,
+        os_observation: OpenSpielObservation,
+        state: list[list[str]],
+        i_actions: list[TicTacToeAction],
+        o_actions: list[TicTacToeAction],
+        interface_transformer: InterfaceTransformer,
+    ) -> None:
+        super().__init__(os_observation, i_actions, o_actions, interface_transformer)
+        self.state = state
+
+
+class TicTacToeTransformer(InterfaceTransformer[TicTacToeAction, TicTacToeObservation, []]):
     printer = GridPrinter(row_header=GridAxisLabel.NUMBERS, col_header=GridAxisLabel.NUMBERS)
 
     def _inner_llm_action(self, action: TicTacToeAction) -> str:
@@ -48,60 +102,6 @@ class TicTacToeTransformer(InterfaceTransformer):
         return None
 
 
-class TicTacToeAction(InterfaceAction):
-    @staticmethod
-    def from_openspiel(action: OpenSpielAction, interface_transformer: TicTacToeTransformer) -> TicTacToeAction:
-        match = re.match(r"([ox])\((\d+),\s*(\d+)\)", action.string)
-        if not match:
-            raise ValueError(f"Invalid action string format: {action.string}")
-        symbol = match.group(1)
-        row = int(match.group(2))
-        col = int(match.group(3))
-        return TicTacToeAction(symbol, row, col, action.number, interface_transformer)
-
-    def __init__(self, symbol: str, row: int, col: int, number: int, interface_transformer: TicTacToeTransformer) -> None:
-        super().__init__(number=number, interface_transformer=interface_transformer)
-        self.symbol = symbol
-        self.row = row
-        self.col = col
-
-    def to_openspiel(self) -> OpenSpielAction:
-        return OpenSpielAction(self.number, f"{self.symbol.lower()}({self.row},{self.col})")
-
-
-class TicTacToeObservation(InterfaceObservation):
-    @staticmethod
-    def _format_cell(cell: str) -> str:
-        if cell == "x":
-            return "X"
-        if cell == "o":
-            return "O"
-        return "."
-
-    @staticmethod
-    def _state_from_openspiel(state: str) -> list[list[str]]:
-        rows = state.split("\n")
-        return [[TicTacToeObservation._format_cell(cell) for cell in row] for row in rows]
-
-    @staticmethod
-    def from_openspiel(observation: OpenSpielObservation, interface_transformer: TicTacToeTransformer) -> TicTacToeObservation:
-        state = TicTacToeObservation._state_from_openspiel(observation.state)
-        i_actions = [TicTacToeAction.from_openspiel(action, interface_transformer) for action in observation.i_actions]
-        o_actions = [TicTacToeAction.from_openspiel(action, interface_transformer) for action in observation.o_actions]
-        return TicTacToeObservation(observation, state, i_actions, o_actions, interface_transformer)
-
-    def __init__(
-        self,
-        os_observation: OpenSpielObservation,
-        state: list[list[str]],
-        i_actions: list[TicTacToeAction],
-        o_actions: list[TicTacToeAction],
-        interface_transformer: TicTacToeTransformer,
-    ) -> None:
-        super().__init__(os_observation, i_actions, o_actions, interface_transformer)
-        self.state = state
-
-
 TIC_TAC_TOE_HEAD_PROMPT = """
 Tic Tac Toe is a two-player game played on a grid.
 Players take turns marking a space with their respective symbols.
@@ -114,7 +114,7 @@ You are playing this game with the user (opponent).
 """
 
 
-class TicTacToePromptAdapter(PromptAdapter):
+class TicTacToePromptAdapter(PromptAdapter[[]]):
     def __init__(self) -> None:
         super().__init__(head_prompt_template=TIC_TAC_TOE_HEAD_PROMPT, use_partial_state=False, position_name="positions", order_actions=True)
         self.head_prompt = self.head_prompt_template
@@ -126,7 +126,7 @@ class TicTacToePromptAdapter(PromptAdapter):
         pass
 
 
-class TicTacToeEngine(TurnBasedEngine):
+class TicTacToeEngine(TurnBasedEngine[TicTacToeTransformer, TicTacToePromptAdapter]):
     def __init__(self, game_config: GameConfig) -> None:
         super().__init__(game_config, TicTacToeGame(), TicTacToeTransformer(), TicTacToePromptAdapter(), TicTacToeAction, TicTacToeObservation)
 

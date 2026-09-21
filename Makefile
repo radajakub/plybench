@@ -1,10 +1,14 @@
-.PHONY: lint format check fix test build clean release release-dry-run require-version
+.PHONY: lint typecheck format check fix test build clean release release-dry-run require-version
 
 # Check lint and formatting (same checks as CI)
 lint:
 	uv run ruff check .
 	uv run ruff format --check .
 	npx --yes prettier@3.9.6 --check .
+	$(MAKE) typecheck
+
+typecheck:
+	uv run pyright
 
 # Alias for lint
 check: lint

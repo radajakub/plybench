@@ -65,16 +65,21 @@ def test_matchup_usage_counts_both_sides_when_both_are_models():
     entries = matchup_usage(tracker)
 
     assert len(entries) == 2
-    by_model = {entry.model.model_name: entry.usage for entry in entries}
+    by_model = {}
+    for entry in entries:
+        assert entry.model is not None
+        by_model[entry.model.model_name] = entry.usage
     assert by_model["gpt-5-nano"].tokens.input_tokens == 100
     assert by_model["gpt-5.4"].tokens.input_tokens == 200
     # each side is recorded against the player it faced
-    assert {entry.opponent.params.model.model_name for entry in entries} == {"gpt-5-nano", "gpt-5.4"}
+    assert {model.model_name for entry in entries if (model := player_model(entry.opponent)) is not None} == {"gpt-5-nano", "gpt-5.4"}
 
 
 def test_a_side_without_calls_is_dropped_rather_than_reported_empty():
     entries = matchup_usage(_result_tracker(MODEL, BOT, [([(100, 20, 10)],)]))
-    assert len(entries) == 1 and entries[0].player.params.model.model_name == "gpt-5-nano"
+    assert len(entries) == 1
+    model = player_model(entries[0].player)
+    assert model is not None and model.model_name == "gpt-5-nano"
 
 
 def test_self_play_is_counted_once_not_once_per_side():
@@ -113,6 +118,7 @@ def test_grouping_folds_the_same_model_across_matchups_into_one_row():
 
 def test_cost_uses_the_model_catalogue_and_is_undefined_for_non_models():
     (entry,) = matchup_usage(_result_tracker(MODEL, BOT, [([(1_000_000, 1_000_000, 0)],)]))
+    assert entry.model is not None
     model = op.llm.resolve_model(entry.model.provider, entry.model.model_name)
 
     assert entry_cost(op.llm, entry) == model.input_cost + model.output_cost

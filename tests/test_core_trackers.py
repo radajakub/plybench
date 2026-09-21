@@ -4,13 +4,17 @@ and GameTracker round-trip. Uses an instance-scoped Registry (no globals)."""
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Never
 
 import pytest
 
 from plybench.common.enums import GameResults
 from plybench.configs.player_config import PlayerConfig
 from plybench.configs.player_params import PlayerParams
-from plybench.player.player import PlayerOutput
+from plybench.core.game import OpenSpielAction, OpenSpielObservation, TurnBasedGame
+from plybench.core.interface import InterfaceAction, InterfaceObservation, InterfaceTransformer
+from plybench.core.llm_interface import LLMAction
+from plybench.player.player import PlayerIdentifier, PlayerOutput
 from plybench.player.spec import PlayerSpec
 from plybench.registry import Registry
 from plybench.trackers.game_tracker import GameTracker
@@ -39,27 +43,41 @@ class _LLMTracker(PlayerTracker):
         return {"reasoning_trace": player_output.reasoning_trace} if player_output.reasoning_trace else {}
 
 
-class _StubLLMAction:
+class _StubLLMAction(InterfaceAction):
     def __init__(self, string: str) -> None:
         self._string = string
 
-    def to_llm(self) -> "_StubLLMAction":
-        return self
+    @staticmethod
+    def from_openspiel(action: OpenSpielAction, interface_transformer: InterfaceTransformer) -> _StubLLMAction:
+        return _StubLLMAction(action.string)
 
-    @property
-    def string(self) -> str:
-        return self._string
+    def to_openspiel(self) -> OpenSpielAction:
+        return OpenSpielAction(0, self._string)
+
+    def to_llm(self) -> LLMAction:
+        return LLMAction(self._string)
 
 
-class _StubObservation:
+class _StubObservation(InterfaceObservation):
+    def __init__(self) -> None:
+        pass
+
+    @staticmethod
+    def from_openspiel(observation: OpenSpielObservation, interface_transformer: InterfaceTransformer) -> _StubObservation:
+        return _StubObservation()
+
     def __str__(self) -> str:
         return "OBS"
 
 
+def _unused_builder(game: TurnBasedGame, cfg: PlayerConfig, pid: PlayerIdentifier) -> Never:
+    raise AssertionError("These tracker tests do not build players")
+
+
 registry = Registry()
-# build is unused in these tests (they drive GameTracker directly), so a trivial builder is fine
-registry.register_player(PlayerSpec("stub", _StubParams, lambda game, cfg, pid: None))
-registry.register_player(PlayerSpec("ai", _StubParams, lambda game, cfg, pid: None, tracker=_LLMTracker()))
+# build is unused in these tests (they drive GameTracker directly).
+registry.register_player(PlayerSpec("stub", _StubParams, _unused_builder))
+registry.register_player(PlayerSpec("ai", _StubParams, _unused_builder, tracker=_LLMTracker()))
 
 
 # --- tests -----------------------------------------------------------------------------------

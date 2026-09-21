@@ -62,6 +62,7 @@ def test_pooling_a_single_opponent_matches_that_opponent_on_its_own():
 def test_a_ratio_metric_carries_a_wilson_interval_so_the_band_reflects_the_pooled_sample():
     small = pooled_bundle([_result_tracker("random:distribution=uniform", [GameResults.WIN, GameResults.LOSS])], MetricName.WIN_RATE, None)
     large = pooled_bundle([_result_tracker("random:distribution=uniform", [GameResults.WIN, GameResults.LOSS] * 25)], MetricName.WIN_RATE, None)
+    assert small is not None and large is not None
     assert small.wilson is not None and large.wilson is not None
     # same point estimate, but more games must narrow the interval
     assert small.value == pytest.approx(large.value)

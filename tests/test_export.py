@@ -101,7 +101,11 @@ def test_build_archive_matches_ingestion_layout(tmp_path, monkeypatch):
 
     with tarfile.open(out) as tar:
         names = tar.getnames()
-        payloads = {name: json.loads(tar.extractfile(name).read()) for name in names}
+        payloads = {}
+        for name in names:
+            member = tar.extractfile(name)
+            assert member is not None
+            payloads[name] = json.loads(member.read())
 
     # every path is wrapped in a single top dir the website strips, then a 4-part matchup path
     assert "exp/experiment.json" in names

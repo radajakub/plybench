@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from plybench.analysis.visual.core.palette import CATEGORICAL, LINESTYLES
-from plybench.analysis.visual.core.style import SeriesStyle
+from plybench.analysis.visual.core.style import Linestyle, SeriesStyle
 from plybench.llm.options import ReasoningEffort
 from plybench.utils.enums import ExtendedEnum
 
@@ -25,7 +25,7 @@ class StyleKey:
     strength: tuple[int, tuple[float, ...], str]
 
 
-def marker_for(effort: ReasoningEffort | None) -> str:
+def marker_for(effort: str | None) -> str:
     for known, marker in EFFORT_MARKERS:
         if known == effort:
             return marker
@@ -53,7 +53,9 @@ class StyleEncoder:
         if unknown:
             raise ValueError(f"colour groups {', '.join(unknown)} are drawn but missing from the colour roster; pass every drawn group in color_keys")
         # strongest first, so the flagship of every provider gets the solid line
-        self._lines = {(color, line): LINESTYLES[index] for color, lines in groups.items() for index, line in enumerate(sorted(lines, key=lambda name: lines[name], reverse=True))}
+        self._lines: dict[tuple[str, str], Linestyle] = {
+            (color, line): LINESTYLES[index] for color, lines in groups.items() for index, line in enumerate(sorted(lines, key=lambda name: lines[name], reverse=True))
+        }
 
     def style(self, key: StyleKey) -> SeriesStyle:
         return SeriesStyle(self._colors[key.color], self._lines[(key.color, key.line)], marker_for(key.effort))

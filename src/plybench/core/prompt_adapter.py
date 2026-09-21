@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 from abc import ABC, abstractmethod
+from typing import Generic, ParamSpec
 
 from plybench.common.enums import ObservationType
 from plybench.core.interface import InterfaceAction, InterfaceObservation
@@ -17,7 +18,10 @@ You must answer your questions by choosing one of the legal moves given by the u
 """
 
 
-class PromptAdapter(ABC):
+PromptArgs = ParamSpec("PromptArgs")
+
+
+class PromptAdapter(ABC, Generic[PromptArgs]):
     def __init__(self, head_prompt_template: str, use_partial_state: bool, position_name: str = "positions", order_actions: bool = False) -> None:
         self.system_prompt = inline_multiline_string(_SYSTEM_PROMPT)
         self.head_prompt_template = inline_multiline_string(head_prompt_template)
@@ -33,7 +37,7 @@ class PromptAdapter(ABC):
         return clone
 
     @abstractmethod
-    def restart_prompt(self) -> None:
+    def restart_prompt(self, *args: PromptArgs.args, **kwargs: PromptArgs.kwargs) -> None:
         raise NotImplementedError
 
     def _i_actions_prompt(self, observation: LLMObservation) -> str:

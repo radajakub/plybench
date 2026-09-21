@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, fields, replace
+from typing import Any, Literal
+
+from matplotlib.typing import LineStyleType, RcKeyType
 
 GRID_COLOR = "#d9d8d4"
 TEXT_PRIMARY = "#0b0b0b"
 TEXT_SECONDARY = "#52514e"
 SURFACE = "#fcfcfb"
 
-Linestyle = str | tuple[int, tuple[int, ...]]
+Linestyle = LineStyleType
 
 
 @dataclass(frozen=True)
@@ -45,7 +48,7 @@ class Style:
     title_size: float = 13.0
     dpi: int = 200
     grid: bool = True
-    grid_axis: str = "y"
+    grid_axis: Literal["both", "x", "y"] = "y"
     grid_width: float = 0.8
     hide_spines: tuple[str, ...] = ("top", "right")
     grid_color: str = GRID_COLOR
@@ -53,7 +56,7 @@ class Style:
     text_secondary: str = TEXT_SECONDARY
     surface: str = SURFACE
 
-    def rc(self) -> dict[str, object]:
+    def rc(self) -> dict[RcKeyType, Any]:
         return {
             "font.size": self.font_size,
             "axes.titlesize": self.font_size + 1,

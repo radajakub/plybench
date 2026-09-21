@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from typing import Generic, TypeVar
 
 from plybench.callbacks.game_callbacks import GameCallbacks
 from plybench.common.enums import GameResults
@@ -12,14 +13,17 @@ from plybench.player.player import Player
 from plybench.trackers.game_tracker import GameTracker
 from plybench.trackers.player_tracker import PlayerTrackerResolver
 
+TransformerT = TypeVar("TransformerT", bound=InterfaceTransformer)
+AdapterT = TypeVar("AdapterT", bound=PromptAdapter)
 
-class TurnBasedEngine(ABC):
+
+class TurnBasedEngine(ABC, Generic[TransformerT, AdapterT]):
     def __init__(
         self,
         game_config: GameConfig,
         game: TurnBasedGame,
-        interface_transformer: InterfaceTransformer,
-        prompt_adapter: PromptAdapter,
+        interface_transformer: TransformerT,
+        prompt_adapter: AdapterT,
         action_class: type[InterfaceAction],
         observation_class: type[InterfaceObservation],
     ) -> None:

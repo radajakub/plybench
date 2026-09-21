@@ -50,7 +50,7 @@ class AVQ(Serializable):
         return self._Q[a]
 
 
-class AVQCache(Saveable):
+class AVQCache(Saveable[[], str, []]):
     @classmethod
     def from_dict(cls, data: dict[Any, dict[str, Any]]) -> AVQCache:
         cache = {int(player): {str(state): AVQ.from_dict(avq) for state, avq in player_cache.items()} for player, player_cache in data.items()}
@@ -72,8 +72,8 @@ class AVQCache(Saveable):
         player, state = ps
         self.cache.setdefault(player, {})[state] = avq
 
-    def to_dict(self) -> dict[int, dict[str, Any]]:
-        return {player: {state: avq.to_dict() for state, avq in player_cache.items()} for player, player_cache in self.cache.items()}
+    def to_dict(self) -> dict[str, Any]:
+        return {str(player): {state: avq.to_dict() for state, avq in player_cache.items()} for player, player_cache in self.cache.items()}
 
 
 def solve_game(game: TurnBasedGame) -> AVQCache:

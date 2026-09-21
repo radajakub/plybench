@@ -16,7 +16,7 @@ class ModifiedTicTacToeGame(TurnBasedGame):
         super().__init__(game_type="modified_tic_tac_toe", game_name="tic_tac_toe")
 
 
-class ModifiedTicTacToeTransformer(InterfaceTransformer):
+class ModifiedTicTacToeTransformer(InterfaceTransformer[TicTacToeAction, TicTacToeObservation, []]):
     printer = GridPrinter(row_header=GridAxisLabel.NUMBERS, col_header=GridAxisLabel.NUMBERS)
 
     def symbol_forward(self, symbol: str) -> str:
@@ -67,7 +67,7 @@ You are playing this game with the user (opponent).
 """
 
 
-class ModifiedTicTacToePromptAdapter(PromptAdapter):
+class ModifiedTicTacToePromptAdapter(PromptAdapter[[]]):
     def __init__(self) -> None:
         super().__init__(head_prompt_template=MODIFIED_TIC_TAC_TOE_HEAD_PROMPT, use_partial_state=False, position_name="positions", order_actions=True)
         self.head_prompt = self.head_prompt_template
@@ -79,7 +79,7 @@ class ModifiedTicTacToePromptAdapter(PromptAdapter):
         pass
 
 
-class ModifiedTicTacToeEngine(TurnBasedEngine):
+class ModifiedTicTacToeEngine(TurnBasedEngine[ModifiedTicTacToeTransformer, ModifiedTicTacToePromptAdapter]):
     def __init__(self, game_config: GameConfig) -> None:
         super().__init__(game_config, ModifiedTicTacToeGame(), ModifiedTicTacToeTransformer(), ModifiedTicTacToePromptAdapter(), TicTacToeAction, TicTacToeObservation)
 

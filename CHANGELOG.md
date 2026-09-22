@@ -6,6 +6,8 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-09-22
+
 ### Added
 
 - Training harness for learnable players: run combinations of games, trainees, trainers, training

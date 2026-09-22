@@ -6,6 +6,36 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+### Added
+
+- Training harness for learnable players: run combinations of games, trainees, trainers, training
+  schedules and replicates, with an untrained baseline (epoch 0) and frozen evaluation against each
+  tester after every training epoch. Checkpoints and game records are saved under `results/training/`
+  so interrupted runs can resume.
+- `LearnablePlayer` and `CheckpointedParams` extension points for custom players. Training games run
+  sequentially on one learner, with per-game `observe` and end-of-epoch `update` hooks; evaluation
+  games use frozen checkpoints and can run concurrently.
+- `scripts/train.py` accepts a JSON experiment from `experiments/training/` or an inline run, with
+  controls for per-provider requests, evaluation rounds and concurrent runs. It prints learning curves
+  and supports console progress and optional epoch notifications.
+- `TrainingAnalysis` and `LearningCurve` compute per-epoch matchup metrics and the change from the
+  untrained baseline. `StepData` provides structured access to recorded player output, including a
+  `thinking` fallback for reasoning stored in the full response.
+- Pyright type checking in CI and through `make typecheck` (also included in `make lint`).
+
+### Changed
+
+- **Breaking:** Import `Benchmark` and `BenchmarkResults` from `plybench.harness.benchmark.benchmark`
+  and `plybench.harness.benchmark.results`, respectively, instead of
+  `plybench.harness.benchmark` and `plybench.harness.results`. The `BenchmarkResults` re-export from
+  `plybench.harness` remains.
+- **Breaking:** The matchup runner is now `run_matchup_concurrent` (with `matchup_callbacks` in place
+  of `benchmark_callbacks`). `run_matchup_sequential` supports a shared player and an after-game hook
+  for training. `BenchmarkCallbacks` inherits the shared matchup and round hooks from
+  `MatchupCallbacks`.
+- The LLM router imports provider clients only when their provider is configured. Game interfaces,
+  engines and provider clients have more specific type annotations.
+
 ## [1.3.0] - 2026-09-19
 
 ### Changed
@@ -179,7 +209,8 @@ Initial release of PlyBench.
   that was not bootstrapped raises a helpful error. Reads `HF_TOKEN` for gated/private models.
   Ships one supported model: `sup-simcse-bert` (`princeton-nlp/sup-simcse-bert-base-uncased`).
 
-[Unreleased]: https://github.com/radajakub/plybench/compare/v1.2.0...HEAD
-[1.2.0]: https://github.com/radajakub/plybench/compare/v1.1.0...v1.2.0
+[Unreleased]: https://github.com/radajakub/plybench/compare/1.3.0...HEAD
+[1.3.0]: https://github.com/radajakub/plybench/compare/1.2.0...1.3.0
+[1.2.0]: https://github.com/radajakub/plybench/compare/v1.1.0...1.2.0
 [1.1.0]: https://github.com/radajakub/plybench/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/radajakub/plybench/releases/tag/v1.0.0

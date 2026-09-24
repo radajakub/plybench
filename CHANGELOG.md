@@ -6,6 +6,8 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+## [2.0.1] - 2026-09-24
+
 ### Added
 
 - `claude-opus-5.5` and `claude-fable-5.1` on the Claude provider, `grok-4.7` and `grok-4.6` on the

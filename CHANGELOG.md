@@ -6,6 +6,34 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+### Added
+
+- `claude-opus-5.5` and `claude-fable-5.1` on the Claude provider, `grok-4.7` and `grok-4.6` on the
+  Grok provider (all four take the `xhigh` effort level; `grok-4.7`/`grok-4.6` are the first Grok
+  models to do so), and `deepseek-v4-flash` on the Metacentrum provider.
+- `max` reasoning effort on the `gpt-5.6-sol`, `gpt-5.6-terra` and `gpt-5.6-luna` models, which
+  OpenAI documents but the repository did not accept.
+
+### Changed
+
+- `claude-sonnet-5` pricing corrected to $2.00 / $10.00 per 1M input / output tokens with a $0.20
+  cache-read rate. Anthropic made the introductory price permanent instead of raising it to
+  $3.00 / $15.00 on 2026-09-01, so recomputed costs for Sonnet 5 runs will drop.
+- `gemini-3.6-flash` pricing corrected to $0.75 / $3.75 per 1M input / output tokens, the rate in
+  force through 2026-12-31 (it rises to $1.50 / $7.50 on 2027-01-01).
+
+### Removed
+
+- `gemini-3-pro` (`gemini-3-pro-preview`), which Google shut down on 2026-03-09. Use `gemini-3.1-pro`.
+
+### Deprecated
+
+- `gemini-3-flash` (`gemini-3-flash-preview`) is deprecated by Google in favour of `gemini-3.6-flash`;
+  it is still served and no shutdown date has been announced.
+- `deepseek-v3.2-thinking`, `qwen-3.5-122b`, `glm-5.2` and `mistral-small-4` are no longer served by
+  e-INFRA on the Metacentrum provider. The definitions are kept so existing experiment configs and
+  recorded results still resolve, but requests against them will fail.
+
 ## [2.0.0] - 2026-09-22
 
 ### Added

@@ -69,6 +69,7 @@ from plybench.analysis.visual.core import (
     render,
     resolve_limits,
 )
+from plybench.analysis.visual.train import benchmark_reference, training_panel
 
 __all__ = [
     "CATEGORICAL",
@@ -107,6 +108,7 @@ __all__ = [
     "build_figure",
     "build_series",
     "build_series_batch",
+    "benchmark_reference",
     "dodges",
     "effort_key",
     "encoder_keys",
@@ -132,4 +134,5 @@ __all__ = [
     "series_layer",
     "style_key",
     "tier_rank",
+    "training_panel",
 ]

@@ -24,7 +24,7 @@ def _section(header: str, body: str) -> str:
     return f"{header}\n{body}"
 
 
-def _bullets(items: list[str]) -> str:
+def _bullets(items: Sequence[str]) -> str:
     return "\n".join(f"- {item}" for item in items)
 
 

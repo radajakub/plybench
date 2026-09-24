@@ -23,6 +23,30 @@ def by_matchup_outcome(move: TracedMove) -> Stratum:
     return (matchup.game, matchup.player, matchup.opponent, move.decision.value)
 
 
+def position_of(move: TracedMove) -> tuple[str, ...]:
+    """The cell and the board the model was looking at. `serialized_state` is the solver's own
+    representation and is the right key; the rendered observation stands in when a run predates it."""
+    matchup = move.matchup
+    return (matchup.experiment, matchup.game, matchup.player, matchup.opponent, move.serialized_state or move.observation)
+
+
+def cap_per_position(moves: Sequence[TracedMove], cap: int, seed: str = "") -> list[TracedMove]:
+    """At most `cap` moves from any one (cell, position), in the order they came in.
+
+    60% of traced moves sit in a position their own model reached more than once in the same
+    presentation, so an uncapped discovery sample spends much of its budget re-reading the same board.
+    This is a sampling parameter and deliberately not a filtering stage: it changes which moves are drawn,
+    never which moves exist, and it introduces no similarity threshold -- positions are equal or they are
+    not. Exact duplicate traces remain a descriptive result worth reporting, not something to act on."""
+    if cap <= 0:
+        raise ValueError("cap must be positive")
+    groups: dict[tuple[str, ...], list[TracedMove]] = {}
+    for move in moves:
+        groups.setdefault(position_of(move), []).append(move)
+    kept = {move.uid for group in groups.values() for move in sorted(group, key=lambda move: _rank(move, seed))[:cap]}
+    return [move for move in moves if move.uid in kept]
+
+
 @dataclass(frozen=True, slots=True)
 class DiscoveryPlan:
     """A diversity sample and the prefix that must be read before saturation is allowed."""
@@ -30,6 +54,8 @@ class DiscoveryPlan:
     moves: tuple[TracedMove, ...]
     coverage_moves: int
     candidate_strata: int
+    n_candidates: int = 0  # analysable moves offered to the plan
+    n_after_position_cap: int = 0  # what survived the per-position cap, before the outcome caps
 
 
 def _discovery_cap(move: TracedMove, suboptimal_cap: int, optimal_cap: int, non_decision_cap: int) -> int:
@@ -47,6 +73,7 @@ def discovery_plan(
     optimal_cap: int = 4,
     non_decision_cap: int = 2,
     coverage_per_stratum: int = 2,
+    state_cap: int = 2,
     seed: str = "",
 ) -> DiscoveryPlan:
     """Build a mistake-enriched, deterministic taxonomy-discovery sequence.
@@ -55,6 +82,8 @@ def discovery_plan(
     controls, preventing weak players from swamping the taxonomy while preserving rare failures from
     strong players. The first ``coverage_per_stratum`` selected moves from every represented matchup and
     outcome form a coverage prefix; the induction loop may only start its saturation countdown after it.
+
+    ``state_cap`` bounds how many moves may come from any one (cell, position) before any of that happens.
     """
     if suboptimal_cap <= 0:
         raise ValueError("suboptimal_cap must be positive")
@@ -62,6 +91,11 @@ def discovery_plan(
         raise ValueError("control caps cannot be negative")
     if coverage_per_stratum <= 0:
         raise ValueError("coverage_per_stratum must be positive")
+
+    # capped before stratification, so a stratum whose positions repeat yields fewer moves rather than the
+    # same number of near-identical ones
+    n_candidates = len(moves)
+    moves = cap_per_position(moves, state_cap, seed)
 
     groups: dict[Stratum, list[TracedMove]] = {}
     for move in moves:
@@ -82,7 +116,7 @@ def discovery_plan(
         key=by_matchup_outcome,
         seed=seed,
     )
-    return DiscoveryPlan(tuple((*prefix, *remainder)), len(prefix), len(groups))
+    return DiscoveryPlan(tuple((*prefix, *remainder)), len(prefix), len(groups), n_candidates, len(moves))
 
 
 def _rank(move: TracedMove, seed: str) -> str:

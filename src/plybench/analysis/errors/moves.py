@@ -65,6 +65,16 @@ class TracedMove:
         return hashlib.sha256("|".join(parts).encode()).hexdigest()[:16]
 
     @property
+    def game_uid(self) -> str:
+        """The recorded game this move belongs to. The induction hold-out is game-level, not move-level:
+        adjacent positions within one game are near-identical, so a move from a game induction has read is
+        not an induction-naive move however unseen that particular position is. Deliberately not a prefix
+        of `uid` -- `uid` is the key of every stored annotation and must never move."""
+        matchup = self.matchup
+        parts = (matchup.experiment, matchup.game, matchup.player, matchup.opponent, str(self.game_round))
+        return hashlib.sha256("|".join(parts).encode()).hexdigest()[:16]
+
+    @property
     def failed(self) -> bool:
         return self.move.startswith("FAIL")
 

@@ -11,7 +11,7 @@ from plybench.common.enums import StateClass
 from plybench.configs.game_config import GameConfig
 from plybench.configs.player_config import PlayerConfig
 from plybench.core.engine import TurnBasedEngine
-from plybench.core.game import OpenSpielAction
+from plybench.core.interface import InterfaceAction
 from plybench.core.minimax import AVQ
 from plybench.player.simple.optimal_player import Judgeable
 from plybench.registry import Registry
@@ -44,7 +44,7 @@ class TurnBasedReplayer:
         loss_value, win_value = self._engine.game.get_reward_range()
         return float(loss_value), float(win_value)
 
-    def _solved(self, serialized_state: str) -> tuple[int, list[OpenSpielAction], AVQ]:
+    def _solved(self, serialized_state: str) -> tuple[int, list[InterfaceAction], AVQ]:
         game = self._engine.game
         game.deserialize_state(serialized_state)  # deserialize the state from stored string
         pid = game.get_player()  # get the player to move
@@ -61,7 +61,7 @@ class TurnBasedReplayer:
         return pid, moves, verdict
 
     @staticmethod
-    def _selected(moves: list[OpenSpielAction], played: str) -> OpenSpielAction:
+    def _selected(moves: list[InterfaceAction], played: str) -> InterfaceAction:
         selected = next((move for move in moves if move.to_llm().string == played), None)
         if selected is None:
             raise ValueError(f"Recorded move not found among legal moves: {played}")

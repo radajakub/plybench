@@ -32,8 +32,10 @@ Passes (--do, these spend money):
                  version, so electing one does not invalidate annotations already made.
     annotate     apply the frozen codebook to every analysable move and store the labels. The judge is shown the
                  move that was played, because three of the coding rules are defined against it, but not
-                 the solver's verdict. Reports separate held-out evaluation, full-corpus descriptive,
-                 and discovery populations.
+                 the solver's verdict. Reports the uncovered rate twice -- over every annotated move, and
+                 over the games induction never read, which is the figure that measures completeness --
+                 and breaks the second down per model. With --coverage-test it annotates only those
+                 held-out games, which is how a wave is run before paying for the census.
     informed     the same pass with the solver's optimal set revealed, written to its own annotator column.
                  Which variant measures the reasoning better is untested: blind risks a judge that cannot
                  verify anything calling sound reasoning wrong, informed risks one reasoning backwards
@@ -65,7 +67,11 @@ import json
 import re
 import sys
 import time
+from contextlib import AbstractContextManager, nullcontext
 from pathlib import Path
+
+import clankers
+from clankers.core.models import describe as describe_error
 
 sys.path.insert(0, str(Path(__file__).parent))
 from _shared import add_source_args, benchmark_from_args, build_op  # noqa: E402
@@ -81,14 +87,28 @@ from plybench.analysis.errors.judge.cost import CostLedger  # noqa: E402
 from plybench.analysis.errors.judge.runner import ResponseCache  # noqa: E402
 from plybench.analysis.errors.pipeline import ETALONS, INDUCE, PASS_ORDER, PassOptions, Pipeline  # noqa: E402
 from plybench.analysis.errors.reporting import REPORTERS, report_cost  # noqa: E402
-from plybench.analysis.errors.split import DEFAULT_SPLIT_SEED, SplitConfig  # noqa: E402
 from plybench.analysis.errors.stores import AnalysisStores  # noqa: E402
 from plybench.analysis.replay import ReplayerCache  # noqa: E402
 from plybench.llm import DEFAULT_CONCURRENCY, ModelConfig  # noqa: E402
-from plybench.observability.notifications import NotificationClient  # noqa: E402
 from plybench.utils.const import MILLION  # noqa: E402
 
 ALL = "all"
+
+
+def _warn_if_unconfigured() -> None:
+    # clankers builds its backend lazily and only warns when a send fails, so a missing NTFY_URL/NTFY_TOPIC
+    # would otherwise go unnoticed until the first pass ends
+    try:
+        _ = clankers.default().backend
+    except ValueError as error:
+        print(f"warning: --notify set but notifications are not configured ({error}); they will be skipped")
+
+
+def _notify(args: argparse.Namespace, message: str) -> None:
+    """A sweep runs for hours across several passes, so "2 of 4 done" is the message worth having; the
+    end-of-run one arrives far too late to act on."""
+    if args.notify:
+        clankers.rogerroger(message)
 
 
 def _model_config(args: argparse.Namespace) -> ModelConfig:
@@ -161,15 +181,11 @@ def _summary(passes: list[str], ledger: CostLedger, cells: int, elapsed: float) 
 
 async def _run(args: argparse.Namespace) -> None:
     started = time.monotonic()
-    op = build_op(notif_enabled=args.notify, concurrency=args.concurrency, limit_scale=args.limit_scale)
-    if args.notify and not op.notif.configured:
-        print("warning: --notify set but NTFY_URL is not configured; notifications will be skipped")
+    op = build_op(concurrency=args.concurrency, limit_scale=args.limit_scale)
     results = benchmark_from_args(op, args).get_results()
     skipped = unsupported_games(results, op.registry)
     replayers = ReplayerCache(op.registry)  # one solved tree per game, shared by the funnel and the labelling pass
-    split_config = SplitConfig(args.discovery_fraction, args.split_seed)
-    print(f"analysis split: {split_config.discovery_fraction:.0%} discovery / {split_config.evaluation_fraction:.0%} evaluation, seed={split_config.seed!r}")
-    funnels = list(build_funnels(results, op.registry, replayers, split_config=split_config))
+    funnels = list(build_funnels(results, op.registry, replayers))
     model = _model_config(args)
     stores, ledger = AnalysisStores(_codebook_label(args, model)), CostLedger(op.llm)
     if stores.codebook_label:
@@ -178,16 +194,18 @@ async def _run(args: argparse.Namespace) -> None:
 
     if passes or args.dry_run:
         options = PassOptions(
-            args.per_stratum,
-            args.seed,
-            args.batch_size,
-            args.patience,
-            args.min_instances,
-            not args.no_consolidate,
-            args.discovery_suboptimal_cap,
-            args.discovery_optimal_cap,
-            args.discovery_non_decision_cap,
-            args.discovery_coverage_per_stratum,
+            per_stratum=args.per_stratum,
+            seed=args.seed,
+            batch_size=args.batch_size,
+            patience=args.patience,
+            min_instances=args.min_instances,
+            consolidate=not args.no_consolidate,
+            coverage_test=args.coverage_test,
+            discovery_suboptimal_cap=args.discovery_suboptimal_cap,
+            discovery_optimal_cap=args.discovery_optimal_cap,
+            discovery_non_decision_cap=args.discovery_non_decision_cap,
+            discovery_coverage_per_stratum=args.discovery_coverage_per_stratum,
+            discovery_state_cap=args.discovery_state_cap,
         )
         pipeline = Pipeline(op.llm, model, stores, ResponseCache(enabled=not args.no_cache), ledger, options)
         populated = [funnel for funnel in funnels if funnel.moves]
@@ -201,7 +219,7 @@ async def _run(args: argparse.Namespace) -> None:
             await pipeline.run(name, populated)
             # a sweep runs for hours across several passes, so "2 of 4 done" is the message worth having;
             # the end-of-run one arrives far too late to act on
-            op.notif.notify(f"[{index}/{len(passes)}] {name} done in {(time.monotonic() - started_pass) / 60:.1f} min")
+            _notify(args, f"[{index}/{len(passes)}] {name} done in {(time.monotonic() - started_pass) / 60:.1f} min")
 
     analyses: list[Analysis] = []
     empty = 0
@@ -240,7 +258,6 @@ async def _run(args: argparse.Namespace) -> None:
     report_cost(ledger)
     if args.json:
         summary = {
-            "split": {"discovery_fraction": split_config.discovery_fraction, "evaluation_fraction": split_config.evaluation_fraction, "seed": split_config.seed},
             "cells": [analysis.to_dict() for analysis in analyses],
             "pools": {axis: [report.to_dict() for report in reports] for axis, reports in pools.items()},
             "cost": ledger.to_dict(),
@@ -248,7 +265,7 @@ async def _run(args: argparse.Namespace) -> None:
         args.json.write_text(json.dumps(summary, indent=2))
         print(f"summaries written to {args.json}")
 
-    op.notif.notify(_summary(passes, ledger, cells, time.monotonic() - started))
+    _notify(args, _summary(passes, ledger, cells, time.monotonic() - started))
 
 
 def main() -> None:
@@ -272,20 +289,6 @@ def main() -> None:
         "already-lost positions, so raw rates partly compare what each model faced; this reweights every group to the corpus mix",
     )
     parser.add_argument("--dump-moves", type=Path, help="write one JSONL row per graded move (uid, labels, refutation), joinable with the judge stores by move uid")
-    parser.add_argument(
-        "--discovery-fraction",
-        type=float,
-        default=0.2,
-        metavar="FRACTION",
-        help="fraction of complete games reserved for taxonomy discovery (default 0.2; the remainder is held-out evaluation)",
-    )
-    parser.add_argument(
-        "--split-seed",
-        default=DEFAULT_SPLIT_SEED,
-        metavar="SEED",
-        help=f"stable game-level discovery/evaluation split seed (default {DEFAULT_SPLIT_SEED!r})",
-    )
-
     judge = parser.add_argument_group("judge (only used with --do)")
     judge.add_argument(
         "--model",
@@ -302,8 +305,22 @@ def main() -> None:
     judge.add_argument(
         "--min-instances",
         type=int,
-        default=30,
-        help="refuse to call induction saturated until this many error instances have been coded, however quiet the batches were (default 30)",
+        default=300,
+        help="refuse to call induction saturated until this many error instances have been coded, however quiet the batches were (default 300)",
+    )
+    judge.add_argument(
+        "--coverage-test",
+        action="store_true",
+        help="annotate only moves from games induction never read, so the uncovered rate measures how complete the codebook is "
+        "rather than how well it fits its own training traces; leave off for the census",
+    )
+    judge.add_argument(
+        "--discovery-state-cap",
+        type=int,
+        default=2,
+        metavar="N",
+        help="maximum discovery moves drawn from any one (cell, position): 60%% of moves sit in a position their model saw "
+        "more than once, and reading the same position repeatedly buys no new failure modes (default 2)",
     )
     judge.add_argument(
         "--discovery-suboptimal-cap",
@@ -353,10 +370,14 @@ def main() -> None:
     judge.add_argument("--limit-scale", type=float, default=1.0, help="scale the per-model quotas, to leave headroom when another run shares the account (default 1.0)")
     args = parser.parse_args()
 
-    op_notif = NotificationClient.from_env(enabled=args.notify)
-    # wrap rather than notify in a finally: a run that died halfway has still spent money, and the
+    # wrapped rather than notified in a finally: a run that died halfway has still spent money, and the
     # difference between "finished" and "failed after 40 minutes" is the whole reason to be told
-    op_notif.wrap("reasoning analysis", lambda: asyncio.run(_run(args)))
+    notify: AbstractContextManager[object] = nullcontext()
+    if args.notify:
+        _warn_if_unconfigured()
+        notify = clankers.Engage("reasoning analysis", failure=lambda error: f"reasoning analysis crashed: {describe_error(error)}")
+    with notify:
+        asyncio.run(_run(args))
 
 
 if __name__ == "__main__":

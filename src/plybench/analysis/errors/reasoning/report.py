@@ -5,7 +5,7 @@ from collections.abc import Sequence
 from plybench.analysis.errors.format import Scope, header
 from plybench.analysis.errors.moves import FunnelStage
 from plybench.analysis.errors.reasoning.agreement import ReliabilityReport
-from plybench.analysis.errors.reasoning.stats import PrevalenceReport
+from plybench.analysis.errors.reasoning.stats import FREEZE_THRESHOLD, PrevalenceReport
 
 
 def report_mistakes(scope: Scope, n_moves: int, reports: Sequence[PrevalenceReport]) -> None:
@@ -19,14 +19,16 @@ def report_mistakes(scope: Scope, n_moves: int, reports: Sequence[PrevalenceRepo
         return
 
     for report in reports:
-        print(f"  judge {report.annotator}  (codebook {report.codebook_version}; {report.population} population)")
+        print(f"  judge {report.annotator}  (codebook {report.codebook_version})")
         print(f"    {report.n_annotated}/{report.n_moves} moves annotated ({report.coverage:.1%}), {report.n_clean} carrying no error")
         print(f"    {'any uncorrected error':30s} {report.any_error.fmt(8, interval=True)}")
-        # errors the annotator found but no code covered: a rate near zero on the evaluation population
-        # is evidence that saturation on discovery data transferred.
+        # errors the annotator found but no code covered. The descriptive rate is over every annotated
+        # move; the figure that measures completeness is the one below it, over games induction never read
         print(f"    {'uncovered by the codebook':30s} {report.uncovered.fmt(8, interval=True)}  ({report.n_uncovered} move(s))")
-        if report.population != "evaluation":
-            print(f"    {'  on induction-naive moves':30s} {report.uncovered_naive.fmt(8, interval=True, count=True)}")
+        basis = "games" if report.game_level_holdout else "moves (no game provenance)"
+        print(f"    {'  holding back induced ' + basis:30s} {report.uncovered_naive.fmt(8, interval=True)}  ({report.n_uncovered_naive}/{report.n_naive} move(s))")
+        if report.n_naive and report.uncovered_naive.value > FREEZE_THRESHOLD:
+            print(f"    ! above the {FREEZE_THRESHOLD:.0%} freeze threshold -- feed the uncovered descriptions back into induction and run another wave")
         print(f"    {'code':30s} {'rate':>8s} {'95% CI':>18s} {'std':>8s} {'optimal':>9s} {'subopt':>9s} {'recovery':>9s}")
         for code in report.codes:
             optimal = code.by_outcome.get(FunnelStage.OPTIMAL)

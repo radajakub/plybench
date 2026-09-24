@@ -10,11 +10,16 @@ from plybench.analysis.errors.funnel.result import FunnelResult
 from plybench.analysis.errors.moves import FunnelStage, TracedMove, group_by, joined
 from plybench.analysis.errors.reasoning.annotations import OTHER, Annotation
 from plybench.analysis.errors.reasoning.codebook import Codebook
-from plybench.analysis.errors.split import AnalysisSplit, SplitConfig, in_split
+from plybench.analysis.errors.reasoning.scope import code_applies
 from plybench.analysis.errors.stores import AnalysisStores, consistency_join
 from plybench.analysis.statistics.bundle import CIBundle, rate
 from plybench.analysis.statistics.standardization import Reference, standardized_rate
 from plybench.utils.enums import ExtendedEnum
+
+# The share of annotated moves carrying an error no code covered, above which the codebook may not be
+# frozen and the OTHER descriptions go back into induction for another wave. Written down 2026-09-24,
+# before the first wave was run: a threshold chosen after seeing the number is not a stopping rule.
+FREEZE_THRESHOLD = 0.05
 
 
 def coded(annotation: Annotation, codebook: Codebook, code_id: str, uncorrected_only: bool = True) -> bool:
@@ -87,13 +92,22 @@ class PrevalenceReport:
     codes: list[CodePrevalence]  # only codes that occurred, most prevalent first
     any_error: CIBundle
     uncovered: CIBundle  # moves whose error no code covered -- how incomplete the codebook still is
-    # the same rate over moves induction never saw. The codebook cannot be validated on the traces it was
-    # built from, so this is the honest completeness figure and `uncovered` is the descriptive one
+    # The same rate over moves from games induction never read. A codebook cannot be validated on the
+    # traces it was built from, so this is the honest completeness figure and `uncovered` is the
+    # descriptive one. `n_naive` is its denominator and is reported with it: without it there is no
+    # telling whether 5% is one move in twenty or a hundred in two thousand.
     uncovered_naive: CIBundle
+    n_naive: int
+    n_uncovered_naive: int
     n_uncovered: int
-    uncovered_descriptions: list[str]  # what those errors were, to read before extending the codebook
+    # what those errors were, to read before extending the codebook. Drawn from every annotated move,
+    # including ones induction read, because more descriptions make a better codebook -- it is the rate,
+    # not the descriptions, that has to come from the held-out games
+    uncovered_descriptions: list[str]
     accounts: dict[Account, int]  # the suboptimal decomposition; empty when consistency verdicts are absent
-    population: str = "all"  # "evaluation" is the locked, induction-naive primary estimate
+    # False when the codebook predates game-level provenance: the hold-out then falls back to excluding
+    # the induced moves themselves, which is weaker, and saying so beats quietly reporting the stronger one
+    game_level_holdout: bool = True
 
     @property
     def coverage(self) -> float:
@@ -104,7 +118,6 @@ class PrevalenceReport:
             **self.scope.to_dict(),
             "annotator": self.annotator,
             "codebook_version": self.codebook_version,
-            "population": self.population,
             "n_moves": self.n_moves,
             "n_annotated": self.n_annotated,
             "n_clean": self.n_clean,
@@ -112,6 +125,9 @@ class PrevalenceReport:
             "any_error": self.any_error.to_dict(),
             "uncovered": self.uncovered.to_dict(),
             "uncovered_naive": self.uncovered_naive.to_dict(),
+            "n_naive": self.n_naive,
+            "n_uncovered_naive": self.n_uncovered_naive,
+            "game_level_holdout": self.game_level_holdout,
             "n_uncovered": self.n_uncovered,
             "uncovered_descriptions": self.uncovered_descriptions,
             "codes": [code.to_dict() for code in self.codes],
@@ -121,7 +137,8 @@ class PrevalenceReport:
 
 def _code_prevalence(scored: list[tuple[TracedMove, Annotation]], codebook: Codebook, code_id: str, confidence: float, reference: Reference[FunnelStage] | None) -> CodePrevalence:
     # A scoped code's denominator is only the positions where that category can logically occur.
-    scored = [(move, annotation) for move, annotation in scored if codebook.codes[code_id] in codebook.applicable(move)]
+    code = codebook.codes[code_id]
+    scored = [(move, annotation) for move, annotation in scored if code_applies(code, move)]
     present = [coded(annotation, codebook, code_id) for _, annotation in scored]
     corrected = sum(coded(annotation, codebook, code_id, uncorrected_only=False) and not coded(annotation, codebook, code_id) for _, annotation in scored)
 
@@ -179,13 +196,13 @@ def prevalence_report(
     consistency: Mapping[str, ConsistencyRecord] | None = None,
     confidence: float = 0.95,
     reference: Reference[FunnelStage] | None = None,
-    population: AnalysisSplit | None = None,
-    split_config: SplitConfig | None = None,
 ) -> PrevalenceReport:
     """Takes the moves rather than the cell, so pooling several cells is the same call with their moves
-    concatenated -- pooled over the moves, never over the cells' own rates."""
-    moves = in_split(list(moves), population, config=split_config) if population is not None else list(moves)
+    concatenated -- pooled over the moves, never over the cells' own rates. That is also how the per-model
+    figure is built: one call with every cell that model played."""
+    moves = list(moves)
     scored = joined(moves, annotations)
+    naive = [(move, annotation) for move, annotation in scored if codebook.naive(move)]
 
     prevalences = [_code_prevalence(scored, codebook, code.id, confidence, reference) for code in codebook.active()]
     occurring = sorted((code for code in prevalences if code.n_uncorrected or code.n_self_corrected), key=lambda code: code.n_uncorrected, reverse=True)
@@ -201,11 +218,13 @@ def prevalence_report(
         codes=occurring,
         any_error=rate([bool(annotation.uncorrected) for _, annotation in scored], confidence),
         uncovered=rate([uncovered(annotation) for _, annotation in scored], confidence),
-        uncovered_naive=rate([uncovered(annotation) for move, annotation in scored if move.uid not in codebook.induced], confidence),
+        uncovered_naive=rate([uncovered(annotation) for _, annotation in naive], confidence),
+        n_naive=len(naive),
+        n_uncovered_naive=sum(uncovered(annotation) for _, annotation in naive),
         n_uncovered=len(escaped),
         uncovered_descriptions=[label.description for annotation in escaped for label in annotation.uncorrected if label.code_id == OTHER and label.description],
         accounts=accounts(moves, annotations, consistency or {}),
-        population=population.value if population is not None else "all",
+        game_level_holdout=codebook.induced_games_known,
     )
 
 
@@ -216,17 +235,5 @@ def prevalence_reports(funnel: FunnelResult, stores: AnalysisStores) -> list[Pre
     reports = []
     for annotator in store.annotators():
         consistency, _ = consistency_join(stores, funnel.experiment, annotator)
-        reports.extend(
-            prevalence_report(
-                Scope.of(funnel),
-                funnel.analyzable,
-                store.by_move(annotator),
-                codebook,
-                annotator,
-                consistency,
-                population=population,
-                split_config=funnel.split_config,
-            )
-            for population in (AnalysisSplit.EVALUATION, None, AnalysisSplit.DISCOVERY)
-        )
+        reports.append(prevalence_report(Scope.of(funnel), funnel.analyzable, store.by_move(annotator), codebook, annotator, consistency))
     return [report for report in reports if report.n_annotated]

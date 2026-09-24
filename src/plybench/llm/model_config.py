@@ -1,16 +1,27 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import cast, get_args
 
-from plybench.llm.options import LLMCallOptions
+from plybench.llm.options import LLMCallOptions, ReasoningEffort
 from plybench.llm.providers.providers import Provider
 from plybench.utils.text import extract_params, to_bool
+
+
+def _reasoning_effort(value: str | None) -> ReasoningEffort | None:
+    """A typo in a config string used to reach the provider unchecked and come back as an opaque API
+    error. The effort levels are a closed set, so it is caught here instead."""
+    if value is None:
+        return None
+    if value not in get_args(ReasoningEffort):
+        raise ValueError(f"Unknown reasoning_effort {value!r} -- expected one of {', '.join(get_args(ReasoningEffort))}")
+    return cast("ReasoningEffort", value)
 
 
 def parse_options(options_string: str) -> LLMCallOptions:
     params = extract_params(options_string)
     return LLMCallOptions(
-        reasoning_effort=params.get("reasoning_effort"),
+        reasoning_effort=_reasoning_effort(params.get("reasoning_effort")),
         thinking_enabled=to_bool(params.get("thinking_enabled", False)),
         max_tokens=int(params["max_tokens"]) if "max_tokens" in params else None,
         temperature=float(params["temperature"]) if "temperature" in params else None,

@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import pytest
 
-from plybench.analysis.errors.judge.sampling import by_matchup_outcome, discovery_plan, interleave, sample, strata
+from plybench.analysis.errors.judge.sampling import by_matchup_outcome, cap_per_position, discovery_plan, interleave, sample, strata
 from plybench.analysis.errors.moves import MatchupId, TracedMove
 from plybench.analysis.errors.reasoning.annotations import Annotation, AnnotationStore, MistakeLabel
 from plybench.analysis.errors.reasoning.codebook import SCOPE_UNIVERSAL, Code, Codebook, Etalon, game_scope
@@ -17,7 +17,7 @@ from plybench.common.enums import StateClass
 MATCHUP = MatchupId("exp", "tic_tac_toe:", "llm:player", "random:")
 
 
-def _traced(seq, is_optimal=True, state_class=StateClass.DECISION, game=None, player=None, opponent=None):
+def _traced(seq, is_optimal=True, state_class=StateClass.DECISION, game=None, player=None, opponent=None, position=None):
     record = MoveRecord(state_class, is_optimal, 0.0, None, 100, None, 3, 1)
     matchup = MatchupId(
         MATCHUP.experiment,
@@ -25,7 +25,10 @@ def _traced(seq, is_optimal=True, state_class=StateClass.DECISION, game=None, pl
         player or MATCHUP.player,
         opponent or MATCHUP.opponent,
     )
-    return TracedMove(matchup, 1, seq, record, "reasoning...", "board", "<A1>", ("<A1>", "<A2>"), ("<A1>",))
+    # distinct by default: two different moves are usually two different boards, and the discovery sampler
+    # caps how many may be drawn from any one of them
+    board = position if position is not None else f"board {seq}"
+    return TracedMove(matchup, 1, seq, record, "reasoning...", board, "<A1>", ("<A1>", "<A2>"), ("<A1>",), serialized_state=board)
 
 
 def _book(tmp_path):
@@ -182,6 +185,35 @@ def test_discovery_enriches_errors_and_covers_every_matchup_stratum_first():
     assert [move.uid for move in discovery_plan(list(reversed(moves)), suboptimal_cap=5, optimal_cap=2, seed="study").moves] == [
         move.uid for move in discovery_plan(moves, suboptimal_cap=5, optimal_cap=2, seed="study").moves
     ]
+
+
+def test_the_discovery_sampler_caps_how_many_moves_come_from_one_position():
+    """60% of traced moves sit in a position their own model reached more than once, so an uncapped
+    sample spends much of the induction budget re-reading the same board. A cap is a sampling parameter,
+    not a filtering stage: it changes what is drawn, never what exists, and it needs no similarity
+    threshold, because positions are equal or they are not."""
+    repeated = [_traced(i, is_optimal=False, position="same board") for i in range(30)]
+    distinct = [_traced(100 + i, is_optimal=False) for i in range(6)]
+
+    plan = discovery_plan(repeated + distinct, suboptimal_cap=32, coverage_per_stratum=1, state_cap=2, seed="study")
+
+    positions = [move.serialized_state for move in plan.moves]
+    assert positions.count("same board") == 2  # the other 28 were the same board again
+    assert len(plan.moves) == 8 and plan.n_candidates == 36 and plan.n_after_position_cap == 8
+    # the rare distinct positions are untouched: the cap removes redundancy, never coverage
+    assert len({move.serialized_state for move in plan.moves}) == 7
+
+
+def test_the_position_cap_is_deterministic_and_independent_of_input_order():
+    moves = [_traced(i, is_optimal=False, position=f"board {i % 4}") for i in range(20)]
+    kept = [move.uid for move in cap_per_position(moves, 2, seed="study")]
+
+    assert len(kept) == 8
+    # which moves survive is decided by the seed and nothing else; the order they come back in follows the
+    # input, because the caller stratifies and interleaves them afterwards
+    assert {move.uid for move in cap_per_position(list(reversed(moves)), 2, seed="study")} == set(kept)
+    assert [move.uid for move in cap_per_position(moves, 2, seed="study")] == kept
+    assert {move.uid for move in cap_per_position(moves, 2, seed="other")} != set(kept)
 
 
 # --- etalons -------------------------------------------------------------------------------------

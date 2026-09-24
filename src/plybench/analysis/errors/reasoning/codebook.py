@@ -104,9 +104,22 @@ class Codebook:
     # Every move uid induction has been shown, whether or not it yielded a code. Reports use this
     # provenance to compare uncovered rates on induction-naive and already-seen traces.
     induced: set[str] = field(default_factory=set)
-    discovery_fraction: float | None = None
-    split_seed: str = ""
+    # The games those moves came from. Hold-out is game-level because adjacent positions in one game are
+    # near-identical; a codebook validated on a different move of a game it was induced on is validated on
+    # itself. Empty on a codebook written before this was recorded, which `induced_games_known` reports.
+    induced_games: set[str] = field(default_factory=set)
     discovery_design: dict[str, int | str] = field(default_factory=dict)
+
+    @property
+    def induced_games_known(self) -> bool:
+        """Whether the game-level hold-out can be applied. False for a codebook induced before games were
+        recorded: the uids are hashes, so the games cannot be recovered, and the completeness figure falls
+        back to the weaker move-level exclusion rather than silently claiming the stronger one."""
+        return not self.induced or bool(self.induced_games)
+
+    def naive(self, move: "TracedMove") -> bool:
+        """Whether induction has seen neither this move nor any other move of its game."""
+        return move.uid not in self.induced and move.game_uid not in self.induced_games
 
     @property
     def version(self) -> str:
@@ -139,10 +152,13 @@ class Codebook:
         self.codes[code.id] = code
         return code
 
-    def record_induced(self, move_uids: Iterable[str]) -> None:
-        """Note that induction has seen these moves. Provenance only, so it deliberately does not move the
-        version -- what a code means is unchanged by which traces went past the judge."""
-        self.induced.update(move_uids)
+    def record_induced(self, moves: Iterable["TracedMove"]) -> None:
+        """Note that induction has seen these moves, and the games they came from. Provenance only, so it
+        deliberately does not move the version -- what a code means is unchanged by which traces went past
+        the judge."""
+        for move in moves:
+            self.induced.add(move.uid)
+            self.induced_games.add(move.game_uid)
 
     def add_example(self, code_id: str, move_uid: str) -> None:
         """Record which move an assignment came from. Provenance only — it never changes what the code
@@ -199,8 +215,7 @@ class Codebook:
             "version": self.version,
             "codes": [code.to_dict() for code in self.codes.values()],
             "induced": sorted(self.induced),
-            "discovery_fraction": self.discovery_fraction,
-            "split_seed": self.split_seed,
+            "induced_games": sorted(self.induced_games),
             "discovery_design": self.discovery_design,
         }
 
@@ -212,8 +227,7 @@ class Codebook:
             codes={code.id: code for code in codes},
             label=data.get("label", ""),
             induced=set(data.get("induced", [])),
-            discovery_fraction=data.get("discovery_fraction"),
-            split_seed=data.get("split_seed", ""),
+            induced_games=set(data.get("induced_games", [])),
             discovery_design=data.get("discovery_design", {}),
         )
 

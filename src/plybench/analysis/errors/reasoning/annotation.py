@@ -5,6 +5,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from difflib import SequenceMatcher
 from functools import partial
+from typing import cast
 
 from pydantic import BaseModel, Field
 
@@ -15,6 +16,7 @@ from plybench.analysis.errors.moves import TracedMove
 from plybench.analysis.errors.reasoning.annotations import OTHER, Annotation, AnnotationStore, MistakeLabel
 from plybench.analysis.errors.reasoning.codebook import Codebook, render_codes
 from plybench.analysis.errors.reasoning.protocol import rules_block
+from plybench.analysis.errors.reasoning.scope import code_applies
 
 ANNOTATION_REVISION = "annotation:v4"
 # the same codebook and the same rules, told what the solver preferred. A separate revision rather than a
@@ -173,7 +175,7 @@ class LabelResolver:
         if code_id and code_id not in self.codebook.codes:
             self.run.rejected_unknown_code.append(code_id)
             return None
-        if code_id and self.codebook.resolve(code_id) not in self.codebook.applicable(move):
+        if code_id and not code_applies(self.codebook.resolve(code_id), move):
             self.run.rejected_unknown_code.append(f"{code_id} (out of scope)")
             return None
         quote = verified_quote(move.trace, applied.evidence)
@@ -215,6 +217,8 @@ async def run_annotation(
         MoveAnnotation,
         partial(annotation_prompt, codebook=codebook, informed=informed),
         resolver,
-        covered=lambda annotations, annotator: annotations.annotated_under(annotator, codebook.version),
+        # `run_annotation` is always given an AnnotationStore; the hook is declared on the base store,
+        # which does not know about codebook versions
+        covered=lambda annotations, annotator: cast("AnnotationStore", annotations).annotated_under(annotator, codebook.version),
     )
     return resolver.finished(await annotating.run(judge, moves, store, cache, progress))

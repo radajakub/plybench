@@ -14,19 +14,19 @@ from typing import Any
 from plybench.analysis.errors.analysis import Analysis
 from plybench.analysis.errors.moves import MatchupId, TracedMove
 from plybench.analysis.errors.procedural.detection import MoveDiagnosis
-from plybench.analysis.errors.split import SplitConfig, split_for
 
 CellIndex = dict[MatchupId, int]
 
 
-def _row(move: TracedMove, diagnosis: MoveDiagnosis, cell: int, split_config: SplitConfig) -> dict[str, Any]:
+def _row(move: TracedMove, diagnosis: MoveDiagnosis, cell: int) -> dict[str, Any]:
     row: dict[str, Any] = {
         "uid": move.uid,
         "cell": cell,
         "round": move.game_round,
         "seq": move.seq,
+        # the recorded game, so the induction hold-out can be checked against the codebook from outside
+        "game_uid": move.game_uid,
         "stage": move.stage.value,
-        "analysis_split": split_for(move, config=split_config).value,
         "output_failure": move.output_failure.value if move.output_failure is not None else None,
         "position": move.record.state_class.value,
         "optimal": move.record.is_optimal,
@@ -41,7 +41,7 @@ def _row(move: TracedMove, diagnosis: MoveDiagnosis, cell: int, split_config: Sp
 
 
 def move_rows(analysis: Analysis, cells: CellIndex) -> Iterator[dict[str, Any]]:
-    return (_row(move, diagnosis, cells.setdefault(move.matchup, len(cells)), analysis.funnel.split_config) for move, diagnosis in analysis.graded)
+    return (_row(move, diagnosis, cells.setdefault(move.matchup, len(cells))) for move, diagnosis in analysis.graded)
 
 
 def _index(cells: CellIndex) -> list[dict[str, Any]]:

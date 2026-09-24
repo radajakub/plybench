@@ -18,13 +18,13 @@ import pytest
 from plybench.analysis.errors.funnel.run import build_funnel
 from plybench.analysis.errors.procedural.detection import SEVERITY_LABELS, MoveLabel, detect, diagnostics_for, nim_sum, piles
 from plybench.analysis.errors.procedural.position import MovePosition
-from plybench.analysis.errors.procedural.refutation import RefutationSolver
+from plybench.analysis.errors.procedural.refutation import Refutation, RefutationSolver
 from plybench.analysis.errors.procedural.run import label_moves
 from plybench.analysis.replay import ReplayerCache, build_replayer
 from plybench.app import PlyBench
 from plybench.common.enums import GameResults, StateClass
 from plybench.core.minimax import AVQ, depth_limited_value
-from plybench.harness.benchmark import Benchmark
+from plybench.harness.benchmark.benchmark import Benchmark
 from plybench.llm import LLMConfig
 
 op = PlyBench(LLMConfig())
@@ -228,6 +228,15 @@ def _refute(position: MovePosition):
     return RefutationSolver()(position)
 
 
+def _refuted(position: MovePosition) -> Refutation:
+    """The refutation, for the cases that require one. A move the solver agreed with has nothing to
+    refute, so the solver may return None; asserting it here keeps that distinction in the test that is
+    about it rather than repeating a narrowing check in every other test."""
+    refutation = _refute(position)
+    assert refutation is not None
+    return refutation
+
+
 def test_a_move_the_solver_agreed_with_has_nothing_to_refute():
     state = _ttt([0, 3, 1, 4])  # x holds 0,1 and finishes at 2
     assert _refute(_position(state, 2, [2])) is None
@@ -237,19 +246,19 @@ def test_a_blunder_the_move_itself_settles_is_refuted_at_one_ply():
     # x can finish at 2 and plays elsewhere: one ply of lookahead already separates the two, because the
     # alternative ends the game and nothing else within that horizon does
     state = _ttt([0, 3, 1, 4])
-    assert _refute(_position(state, 6, [2])).depth == 1
+    assert _refuted(_position(state, 6, [2])).depth == 1
 
     # and the same from the other direction: the move played is the one that ends the game, as a loss
     nim = _nim_down_to(5)  # 0 0 0 2 left, and taking both hands over the last match
     both, one = _take(nim, 3, 2), _take(nim, 3, 1)
-    assert _refute(_position(nim, both, [one])).depth == 1
+    assert _refuted(_position(nim, both, [one])).depth == 1
 
 
 def test_a_block_that_was_not_played_needs_the_opponents_reply_to_show_it():
     # o holds 0,1 and finishes at 2; x holds 4,8 and can only block. Playing anything else looks no worse
     # than blocking until the opponent's answer is on the board, which is the second ply
     state = _ttt([4, 0, 8, 1])
-    refutation = _refute(_position(state, 6, [2], value=DRAW))
+    refutation = _refuted(_position(state, 6, [2], value=DRAW))
     assert refutation.depth == 2
 
 
@@ -257,7 +266,7 @@ def test_width_is_the_share_of_replies_that_punish():
     # after x abandons the block at 2, o has four replies and exactly one of them wins; the other three
     # hand x the fork it just built on 2-4-6 and 6-7-8
     state = _ttt([4, 0, 8, 1])
-    refutation = _refute(_position(state, 6, [2], value=DRAW))
+    refutation = _refuted(_position(state, 6, [2], value=DRAW))
     assert (refutation.n_refuting, refutation.n_replies) == (1, 4)
     assert refutation.width == 0.25
     assert refutation.n_better == 1  # the block, and nothing else, was worth more
@@ -265,7 +274,7 @@ def test_width_is_the_share_of_replies_that_punish():
     # a move that ends the game leaves no reply to punish it, so there is no share to take
     nim = _nim_down_to(5)
     both, one = _take(nim, 3, 2), _take(nim, 3, 1)
-    ended = _refute(_position(nim, both, [one]))
+    ended = _refuted(_position(nim, both, [one]))
     assert (ended.n_replies, ended.width) == (0, None)
 
 

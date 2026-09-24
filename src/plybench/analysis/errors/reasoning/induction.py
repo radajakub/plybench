@@ -12,6 +12,7 @@ from plybench.analysis.errors.moves import FunnelStage, TracedMove
 from plybench.analysis.errors.reasoning.annotation import verified_quote
 from plybench.analysis.errors.reasoning.codebook import SCOPE_UNIVERSAL, Code, Codebook, game_scope, render_codes
 from plybench.analysis.errors.reasoning.protocol import rules_block
+from plybench.analysis.errors.reasoning.scope import code_applies
 from plybench.common.progress import track
 
 INDUCTION_REVISION = "induction:v2"
@@ -96,6 +97,9 @@ class InductionRun:
     new_per_batch: list[int] = field(default_factory=list)  # coded batches only, so the curve means what it looks like
     assignments: int = 0  # errors mapped onto a code that already existed
     instances: int = 0  # errors attributed at all, new code or existing: what the saturation claim rests on
+    # attributions per code id, the frequency spectrum the unseen-species estimators read. Counted here
+    # rather than from `Code.examples`, which dedups by move and so loses a code seen twice in one trace
+    per_code: dict[str, int] = field(default_factory=dict)
     unknown_codes: list[str] = field(default_factory=list)  # ids the judge invented for codes it did not propose
     rejected_evidence: list[str] = field(default_factory=list)  # proposals not anchored in their trace
     rejected_scope: list[str] = field(default_factory=list)  # existing codes applied outside their domain
@@ -152,10 +156,11 @@ def _apply_batch(batch: InducedBatch, moves: Sequence[TracedMove], codebook: Cod
         if error.code_id:
             if error.code_id in codebook.codes:
                 resolved = codebook.resolve(error.code_id)
-                if resolved not in codebook.applicable(move):
+                if not code_applies(resolved, move):
                     run.rejected_scope.append(f"move {error.move}: {error.code_id}")
                 else:
                     codebook.add_example(error.code_id, move.uid)
+                    run.per_code[resolved.id] = run.per_code.get(resolved.id, 0) + 1
                     run.assignments += 1
                     coded += 1
             else:
@@ -166,6 +171,7 @@ def _apply_batch(batch: InducedBatch, moves: Sequence[TracedMove], codebook: Cod
         scope = game_scope(_game_key(move)) if error.game_specific else SCOPE_UNIVERSAL
         code = Code(id=slug(error.name, set(codebook.codes)), name=error.name, definition=error.definition, scope=scope, examples=(move.uid,), inducer=inducer)
         codebook.add(code)
+        run.per_code[code.id] = run.per_code.get(code.id, 0) + 1
         run.new_codes.append(code.id)
         new_codes += 1
         coded += 1
@@ -211,7 +217,7 @@ async def induce(
             run.failed_batches += 1
             continue
         run.moves_seen += len(batch)
-        codebook.record_induced(move.uid for move in batch)  # annotation holds these back to validate the book
+        codebook.record_induced(batch)  # their games are held back, so completeness is measured on traces induction never read
         added, coded = _apply_batch(parsed, batch, codebook, run, judge.annotator)
         run.new_per_batch.append(added)
 

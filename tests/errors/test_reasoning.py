@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from collections.abc import Sequence
 
 from pydantic import BaseModel
 
@@ -45,12 +46,12 @@ MODEL = ModelConfig(Provider.OPENAI, "judge-model", LLMCallOptions())
 TRACE = "I could take A2 but then they win. Therefore the best move is A1."
 
 
-def _traced(seq: int = 1, move: str = "<A1>", optimal: list[str] | None = None, trace: str = TRACE) -> TracedMove:
-    optimal_moves = optimal if optimal is not None else ("<A1>",)
+def _traced(seq: int = 1, move: str = "<A1>", optimal: Sequence[str] | None = None, trace: str = TRACE, game_round: int = 1) -> TracedMove:
+    optimal_moves = tuple(optimal) if optimal is not None else ("<A1>",)
     record = MoveRecord(StateClass.DECISION, move in optimal_moves, 0.0, None, len(LEGAL), None, len(LEGAL), len(optimal_moves))
     # the position carries the sequence number: two moves that render identically would be one prompt, and
     # the response cache would answer the second from the first
-    return TracedMove(MATCHUP, 1, seq, record, trace, f"board {seq}", move, LEGAL, optimal_moves)
+    return TracedMove(MATCHUP, game_round, seq, record, trace, f"board {seq}", move, LEGAL, optimal_moves)
 
 
 def _funnel(moves: list[TracedMove]) -> FunnelResult:
@@ -205,7 +206,24 @@ def test_induction_records_every_move_it_was_shown_so_annotation_can_hold_them_b
     asyncio.run(induce(judge, moves, book, batch_size=4, patience=5, cache=ResponseCache(tmp_path / "c"), progress=False))
 
     assert book.induced == {move.uid for move in moves}  # every move seen, not only the ones that yielded a code
-    assert Codebook.load("exp", book.save(tmp_path / "codebook.json")).induced == book.induced
+    assert book.induced_games == {move.game_uid for move in moves}  # and the games, which is what is held back
+    reloaded = Codebook.load("exp", book.save(tmp_path / "codebook.json"))
+    assert (reloaded.induced, reloaded.induced_games) == (book.induced, book.induced_games)
+
+
+def test_induction_counts_instances_per_code_so_the_spectrum_can_be_read(tmp_path):
+    """`Code.examples` dedups by move, so a code the judge found twice in one trace looks like a singleton
+    there. The unseen-species estimators read exactly that distinction, so the attributions are counted
+    separately from the provenance."""
+    move = _traced(1)
+    errors = [_error(code_id="threat_blindness"), _error(code_id="threat_blindness")]
+    judge, _ = _judge([InducedBatch(errors=errors)])
+    book = _book(THREAT)
+
+    run = asyncio.run(induce(judge, [move], book, batch_size=1, patience=5, cache=ResponseCache(tmp_path / "c"), progress=False))
+
+    assert run.per_code == {"threat_blindness": 2}
+    assert book.codes["threat_blindness"].examples == (move.uid,)  # one move, whatever it contributed
 
 
 def test_an_assignment_to_an_existing_code_adds_provenance_instead_of_a_duplicate(tmp_path):
@@ -365,6 +383,54 @@ def test_an_uncovered_error_counts_as_an_error_but_under_no_code():
     assert report.codes == []  # but it belongs to no code, so it inflates nobody's prevalence
 
 
+def test_a_fresh_position_from_a_game_induction_read_does_not_measure_completeness(tmp_path):
+    """The whole hold-out rests on this. Two moves of one game are two positions one ply apart, so a
+    codebook asked about the second after being induced on the first is being asked about itself. The
+    uncovered rate it produces there is a fit statistic, not a completeness figure."""
+    read, same_game, other_game = _traced(1, game_round=7), _traced(2, game_round=7), _traced(3, game_round=8)
+    book = _book(THREAT)
+    book.record_induced([read])
+
+    assert not book.naive(read) and not book.naive(same_game)  # unseen position, seen game
+    assert book.naive(other_game)
+
+    escape = MistakeLabel(OTHER, "Therefore the best move is A1.", False, "novel failure")
+    annotations = {move.uid: Annotation(move.uid, "judge|v1", book.version, (escape,)) for move in (read, same_game, other_game)}
+    report = _prevalence([read, same_game, other_game], annotations, book, "judge|v1")
+
+    # every move looks uncovered, but only one of them is entitled to say so
+    assert report.uncovered.value == 1.0 and report.n_uncovered == 3
+    assert report.n_naive == 1 and report.n_uncovered_naive == 1 and report.uncovered_naive.value == 1.0
+
+
+def test_the_completeness_rate_carries_the_denominator_it_was_measured_on(tmp_path):
+    """A rate without its denominator cannot be acted on: 5% uncovered is a reason to run another wave if
+    it is 100 moves in 2000 and no evidence of anything if it is one in twenty."""
+    moves = [_traced(seq, game_round=seq) for seq in range(1, 5)]
+    book = _book(THREAT)
+    book.record_induced(moves[:2])
+    escape = MistakeLabel(OTHER, "Therefore the best move is A1.", False, "novel failure")
+    annotations = {move.uid: Annotation(move.uid, "judge|v1", book.version, (escape,) if move is moves[2] else ()) for move in moves}
+
+    report = _prevalence(moves, annotations, book, "judge|v1")
+
+    assert (report.n_uncovered_naive, report.n_naive) == (1, 2) and report.uncovered_naive.value == 0.5
+    assert report.game_level_holdout
+
+
+def test_a_codebook_with_no_game_provenance_reports_the_weaker_holdout_rather_than_claiming_the_stronger(tmp_path):
+    """Codebooks written before games were recorded cannot be upgraded -- the uids are hashes. Falling
+    back to move-level exclusion is defensible; quietly reporting it as the game-level figure is not."""
+    read, same_game = _traced(1, game_round=7), _traced(2, game_round=7)
+    book = _book(THREAT)
+    book.induced.add(read.uid)  # as an old file loads: moves, no games
+
+    assert not book.induced_games_known
+    assert book.naive(same_game)  # the weaker exclusion is all that is available
+    report = _prevalence([read, same_game], {}, book, "judge|v1")
+    assert not report.game_level_holdout
+
+
 def test_a_move_with_no_error_is_recorded_as_clean_rather_than_skipped(tmp_path):
     judge, _ = _judge([MoveAnnotation(labels=[], notes="clean line")])
     store = AnnotationStore("exp", tmp_path / "annotations.jsonl")
@@ -496,7 +562,9 @@ def test_a_same_protocol_pair_wins_even_when_a_cross_protocol_one_overlaps_more(
     for uid in ("a", "b", "c", "d", "e"):
         store.add(Annotation(uid, "openai:one|annotation:v3-informed", "v", ()))
 
-    first, second, same = best_pair(store)
+    pair = best_pair(store)
+    assert pair is not None  # two annotators share moves, so there is one; having none is its own test
+    first, second, same = pair
     assert same and {first, second} == {"openai:one|annotation:v3", "openai:two|annotation:v3"}
 
 
@@ -509,7 +577,9 @@ def test_two_protocols_are_compared_when_asked_but_flagged_as_not_reliability(tm
         store.add(Annotation(uid, "metacentrum:gemma-4|annotation:v3", "v", ()))
         store.add(Annotation(uid, "metacentrum:gemma-4|annotation:v3-informed", "v", ()))
 
-    first, second, same = best_pair(store)
+    pair = best_pair(store)
+    assert pair is not None
+    first, second, same = pair
     assert not same and {first, second} == {"metacentrum:gemma-4|annotation:v3", "metacentrum:gemma-4|annotation:v3-informed"}
 
 

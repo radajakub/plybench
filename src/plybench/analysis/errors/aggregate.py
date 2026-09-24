@@ -25,7 +25,6 @@ from plybench.analysis.errors.procedural.report import report_labels
 from plybench.analysis.errors.procedural.stats import LabelReport, label_report
 from plybench.analysis.errors.reasoning.report import report_mistakes
 from plybench.analysis.errors.reasoning.stats import PrevalenceReport, prevalence_report
-from plybench.analysis.errors.split import AnalysisSplit
 from plybench.analysis.errors.stores import consistency_join
 from plybench.analysis.statistics.standardization import Reference, reference_mix
 
@@ -85,21 +84,7 @@ def _mistakes(scope: Scope, members: Sequence[Analysis], confidence: float, refe
     reports = []
     for annotator in store.annotators():
         consistency, _ = consistency_join(stores, scope.experiment, annotator)
-        reports.extend(
-            prevalence_report(
-                scope,
-                moves,
-                store.by_move(annotator),
-                codebook,
-                annotator,
-                consistency,
-                confidence,
-                reference,
-                population=population,
-                split_config=members[0].funnel.split_config,
-            )
-            for population in (AnalysisSplit.EVALUATION, None, AnalysisSplit.DISCOVERY)
-        )
+        reports.append(prevalence_report(scope, moves, store.by_move(annotator), codebook, annotator, consistency, confidence, reference))
     return [report for report in reports if report.n_annotated]
 
 

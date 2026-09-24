@@ -5,18 +5,16 @@ routing only -- the funnel's own numbers about them are `funnel/stats.py`, like 
 from __future__ import annotations
 
 from plybench.analysis.errors.moves import FunnelStage, TracedMove, by_stage
-from plybench.analysis.errors.split import SplitConfig
 from plybench.configs.game_config import GameConfig
 from plybench.configs.player_config import PlayerConfig
 
 
 class FunnelResult:
-    def __init__(self, experiment: str, game: GameConfig, player: PlayerConfig, moves: list[TracedMove], split_config: SplitConfig | None = None) -> None:
+    def __init__(self, experiment: str, game: GameConfig, player: PlayerConfig, moves: list[TracedMove]) -> None:
         self.experiment = experiment
         self.game = game
         self.player = player
         self.moves = moves
-        self.split_config = split_config or SplitConfig()
         grouped = by_stage(moves)
         # every leaf is kept, empty ones included: a bucket nothing landed in is a result, not a missing row
         self._by_stage: dict[FunnelStage, list[TracedMove]] = {stage: grouped.get(stage, []) for stage in FunnelStage}

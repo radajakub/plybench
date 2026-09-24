@@ -5,6 +5,7 @@ caching/resume behaviour that keeps a re-run from paying for verdicts it already
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Sequence
 
 from pydantic import BaseModel
 
@@ -32,12 +33,12 @@ ANNOTATOR = "openai:judge-model|consistency:test"
 def _traced(
     seq: int = 1,
     move: str = "<A1>",
-    optimal: list[str] | None = None,
+    optimal: Sequence[str] | None = None,
     state_class: StateClass = StateClass.DECISION,
     observation: str = "board",
     trace: str = "so I will play A1",
 ) -> TracedMove:
-    optimal_moves = optimal if optimal is not None else (LEGAL if state_class.is_forced else ("<A1>",))
+    optimal_moves = tuple(optimal) if optimal is not None else (LEGAL if state_class.is_forced else ("<A1>",))
     record = MoveRecord(state_class, move in optimal_moves, 0.0, None, 100, None, len(LEGAL), len(optimal_moves))
     return TracedMove(MATCHUP, 1, seq, record, trace, observation, move, LEGAL, optimal_moves)
 

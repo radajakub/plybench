@@ -14,13 +14,13 @@ from plybench.analysis.errors.moves import FunnelStage, MatchupId, TracedMove, g
 from plybench.analysis.stats.moves import MoveRecord
 from plybench.app import PlyBench
 from plybench.common.enums import MetricName, StateClass
-from plybench.harness.benchmark import Benchmark
+from plybench.harness.benchmark.benchmark import Benchmark
 from plybench.llm import LLMConfig
 
 op = PlyBench(LLMConfig())
 
 
-def _traced(trace="reasoning...", move="<A1>", state_class=StateClass.DECISION, is_optimal=True, regret=0.0, opponent="random:", game_round=1, seq=1):
+def _traced(trace: str | None = "reasoning...", move="<A1>", state_class=StateClass.DECISION, is_optimal=True, regret=0.0, opponent="random:", game_round=1, seq=1):
     record = MoveRecord(state_class, is_optimal, regret, None, 100, None, 3, 1)
     matchup = MatchupId("exp", "tic_tac_toe:", "llm:player", opponent)
     return TracedMove(matchup, game_round, seq, record, trace, "board", move, ("<A1>", "<A2>", "<A3>"), ("<A1>",))

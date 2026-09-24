@@ -184,8 +184,11 @@ def test_standardisation_removes_the_position_mix_from_a_comparison():
     raw = {name: sum(h for h, _ in r.values()) / sum(n for _, n in r.values()) for name, r in (("weak", weak), ("strong", strong))}
     std = {name: standardized_rate(r, reference) for name, r in (("weak", weak), ("strong", strong))}
 
+    # both groups entered every stratum here, so neither rate is None -- the None case is its own test
+    assert std["weak"] is not None and std["strong"] is not None
     assert raw["weak"] / raw["strong"] < std["weak"].value / std["strong"].value
-    assert std["weak"].sem is not None and std["weak"].sem.lower > std["strong"].sem.upper
+    assert std["weak"].sem is not None and std["strong"].sem is not None
+    assert std["weak"].sem.lower > std["strong"].sem.upper
     assert std["weak"].n == 460, "the interval rests on every move in the group, not on the reweighted total"
 
 

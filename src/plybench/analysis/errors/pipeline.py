@@ -17,10 +17,12 @@ from plybench.analysis.errors.judge.runner import Generator, Judge, ResponseCach
 from plybench.analysis.errors.judge.sampling import DiscoveryPlan, by_matchup_outcome, discovery_plan, sample, strata
 from plybench.analysis.errors.moves import FunnelStage, TracedMove
 from plybench.analysis.errors.reasoning.annotation import ANNOTATION_REVISION, INFORMED_ANNOTATION_REVISION, run_annotation
+from plybench.analysis.errors.reasoning.annotations import AnnotationStore
+from plybench.analysis.errors.reasoning.codebook import Codebook
+from plybench.analysis.errors.reasoning.coverage import Coverage
 from plybench.analysis.errors.reasoning.etalons import ETALON_REVISION, elect_etalons
 from plybench.analysis.errors.reasoning.induction import INDUCTION_REVISION, consolidate, induce
-from plybench.analysis.errors.reasoning.stats import prevalence_report
-from plybench.analysis.errors.split import AnalysisSplit, in_split
+from plybench.analysis.errors.reasoning.stats import FREEZE_THRESHOLD, prevalence_report
 from plybench.analysis.errors.stores import AnalysisStores, consistency_join
 from plybench.llm import ModelConfig
 
@@ -47,12 +49,19 @@ class PassOptions:
     seed: str = ""
     batch_size: int = 8
     patience: int = 4
-    min_instances: int = 30
+    # saturation is refused until this many errors have been coded. A 20-30 code taxonomy over a skewed
+    # distribution needs several hundred instances before its tail is represented at all, so a low guard
+    # lets a run declare completeness having seen almost nothing
+    min_instances: int = 300
     consolidate: bool = True
+    # hold the games induction read out of the annotation pass, so the uncovered rate is measured on
+    # traces the codebook was not built from. This is the coverage test; the census leaves it off
+    coverage_test: bool = False
     discovery_suboptimal_cap: int = 32
     discovery_optimal_cap: int = 4
     discovery_non_decision_cap: int = 2
     discovery_coverage_per_stratum: int = 2
+    discovery_state_cap: int = 2  # moves drawn per (cell, position)
 
 
 class Pipeline:
@@ -75,14 +84,25 @@ class Pipeline:
             optimal_cap=self.options.discovery_optimal_cap,
             non_decision_cap=self.options.discovery_non_decision_cap,
             coverage_per_stratum=self.options.discovery_coverage_per_stratum,
+            state_cap=self.options.discovery_state_cap,
             seed=self.options.seed,
         )
 
-    def _excluded(self, pass_name: str, funnels: list[FunnelResult]) -> set[str]:  # noqa: ARG002
-        # nothing is held back any more. A codebook still cannot be validated on the traces it was induced
-        # from, but withholding them left holes in a census that is meant to cover every analysable move;
-        # `prevalence_report` measures the uncovered rate twice instead, once on the induction-naive moves
-        return set()
+    def _excluded(self, pass_name: str, funnels: list[FunnelResult]) -> set[str]:
+        """Move uids the pass may not look at.
+
+        The census holds nothing back: it is meant to cover every analysable move, and
+        `prevalence_report` measures the uncovered rate twice anyway, once on the induction-naive games.
+        The coverage test is the opposite case -- it exists only to measure completeness, so every call it
+        spends on a game induction has already read is a call spent measuring nothing."""
+        if not (self.options.coverage_test and pass_name in (ANNOTATE, INFORMED)):
+            return set()
+        codebook = self.stores.codebook(funnels[0].experiment) if funnels else None
+        if codebook is None or not codebook.induced:
+            return set()
+        if not codebook.induced_games_known:
+            print("  ! this codebook predates game-level provenance, so only the induced moves themselves can be held back")
+        return {move.uid for funnel in funnels for move in funnel.analyzable if not codebook.naive(move)}
 
     def select(self, pass_name: str, funnels: list[FunnelResult]) -> Selection:
         """Chosen at pass time rather than up front: induction adds to the held-back set, so annotation
@@ -91,10 +111,6 @@ class Pipeline:
         selection = []
         for funnel in funnels:
             moves = funnel.analyzable
-            # A small discovery partition builds the taxonomy; the much larger evaluation partition
-            # estimates prevalence. Complete games remain disjoint across the boundary.
-            if pass_name in (INDUCE, ETALONS):
-                moves = in_split(moves, AnalysisSplit.DISCOVERY, config=funnel.split_config)
             # dropped before sampling, so the sample fills up from held-out moves rather than shrinking
             moves = [move for move in moves if move.uid not in excluded]
             if self.options.per_stratum is None or pass_name == INDUCE:
@@ -144,18 +160,13 @@ class Pipeline:
     async def _induce(self, judge: Judge, selection: Selection, funnels: list[FunnelResult]) -> None:
         experiment = selection[0][0].experiment
         codebook = self.stores.codebook(experiment)
-        split_config = selection[0][0].split_config
-        recorded = (codebook.discovery_fraction, codebook.split_seed)
-        requested = (split_config.discovery_fraction, split_config.seed)
-        if codebook.discovery_fraction is not None and recorded != requested:
-            raise SystemExit(f"codebook was induced with split {recorded}, but this run requested {requested}; use the original parameters or a new --codebook")
-        codebook.discovery_fraction, codebook.split_seed = requested
         design: dict[str, int | str] = {
             "strata": "game,player,opponent,outcome",
             "suboptimal_cap": self.options.discovery_suboptimal_cap,
             "optimal_cap": self.options.discovery_optimal_cap,
             "non_decision_cap": self.options.discovery_non_decision_cap,
             "coverage_per_stratum": self.options.discovery_coverage_per_stratum,
+            "state_cap": self.options.discovery_state_cap,
             "sampling_seed": self.options.seed,
         }
         if codebook.discovery_design and codebook.discovery_design != design:
@@ -180,8 +191,11 @@ class Pipeline:
             f"outcomes={outcomes}; codebook starts with {len(codebook.active())} active code(s)"
         )
         print(f"  saturation disabled until the {plan.coverage_moves}-move stratum-coverage prefix has been read")
+        dropped = plan.n_candidates - plan.n_after_position_cap
+        if dropped:
+            print(f"  {dropped} move(s) dropped by the {self.options.discovery_state_cap}-per-position cap before stratification")
         if missing:
-            print(f"  ! {len(missing)} suboptimal matchup stratum/strata have no move in discovery; consider a larger discovery fraction")
+            print(f"  ! {len(missing)} suboptimal matchup stratum/strata have no move in discovery; raise the per-stratum caps or the per-position cap")
 
         run = await induce(
             judge,
@@ -199,6 +213,7 @@ class Pipeline:
         stop = "saturated" if run.saturated else "ran out of moves while still finding codes"
         print(f"  new codes per batch: {run.new_per_batch}  -> {stop}")
         print(f"  {run.instances} error instance(s) coded in total -- what the saturation claim rests on")
+        print(f"  coverage: {Coverage.of(run.per_code).summary()}")
         if run.unmixed_batches:
             print(f"  {run.unmixed_batches} batch(es) held no suboptimal move -- coded, but they cannot end the loop, since there was little in them to find")
         if run.silent_batches:
@@ -270,19 +285,7 @@ class Pipeline:
         for funnel, moves in selection:
             run = await run_annotation(judge, moves, codebook, store, self.cache, informed=informed)
             self.ledger.record(INFORMED if informed else ANNOTATE, self.model, run.stats)
-            reports = [
-                prevalence_report(
-                    Scope.of(funnel),
-                    funnel.analyzable,
-                    store.by_move(judge.annotator),
-                    codebook,
-                    judge.annotator,
-                    consistency,
-                    population=population,
-                    split_config=funnel.split_config,
-                )
-                for population in (AnalysisSplit.EVALUATION, None)
-            ]
+            report = prevalence_report(Scope.of(funnel), funnel.analyzable, store.by_move(judge.annotator), codebook, judge.annotator, consistency)
             print(f"\n{cell(funnel)}")
             if run.stats is not None:
                 print(f"  annotated {run.stats.n} ({run.stats.n_cached} cached, {run.stats.n_failed} without a verdict)")
@@ -296,13 +299,39 @@ class Pipeline:
                 print(f"  ! evidence not found in trace -- {rejected}")
             for rejected in sorted(set(run.rejected_unknown_code))[:3]:
                 print(f"  ! label used an unknown code id: {rejected}")
-            for report in reports:
-                print(
-                    f"  [{report.population}] {report.n_annotated}/{report.n_moves} moves annotated, {report.n_clean} clean, "
-                    f"any-error rate {report.any_error.value:.3f}, uncovered {report.uncovered.value:.3f}"
-                )
-                for code in report.codes[:8]:
-                    print(f"    {code.code_id:28s} {code.n_uncorrected:4d} uncorrected  rate {code.rate.value:.3f}  (+{code.n_self_corrected} self-corrected)")
-                if report.accounts:
-                    accounts = ", ".join(f"{account.value}={count}" for account, count in report.accounts.items() if count)
-                    print(f"    suboptimal moves accounted for: {accounts}")
+            print(f"  {report.n_annotated}/{report.n_moves} moves annotated, {report.n_clean} clean, any-error rate {report.any_error.value:.3f}")
+            holdout = "games induction read" if report.game_level_holdout else "moves induction read (no game provenance)"
+            print(
+                f"  uncovered {report.uncovered.value:.3f} over all {report.n_annotated} annotated move(s); "
+                f"{report.n_uncovered_naive}/{report.n_naive} = {report.uncovered_naive.fmt(5, interval=True)} holding back {holdout}"
+            )
+            for code in report.codes[:8]:
+                print(f"    {code.code_id:28s} {code.n_uncorrected:4d} uncorrected  rate {code.rate.value:.3f}  (+{code.n_self_corrected} self-corrected)")
+            if report.accounts:
+                accounts = ", ".join(f"{account.value}={count}" for account, count in report.accounts.items() if count)
+                print(f"    suboptimal moves accounted for: {accounts}")
+
+        self._completeness(judge, selection, codebook, store)
+
+    def _completeness(self, judge: Judge, selection: Selection, codebook: Codebook, store: AnnotationStore) -> None:
+        """The uncovered rate per model, which is the figure the freeze decision rests on.
+
+        Printed unprompted rather than left to a pooling flag, because the failure it exists to catch is
+        invisible in every other view: a pooled 4% hiding one model at 20% means that model's errors are
+        not in the codebook and none of its rates are comparable with the others'."""
+        by_model: dict[Scope, list[TracedMove]] = {}
+        for funnel, _ in selection:
+            by_model.setdefault(Scope.of(funnel).only("model"), []).extend(funnel.analyzable)
+        reports = [prevalence_report(scope, moves, store.by_move(judge.annotator), codebook, judge.annotator) for scope, moves in by_model.items()]
+        reports = [report for report in reports if report.n_naive]
+        if not reports:
+            print("\nno annotated move comes from a game induction never read -- the uncovered rate cannot measure completeness yet")
+            return
+
+        print(f"\ncodebook completeness per model, on games induction never read (freeze threshold {FREEZE_THRESHOLD:.0%})")
+        for report in sorted(reports, key=lambda report: report.uncovered_naive.value, reverse=True):
+            flag = "  <-- blocks the freeze" if report.uncovered_naive.value > FREEZE_THRESHOLD else ""
+            print(f"  {str(report.scope):48s} {report.n_uncovered_naive:4d}/{report.n_naive:<6d} {report.uncovered_naive.fmt(8, interval=True)}{flag}")
+        worst = max(report.uncovered_naive.value for report in reports)
+        if worst > FREEZE_THRESHOLD:
+            print("  the codebook is not complete for every model -- read the uncovered descriptions, extend it, and run another wave")

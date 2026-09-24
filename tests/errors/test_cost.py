@@ -18,6 +18,7 @@ from plybench.analysis.stats.moves import MoveRecord
 from plybench.app import PlyBench
 from plybench.common.enums import StateClass
 from plybench.llm import LLMCallOptions, LLMConfig, LLMMessage, LLMModel, LLMResponse, LLMTokens, ModelConfig, OutputText, Provider
+from plybench.player.llm_player import LLMParams
 
 op = PlyBench(LLMConfig())
 
@@ -186,4 +187,5 @@ def test_the_player_and_the_judge_agree_on_what_a_model_string_means():
     # the tail of a player config is exactly a judge config, which is the property that makes one parser
     # correct rather than merely convenient
     player = op.registry.player_config("llm:actions:text:openai:gpt-5-nano:thinking_enabled=True,reasoning_effort=low")
+    assert isinstance(player.params, LLMParams)  # only an LLM player names a model at all
     assert ModelConfig.from_string("openai:gpt-5-nano:thinking_enabled=True,reasoning_effort=low") == player.params.model

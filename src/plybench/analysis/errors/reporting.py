@@ -10,7 +10,7 @@ from plybench.analysis.errors.consistency.report import report_consistency
 from plybench.analysis.errors.funnel.report import report_funnel, report_opponents, report_subgroups, report_traces
 from plybench.analysis.errors.judge.cost import CostLedger, StepCost
 from plybench.analysis.errors.procedural.report import report_labels
-from plybench.analysis.errors.reasoning.report import report_mistakes, report_reliability
+from plybench.analysis.errors.reasoning.report import report_correlations, report_mistakes, report_reliability
 from plybench.utils.const import MILLION
 
 Reporter = Callable[[Analysis], None]
@@ -26,6 +26,7 @@ REPORTERS: dict[str, Reporter] = {
     "consistency": lambda analysis: report_consistency(analysis.scope, len(analysis.funnel.moves), analysis.consistency_reports),
     "mistakes": lambda analysis: report_mistakes(analysis.scope, len(analysis.funnel.moves), analysis.prevalence_reports),
     "reliability": lambda analysis: report_reliability(analysis.scope, len(analysis.funnel.moves), analysis.reliability_report),
+    "correlations": lambda analysis: report_correlations(analysis.scope, len(analysis.funnel.moves), analysis.correlation_reports),
 }
 
 

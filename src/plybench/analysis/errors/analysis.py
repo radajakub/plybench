@@ -16,7 +16,7 @@ from plybench.analysis.errors.moves import joined
 from plybench.analysis.errors.procedural import stats as procedural_stats
 from plybench.analysis.errors.procedural.detection import MoveDiagnosis
 from plybench.analysis.errors.procedural.run import label_moves
-from plybench.analysis.errors.reasoning import agreement
+from plybench.analysis.errors.reasoning import agreement, correlate
 from plybench.analysis.errors.reasoning import stats as reasoning_stats
 from plybench.analysis.errors.stores import AnalysisStores
 from plybench.analysis.replay import ReplayerCache
@@ -56,6 +56,19 @@ class Analysis:
     def reliability_report(self) -> agreement.ReliabilityReport | None:
         return agreement.reliability_report(self.funnel, self.stores)
 
+    @cached_property
+    def correlation_reports(self) -> list[correlate.CrosstabReport]:
+        """Both joins, one pair per annotator: the codes against the solver's own labels, and against how
+        long the trace was. These are the two design questions the separate stages cannot answer alone."""
+        store, codebook = self.stores.annotations(self.funnel.experiment), self.stores.codebook(self.funnel.experiment)
+        moves = self.funnel.analyzable
+        reports = []
+        for annotator in store.annotators():
+            by_move = store.by_move(annotator)
+            reports.append(correlate.code_by_label(self.scope, moves, by_move, self.labels, codebook, annotator))
+            reports.append(correlate.code_by_length(self.scope, moves, by_move, codebook, annotator))
+        return [report for report in reports if report.n_moves]
+
     def to_dict(self) -> dict[str, Any]:
         reliability = self.reliability_report
         return {
@@ -64,6 +77,7 @@ class Analysis:
             "consistency": [report.to_dict() for report in self.consistency_reports],
             "mistakes": [report.to_dict() for report in self.prevalence_reports],
             "reliability": reliability.to_dict() if reliability is not None else None,
+            "correlations": [report.to_dict() for report in self.correlation_reports],
         }
 
 

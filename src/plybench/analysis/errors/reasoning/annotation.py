@@ -18,10 +18,10 @@ from plybench.analysis.errors.reasoning.codebook import Codebook, render_codes
 from plybench.analysis.errors.reasoning.protocol import rules_block
 from plybench.analysis.errors.reasoning.scope import code_applies
 
-ANNOTATION_REVISION = "annotation:v4"
+ANNOTATION_REVISION = "annotation:v5"
 # the same codebook and the same rules, told what the solver preferred. A separate revision rather than a
 # setting, so the two columns sit side by side in one store and can be compared instead of argued about
-INFORMED_ANNOTATION_REVISION = "annotation:v4-informed"
+INFORMED_ANNOTATION_REVISION = "annotation:v5-informed"
 
 # shown to both variants: the chosen move, because rules 1, 3 and 4 are all defined against it
 _CHOSEN = """You are told which move was finally played, because the coding rules are defined in terms of \
@@ -132,7 +132,9 @@ def annotation_prompt(move: TracedMove, codebook: Codebook, informed: bool = Fal
     Never revealed either way: which model wrote the trace. That is the blinding the cross-model
     comparison actually rests on."""
     given = f"{_CHOSEN}\n\n{_INFORMED if informed else _BLIND}"
-    system = _ANNOTATION_SYSTEM.format(given=given, rules=rules_block(), codes=render_codes(codebook.applicable(move)))
+    # every active code, never the ones scoped to this move's game. A code offered only where it is
+    # expected can only ever be observed there, and where a code occurs is the finding
+    system = _ANNOTATION_SYSTEM.format(given=given, rules=rules_block(), codes=render_codes(codebook.active()))
     return Prompt(system, render_move(move, reveal_choice=True, reveal_optimal=informed))
 
 
@@ -146,6 +148,7 @@ class AnnotationRun:
     n_labels: int = 0
     n_self_corrected: int = 0
     n_other: int = 0  # errors no code covered: the codebook's incompleteness, measured rather than lost
+    n_outside_level: int = 0  # labels using a code outside its declared level: kept, and evidence the level is wrong
     n_trimmed: int = 0  # labels kept, but with a stitched quote cut back to the part really in the trace
     rejected_unknown_code: list[str] = field(default_factory=list)
     rejected_evidence: list[str] = field(default_factory=list)
@@ -175,14 +178,15 @@ class LabelResolver:
         if code_id and code_id not in self.codebook.codes:
             self.run.rejected_unknown_code.append(code_id)
             return None
-        if code_id and not code_applies(self.codebook.resolve(code_id), move):
-            self.run.rejected_unknown_code.append(f"{code_id} (out of scope)")
-            return None
         quote = verified_quote(move.trace, applied.evidence)
         if quote is None:
             self.run.rejected_evidence.append(f"{code_id or OTHER}: {applied.evidence[:60]}")
             return None
 
+        # a code used outside the level it claims is kept and counted. That is the measurement the
+        # hierarchy rests on: a code declared presentation-specific and then found under another
+        # presentation was mis-levelled, and rejecting the label is how that never gets discovered
+        self.run.n_outside_level += bool(code_id) and not code_applies(self.codebook.resolve(code_id), move)
         self.run.n_trimmed += not quotes_trace(move.trace, applied.evidence)
         self.run.n_labels += 1
         self.run.n_other += not code_id

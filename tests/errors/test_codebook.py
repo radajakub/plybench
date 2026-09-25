@@ -8,7 +8,7 @@ import pytest
 from plybench.analysis.errors.judge.sampling import by_matchup_outcome, cap_per_position, discovery_plan, interleave, sample, strata
 from plybench.analysis.errors.moves import MatchupId, TracedMove
 from plybench.analysis.errors.reasoning.annotations import Annotation, AnnotationStore, MistakeLabel
-from plybench.analysis.errors.reasoning.codebook import SCOPE_UNIVERSAL, Code, Codebook, Etalon, game_scope
+from plybench.analysis.errors.reasoning.codebook import SCOPE_UNIVERSAL, Code, Codebook, Etalon, family_scope, game_scope
 from plybench.analysis.errors.reasoning.protocol import CODING_RULES, rules_block
 from plybench.analysis.errors.stores import AnalysisStores
 from plybench.analysis.stats.moves import MoveRecord
@@ -50,12 +50,32 @@ def test_codes_carry_a_tier_and_a_scope(tmp_path):
         book.add(Code("nim_sum", "duplicate", "y"))  # ids are assigned once and never reused
 
 
-def test_only_codes_applicable_to_the_move_are_exposed():
+def test_applicability_says_where_a_code_claims_to_belong_not_where_it_may_be_used():
+    """A reporting predicate, deliberately not a gate. Annotation offers every code on every move; this
+    is what the result is then compared against to say whether the level claim held."""
     book = _book(None)
     nim = _traced(1, game="nim:")
     ttt = _traced(2, game="tic_tac_toe:")
     assert {code.id for code in book.applicable(nim)} == {"threat_blindness", "nim_sum"}
     assert {code.id for code in book.applicable(ttt)} == {"threat_blindness"}
+
+
+def test_the_hierarchy_is_three_deep_and_refuses_a_fourth_tier():
+    book = Codebook("exp")
+    book.add(Code("universal_step", "A universal step", "x"))
+    book.add(Code("family_case", "A family case", "y", family_scope("nim")))
+    book.add(Code("presentation_case", "A presentation case", "z", game_scope("story_nim")))
+    book.add(Code("deeper", "One tier too far", "w", game_scope("story_nim")))
+
+    book.set_parent("family_case", "universal_step")
+    book.set_parent("presentation_case", "family_case")
+    assert [book.depth(code) for code in ("universal_step", "family_case", "presentation_case")] == [0, 1, 2]
+
+    # a fourth tier has no level to be counted over, which is the whole argument of the hierarchy
+    with pytest.raises(ValueError, match="deeper than the 3 levels"):
+        book.set_parent("deeper", "presentation_case")
+    with pytest.raises(ValueError, match="cycle"):
+        book.set_parent("universal_step", "presentation_case")
 
 
 def test_merging_retires_a_code_without_orphaning_its_labels(tmp_path):

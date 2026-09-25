@@ -14,6 +14,15 @@ if TYPE_CHECKING:
 
 SCOPE_UNIVERSAL = "universal"
 
+# The three levels the taxonomy is cut at, and the whole point of the hierarchy: a code shared across
+# every obfuscation of one game says something about the game, while one confined to a single rendering
+# says the formulation introduced it. A level is a *claim* recorded on the code -- it is measured against
+# where the code actually occurs, never used to decide which moves the code may be applied to.
+LEVEL_UNIVERSAL = "universal"  # a reasoning step that would fail the same way in any game
+LEVEL_FAMILY = "family"  # tied to the rules underneath, shared by every obfuscation of them
+LEVEL_PRESENTATION = "presentation"  # only possible given this particular formulation
+LEVELS: tuple[str, ...] = (LEVEL_UNIVERSAL, LEVEL_FAMILY, LEVEL_PRESENTATION)
+
 
 def game_scope(game_key: str) -> str:
     return f"game:{game_key}"
@@ -21,6 +30,12 @@ def game_scope(game_key: str) -> str:
 
 def family_scope(family: str) -> str:
     return f"family:{family}"
+
+
+def level_of(scope: str) -> str:
+    if scope.startswith("game:"):
+        return LEVEL_PRESENTATION
+    return LEVEL_FAMILY if scope.startswith("family:") else LEVEL_UNIVERSAL
 
 
 @dataclass(frozen=True, slots=True)
@@ -63,6 +78,11 @@ class Code:
     @property
     def active(self) -> bool:
         return self.merged_into is None
+
+    @property
+    def level(self) -> str:
+        """Which of the three tiers this code claims to sit at, read off its scope."""
+        return level_of(self.scope)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -172,17 +192,54 @@ class Codebook:
         code = self.resolve(code_id)
         self.codes[code.id] = replace(code, etalon=etalon)
 
+    def depth(self, code_id: str) -> int:
+        """How many parents sit above this code. 0 on the spine, 2 at the deepest a three-level taxonomy
+        can go."""
+        depth, current, seen = 0, self.resolve(code_id), set()
+        while current.parent_id is not None:
+            if current.id in seen:
+                raise ValueError(f"Parent cycle at {current.id}")
+            seen.add(current.id)
+            current = self.resolve(current.parent_id)
+            depth += 1
+        return depth
+
     def set_parent(self, code_id: str, parent_id: str) -> None:
-        """Hang a variant-specific code under the universal one it specialises. Two tiers only: a parent
-        must itself be a spine code, so the taxonomy cannot grow into a chain nothing can be counted over."""
+        """Hang a code under the more general one it specialises: a presentation-level code under its
+        family, a family-level code under the universal reasoning step.
+
+        Three tiers at most, matching the three levels. A deeper chain is refused rather than flattened,
+        because a taxonomy whose depth is unbounded has no level to count anything over -- and the whole
+        argument of the hierarchy is that a code's level is a fact you can report."""
         code, parent = self.resolve(code_id), self.resolve(parent_id)
         if code.id == parent.id:
             raise ValueError(f"A code cannot be its own parent: {code_id}")
-        if parent.parent_id is not None:
-            raise ValueError(f"{parent.id} is itself a specialisation, so it cannot be a parent")
-        if self.children(code.id):
-            raise ValueError(f"{code.id} already has children, so it belongs on the universal tier")
+        if self._descends_from(parent.id, code.id):
+            raise ValueError(f"{parent.id} already sits under {code.id}, so this would make a cycle")
+        if self.depth(parent.id) + 1 + self._height(code.id) > len(LEVELS) - 1:
+            raise ValueError(f"Parenting {code.id} under {parent.id} would build a chain deeper than the {len(LEVELS)} levels")
         self.codes[code.id] = replace(code, parent_id=parent.id)
+
+    def _descends_from(self, code_id: str, ancestor_id: str) -> bool:
+        current, seen = self.resolve(code_id), set()
+        while current.parent_id is not None and current.id not in seen:
+            seen.add(current.id)
+            current = self.resolve(current.parent_id)
+            if current.id == ancestor_id:
+                return True
+        return False
+
+    def _height(self, code_id: str) -> int:
+        """How many tiers hang below this code already."""
+        children = self.children(code_id)
+        return 1 + max((self._height(child.id) for child in children), default=0) if children else 0
+
+    def set_level(self, code_id: str, scope: str) -> None:
+        """Move a code to a different tier. This is a restructuring decision -- it is a claim about what
+        the code means and where it can occur -- so unlike `add_example` or `set_etalon` it deliberately
+        *does* move the version, and annotations made under the old one stay readable as an older revision."""
+        code = self.resolve(code_id)
+        self.codes[code.id] = replace(code, scope=scope)
 
     def resolve(self, code_id: str) -> Code:
         """Follow merges to the code a label should be counted under. Annotations made before a merge stay
@@ -246,13 +303,18 @@ class Codebook:
         return replace(cls.from_dict(json.loads(path.read_text())), label=label)
 
 
-def render_codes(codes: Sequence[Code]) -> str:
-    """The codebook as the judge sees it: id, name, definition, and the parent for a variant-specific
-    leaf. Nothing about prevalence — a judge told a code is common will find it more often."""
+def render_codes(codes: Sequence[Code], show_level: bool = False) -> str:
+    """The codebook as the judge sees it: id, name, definition, and the parent for a specialisation.
+
+    Nothing about prevalence — a judge told a code is common will find it more often. `show_level` is off
+    for annotation for the same reason: a judge told a code is presentation-level will not report it
+    elsewhere, and where a code occurs is the thing being measured. Restructuring turns it on, because
+    revising the levels is exactly what that call is for."""
     if not codes:
         return "(empty — every error you find is a new code)"
     lines = []
     for code in codes:
-        scope = "" if code.parent_id is None else f" [specialises {code.parent_id}, scope {code.scope}]"
-        lines.append(f"- {code.id} — {code.name}: {code.definition}{scope}")
+        parent = "" if code.parent_id is None else f" [specialises {code.parent_id}]"
+        level = f" [{code.level}" + (f", {code.scope}]" if code.level != LEVEL_UNIVERSAL else "]") if show_level else ""
+        lines.append(f"- {code.id} — {code.name}: {code.definition}{parent}{level}")
     return "\n".join(lines)

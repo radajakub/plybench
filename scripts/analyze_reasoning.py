@@ -15,9 +15,12 @@ Reports (--report, read-only):
     opponents    the analysable moves broken down by the opponent they were played against
     consistency  whether the move played is the one the trace concluded, read off the stored verdicts
     mistakes     per-code prevalence with Wilson intervals, self-correction rates, how often an error fell
-                 outside the codebook entirely, and the decomposition of every suboptimal move into
-                 slip / reasoning error / both / unexplained
+                 outside the codebook entirely, which codes were found outside the level they claim, and
+                 the decomposition of every suboptimal move into slip / reasoning error / both / unexplained
     reliability  per-code Cohen's kappa between two annotators over the moves both judged
+    correlations each reasoning code against the solver's tactical labels on the same move, and against
+                 the length of the trace it was found in -- whether the trace is diagnostic of the
+                 decision, or narration written beside it (free, joins what is already stored)
 
 Passes (--do, these spend money):
     consistency  did the model play the move its own trace concluded? Blind: the judge sees the position,

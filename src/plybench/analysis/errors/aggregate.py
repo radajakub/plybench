@@ -17,6 +17,7 @@ from typing import Any
 from plybench.analysis.errors.analysis import Analysis
 from plybench.analysis.errors.consistency.report import report_consistency
 from plybench.analysis.errors.consistency.stats import ConsistencyReport, consistency_report
+from plybench.analysis.errors.facets import UNKNOWN
 from plybench.analysis.errors.format import Scope
 from plybench.analysis.errors.funnel.report import report_funnel
 from plybench.analysis.errors.funnel.stats import FunnelReport, funnel_report
@@ -115,7 +116,20 @@ def pooled_reports(
     for analysis in analyses:
         groups.setdefault(analysis.scope.only(*facets), []).append(analysis)
     ordered = sorted(groups.items(), key=lambda item: tuple(value for _, value in item[0].items))
+    _warn_on_mixed_traces(ordered)
     return [_pooled(scope, facets, members, confidence, reference) for scope, members in ordered]
+
+
+def _warn_on_mixed_traces(groups: Sequence[tuple[Scope, list[Analysis]]]) -> None:
+    """A pooled row covering both trace kinds is not interpretable, so say so where it happens.
+
+    A raw chain of thought and a provider-written summary are different objects. An error rate over the
+    two together is a weighted average of a rate and a rate-over-a-summary, and no reading of it is
+    correct. Pool by `trace_kind` as well, or read the two groups apart."""
+    for scope, members in groups:
+        kinds = {analysis.scope.get("trace_kind") for analysis in members} - {UNKNOWN, ""}
+        if len(kinds) > 1:
+            print(f"  ! {scope} pools {' and '.join(sorted(kinds))} -- these are different objects and the rates below cannot be read together")
 
 
 def report_pooled(report: PooledReport) -> None:

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from plybench.analysis.errors.consistency.verdicts import ConsistencyRecord, ConsistencyVerdict, SlipKind, slip_kind
@@ -9,8 +9,8 @@ from plybench.analysis.errors.format import Scope
 from plybench.analysis.errors.funnel.result import FunnelResult
 from plybench.analysis.errors.moves import FunnelStage, TracedMove, group_by, joined
 from plybench.analysis.errors.reasoning.annotations import OTHER, Annotation
-from plybench.analysis.errors.reasoning.codebook import Codebook
-from plybench.analysis.errors.reasoning.scope import code_applies
+from plybench.analysis.errors.reasoning.codebook import SCOPE_UNIVERSAL, Codebook
+from plybench.analysis.errors.reasoning.scope import code_applies, move_game_key
 from plybench.analysis.errors.stores import AnalysisStores, consistency_join
 from plybench.analysis.statistics.bundle import CIBundle, rate
 from plybench.analysis.statistics.standardization import Reference, standardized_rate
@@ -42,11 +42,17 @@ def uncovered(annotation: Annotation, uncorrected_only: bool = True) -> bool:
 class CodePrevalence:
     code_id: str
     name: str
-    n_moves: int  # denominator: annotated moves in this cell
+    n_moves: int  # denominator: every annotated move in this cell, whatever level the code claims
     n_uncorrected: int
     n_self_corrected: int  # caught and repaired by the trace itself -- recorded, never in the rate
     rate: CIBundle
     by_outcome: dict[FunnelStage, CIBundle]
+    level: str = SCOPE_UNIVERSAL  # the tier the code claims: universal, family or presentation
+    # where the code was actually found, one entry per presentation. This is the level result: a code
+    # claiming to be presentation-specific and occurring under three of them was mis-levelled, and a
+    # universal code occurring under one is a candidate for narrowing
+    by_presentation: dict[str, CIBundle] = field(default_factory=dict)
+    n_outside_level: int = 0  # occurrences outside the declared level
     # the rate this group would have shown facing the reference mix of positions; None when no reference
     # was asked for, or when the group entered none of its strata
     standardized: CIBundle | None = None
@@ -57,6 +63,16 @@ class CodePrevalence:
         total = self.n_uncorrected + self.n_self_corrected
         return self.n_self_corrected / total if total else None
 
+    @property
+    def presentations(self) -> list[str]:
+        """The presentations the code was actually found under, most frequent first."""
+        return sorted((key for key, bundle in self.by_presentation.items() if bundle.value), key=lambda key: -self.by_presentation[key].value)
+
+    @property
+    def level_holds(self) -> bool:
+        """Whether the code stayed inside the level it claims."""
+        return self.n_outside_level == 0
+
     def to_dict(self) -> dict[str, Any]:
         return {
             "code_id": self.code_id,
@@ -66,7 +82,10 @@ class CodePrevalence:
             "n_self_corrected": self.n_self_corrected,
             "recovery": self.recovery,
             "rate": self.rate.to_dict(),
+            "level": self.level,
+            "n_outside_level": self.n_outside_level,
             "by_outcome": {stage.value: bundle.to_dict() for stage, bundle in self.by_outcome.items()},
+            "by_presentation": {key: bundle.to_dict() for key, bundle in self.by_presentation.items()},
         }
 
 
@@ -136,9 +155,10 @@ class PrevalenceReport:
 
 
 def _code_prevalence(scored: list[tuple[TracedMove, Annotation]], codebook: Codebook, code_id: str, confidence: float, reference: Reference[FunnelStage] | None) -> CodePrevalence:
-    # A scoped code's denominator is only the positions where that category can logically occur.
+    # Every annotated move is the denominator, whatever level the code claims. Restricting it to the
+    # declared scope would make "this code only occurs here" true by construction, and where a code occurs
+    # is the finding the three-level hierarchy exists to produce.
     code = codebook.codes[code_id]
-    scored = [(move, annotation) for move, annotation in scored if code_applies(code, move)]
     present = [coded(annotation, codebook, code_id) for _, annotation in scored]
     corrected = sum(coded(annotation, codebook, code_id, uncorrected_only=False) and not coded(annotation, codebook, code_id) for _, annotation in scored)
 
@@ -147,14 +167,20 @@ def _code_prevalence(scored: list[tuple[TracedMove, Annotation]], codebook: Code
     by_outcome = {stage: rate(hits[stage], confidence) for stage in FunnelStage if stage in hits}
     counts = {stage: (sum(values), len(values)) for stage, values in hits.items()}
 
+    by_game = group_by(scored, lambda pair: move_game_key(pair[0]))
+    by_presentation = {key: rate([coded(annotation, codebook, code_id) for _, annotation in group], confidence) for key, group in by_game.items()}
+
     return CodePrevalence(
         code_id=code_id,
-        name=codebook.codes[code_id].name,
+        name=code.name,
         n_moves=len(scored),
         n_uncorrected=sum(present),
         n_self_corrected=corrected,
         rate=rate(present, confidence),
         by_outcome=by_outcome,
+        level=code.level,
+        by_presentation=by_presentation,
+        n_outside_level=sum(coded(annotation, codebook, code_id) and not code_applies(code, move) for move, annotation in scored),
         standardized=standardized_rate(counts, reference, confidence) if reference else None,
     )
 

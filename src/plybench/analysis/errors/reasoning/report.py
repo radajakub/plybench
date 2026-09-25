@@ -5,6 +5,7 @@ from collections.abc import Sequence
 from plybench.analysis.errors.format import Scope, header
 from plybench.analysis.errors.moves import FunnelStage
 from plybench.analysis.errors.reasoning.agreement import ReliabilityReport
+from plybench.analysis.errors.reasoning.correlate import CrosstabReport
 from plybench.analysis.errors.reasoning.stats import FREEZE_THRESHOLD, PrevalenceReport
 
 
@@ -29,7 +30,7 @@ def report_mistakes(scope: Scope, n_moves: int, reports: Sequence[PrevalenceRepo
         print(f"    {'  holding back induced ' + basis:30s} {report.uncovered_naive.fmt(8, interval=True)}  ({report.n_uncovered_naive}/{report.n_naive} move(s))")
         if report.n_naive and report.uncovered_naive.value > FREEZE_THRESHOLD:
             print(f"    ! above the {FREEZE_THRESHOLD:.0%} freeze threshold -- feed the uncovered descriptions back into induction and run another wave")
-        print(f"    {'code':30s} {'rate':>8s} {'95% CI':>18s} {'std':>8s} {'optimal':>9s} {'subopt':>9s} {'recovery':>9s}")
+        print(f"    {'code':30s} {'level':>12s} {'rate':>8s} {'95% CI':>18s} {'std':>8s} {'optimal':>9s} {'subopt':>9s} {'recovery':>9s}")
         for code in report.codes:
             optimal = code.by_outcome.get(FunnelStage.OPTIMAL)
             suboptimal = code.by_outcome.get(FunnelStage.SUBOPTIMAL)
@@ -38,9 +39,10 @@ def report_mistakes(scope: Scope, n_moves: int, reports: Sequence[PrevalenceRepo
             recovery = f"{code.recovery:.2f}" if code.recovery is not None else "-"
             standardized = f"{code.standardized.value:8.3f}" if code.standardized is not None else f"{'':8s}"
             print(
-                f"    {code.code_id:30s} {code.rate.value:8.3f} {bounds:>18s} {standardized} "
+                f"    {code.code_id:30s} {code.level:>12s} {code.rate.value:8.3f} {bounds:>18s} {standardized} "
                 f"{optimal.value if optimal else float('nan'):9.3f} {suboptimal.value if suboptimal else float('nan'):9.3f} {recovery:>9s}"
             )
+        _report_levels(report)
         for description in report.uncovered_descriptions[:5]:
             print(f"      uncovered: {description[:110]}")
         if report.accounts:
@@ -48,6 +50,48 @@ def report_mistakes(scope: Scope, n_moves: int, reports: Sequence[PrevalenceRepo
             for account, count in report.accounts.items():
                 if count:
                     print(f"      {account.value:16s} {count:5d}")
+
+
+def _report_levels(report: PrevalenceReport) -> None:
+    """Where each code was actually found, against the level it claims.
+
+    The taxonomy's three levels are a claim: a code is universal, or about the game underneath, or an
+    artefact of one formulation. Since annotation offers every code on every presentation, that claim is
+    testable, and this is the test. A presentation-level code appearing under three presentations is
+    mis-levelled; a universal one that only ever appears under one is a candidate for narrowing."""
+    broken = [code for code in report.codes if not code.level_holds]
+    if not broken:
+        return
+    print("    codes found outside the level they claim:")
+    for code in broken:
+        print(f"      {code.code_id:28s} {code.level:12s} {code.n_outside_level:4d} occurrence(s) elsewhere; seen under {', '.join(code.presentations)}")
+
+
+def report_correlations(scope: Scope, n_moves: int, reports: Sequence[CrosstabReport]) -> None:
+    """Each reasoning code against the tactical labels on the same move, and against trace length.
+
+    `lift` is the column to read: the code's rate in that bucket over its rate everywhere. 1.0 means the
+    two classifications say nothing about each other. A code whose lift is flat across every bucket is
+    describing how the model writes, not what it got wrong."""
+    print(header(scope, n_moves))
+    if not reports:
+        print("  needs both the procedural labels and stored annotations -- run: --do annotate")
+        return
+
+    for report in reports:
+        print(f"  judge {report.annotator}  |  {report.axis}  |  {report.n_moves} annotated move(s)")
+        if not report.codes:
+            print("    no code occurred in these moves")
+            continue
+        width = max(len(bucket) for bucket in report.buckets) if report.buckets else 0
+        print(f"    {'code':30s} {'overall':>8s}" + "".join(f" {bucket:>{max(width, 9)}s}" for bucket in report.buckets))
+        print(f"    {'(moves in bucket)':30s} {report.n_moves:8d}" + "".join(f" {report.n_bucketed[bucket]:>{max(width, 9)}d}" for bucket in report.buckets))
+        for code in (report.any_error, *report.codes):
+            cells = "".join(f" {code.by_bucket[bucket].value:>{max(width, 9)}.3f}" for bucket in report.buckets)
+            print(f"    {code.code_id:30s} {code.baseline.value:8.3f}{cells}")
+            lift = code.strongest
+            if lift is not None and lift[1] >= 1.5:
+                print(f"    {'':30s} strongest in {lift[0]} at {lift[1]:.1f}x its overall rate")
 
 
 def report_reliability(scope: Scope, n_moves: int, report: ReliabilityReport | None) -> None:

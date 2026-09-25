@@ -10,12 +10,24 @@ from plybench.analysis.errors.judge.prompts import Prompt, render_batch
 from plybench.analysis.errors.judge.runner import Judge, ResponseCache, RunStats, run_prompts, run_stats
 from plybench.analysis.errors.moves import FunnelStage, TracedMove
 from plybench.analysis.errors.reasoning.annotation import verified_quote
-from plybench.analysis.errors.reasoning.codebook import SCOPE_UNIVERSAL, Code, Codebook, game_scope, render_codes
+from plybench.analysis.errors.reasoning.codebook import (
+    LEVEL_FAMILY,
+    LEVEL_PRESENTATION,
+    LEVEL_UNIVERSAL,
+    LEVELS,
+    SCOPE_UNIVERSAL,
+    Code,
+    Codebook,
+    family_scope,
+    game_scope,
+    render_codes,
+)
 from plybench.analysis.errors.reasoning.protocol import rules_block
-from plybench.analysis.errors.reasoning.scope import code_applies
+from plybench.analysis.errors.reasoning.scope import code_applies, move_family
+from plybench.analysis.recognition import original_game_name, recognizable
 from plybench.common.progress import track
 
-INDUCTION_REVISION = "induction:v2"
+INDUCTION_REVISION = "induction:v3"
 
 _INDUCTION_SYSTEM = """You are building a taxonomy of reasoning mistakes made by language models playing a \
 two-player game. For each move you get the position the player was shown, the legal moves, the move it \
@@ -35,8 +47,14 @@ For every error you find, report:
 - name and definition: filled in only when you are proposing a new code (code_id empty), left empty otherwise
 - evidence: a verbatim quote from that move's trace
 - self_corrected: true when the trace caught and repaired this error and the final move follows the repair
-- game_specific: true when the code only makes sense given this variant's mechanics, false when it names a \
-reasoning step that would fail the same way in any game
+- level: which of three tiers the code belongs to.
+  * "universal" -- a reasoning step that would fail the same way in any game, whatever it is about
+  * "family" -- tied to the rules of the underlying game, so it would occur under any way of presenting \
+those rules
+  * "presentation" -- only possible given this particular formulation, and impossible once the same game \
+is rendered differently
+  Prefer the most general tier the failure really belongs to. "presentation" is the strong claim: it says \
+the wording introduced the error, not the game
 
 Propose a new code only when no existing code covers the failure. Prefer assigning to an existing code, \
 broadening its definition in your head, over creating a near-duplicate. A move with no load-bearing error \
@@ -45,12 +63,17 @@ contributes nothing — that is a normal outcome, not a gap to fill."""
 _CONSOLIDATION_SYSTEM = """You are consolidating a taxonomy of reasoning mistakes that was grown \
 incrementally, so it contains synonyms and codes at inconsistent levels of generality.
 
-Return two things:
+Return three things:
 - merges: pairs where source_id and target_id name the same failure. The target survives; pick the one \
 whose definition travels better across game variants. Never merge codes that describe different failures \
 just because they co-occur.
-- parents: pairs where code_id is a variant-specific special case of the more general parent_id. Only one \
-level: a parent must not itself be a specialisation.
+- parents: pairs where code_id is a special case of the more general parent_id. The hierarchy runs \
+universal -> family -> presentation, so a chain is at most three deep.
+- levels: codes whose tier was claimed wrongly during incremental coding, each with the level it should \
+sit at. Each code is shown with the level it currently claims. Levels were assigned one batch at a time, \
+with no view of the whole taxonomy, so this is where a code that was called presentation-specific but \
+names a failure of the underlying game gets corrected. The levels are "universal", "family" and \
+"presentation".
 
 Leave a code alone if you are unsure. A taxonomy that keeps two distinct codes is recoverable; one that \
 merged them is not."""
@@ -63,7 +86,7 @@ class InducedError(BaseModel):
     definition: str = Field(description="which reasoning step failed, phrased to travel across variants; empty when code_id is given")
     evidence: str = Field(description="verbatim quote from that move's trace")
     self_corrected: bool = Field(description="the trace caught and repaired this error and the final move follows the repair")
-    game_specific: bool = Field(description="the code only makes sense for this game variant's mechanics")
+    level: str = Field(description='one of "universal", "family", "presentation" -- the most general tier this failure really belongs to')
 
 
 class InducedBatch(BaseModel):
@@ -81,9 +104,16 @@ class Parenting(BaseModel):
     parent_id: str
 
 
+class Levelling(BaseModel):
+    code_id: str
+    level: str = Field(description='"universal", "family" or "presentation"')
+    reason: str
+
+
 class Consolidation(BaseModel):
     merges: list[Merge]
     parents: list[Parenting]
+    levels: list[Levelling] = Field(default_factory=list)
 
 
 @dataclass
@@ -102,7 +132,7 @@ class InductionRun:
     per_code: dict[str, int] = field(default_factory=dict)
     unknown_codes: list[str] = field(default_factory=list)  # ids the judge invented for codes it did not propose
     rejected_evidence: list[str] = field(default_factory=list)  # proposals not anchored in their trace
-    rejected_scope: list[str] = field(default_factory=list)  # existing codes applied outside their domain
+    cross_level: list[str] = field(default_factory=list)  # codes used outside their declared level: evidence the level is wrong, not a rejection
     failed_batches: int = 0  # produced no answer at all: not evidence of anything, least of all saturation
     unmixed_batches: int = 0  # held no suboptimal move, so finding nothing in them says nothing either
     silent_batches: int = 0  # mixed, but the judge attributed no error: also says nothing about completeness
@@ -125,6 +155,17 @@ def slug(name: str, taken: set[str]) -> str:
 
 def _game_key(move: TracedMove) -> str:
     return move.matchup.game.split(":")[0]
+
+
+def _scope_for(level: str, move: TracedMove) -> str:
+    """The scope recording the level a proposal claimed. An unrecognised level falls back to universal:
+    over-scoping a code is the recoverable mistake, since where it actually occurs is measured either way,
+    whereas inventing a narrow scope from a malformed answer is not."""
+    if level.strip().casefold() == LEVEL_PRESENTATION:
+        return game_scope(_game_key(move))
+    if level.strip().casefold() == LEVEL_FAMILY:
+        return family_scope(move_family(move))
+    return SCOPE_UNIVERSAL
 
 
 def _mixed(batch: Sequence[TracedMove]) -> bool:
@@ -156,19 +197,20 @@ def _apply_batch(batch: InducedBatch, moves: Sequence[TracedMove], codebook: Cod
         if error.code_id:
             if error.code_id in codebook.codes:
                 resolved = codebook.resolve(error.code_id)
+                # kept, not rejected: a code turning up outside its declared level is the evidence that
+                # the level claim is too narrow, and discarding it is how a taxonomy confirms itself
                 if not code_applies(resolved, move):
-                    run.rejected_scope.append(f"move {error.move}: {error.code_id}")
-                else:
-                    codebook.add_example(error.code_id, move.uid)
-                    run.per_code[resolved.id] = run.per_code.get(resolved.id, 0) + 1
-                    run.assignments += 1
-                    coded += 1
+                    run.cross_level.append(f"{resolved.id} on {_game_key(move)} (declared {resolved.level})")
+                codebook.add_example(error.code_id, move.uid)
+                run.per_code[resolved.id] = run.per_code.get(resolved.id, 0) + 1
+                run.assignments += 1
+                coded += 1
             else:
                 run.unknown_codes.append(error.code_id)
             continue
         if not error.name or not error.definition:
             continue  # neither an assignment nor a usable proposal
-        scope = game_scope(_game_key(move)) if error.game_specific else SCOPE_UNIVERSAL
+        scope = _scope_for(error.level, move)
         code = Code(id=slug(error.name, set(codebook.codes)), name=error.name, definition=error.definition, scope=scope, examples=(move.uid,), inducer=inducer)
         codebook.add(code)
         run.per_code[code.id] = run.per_code.get(code.id, 0) + 1
@@ -238,15 +280,32 @@ async def induce(
 
 
 def consolidation_prompt(codebook: Codebook) -> Prompt:
-    return Prompt(_CONSOLIDATION_SYSTEM, f"### The codebook\n{render_codes(codebook.active())}")
+    return Prompt(_CONSOLIDATION_SYSTEM, f"### The codebook\n{render_codes(codebook.active(), show_level=True)}")
 
 
 @dataclass
 class ConsolidationRun:
     merged: list[tuple[str, str]] = field(default_factory=list)
     parented: list[tuple[str, str]] = field(default_factory=list)
+    relevelled: list[tuple[str, str]] = field(default_factory=list)
     rejected: list[str] = field(default_factory=list)  # proposals that would have broken the taxonomy
     stats: RunStats | None = None
+
+
+def _generalised_scope(code: Code, level: str) -> str | None:
+    """The scope a code takes when moved to a more general level, or None when the move is a narrowing.
+
+    Narrowing cannot be done here and is refused rather than guessed. Going from universal to family, or
+    family to presentation, needs the name of the family or the presentation, and this call sees only the
+    codebook -- the traces the code came from are not in front of it. Generalising throws that name away,
+    which needs nothing. The asymmetry is fine: over-scoping is the recoverable mistake, because where a
+    code actually occurs is measured either way."""
+    target = level.strip().casefold()
+    if target not in LEVELS or LEVELS.index(target) >= LEVELS.index(code.level):
+        return None
+    if target == LEVEL_UNIVERSAL:
+        return SCOPE_UNIVERSAL
+    return family_scope(original_game_name(key) if recognizable(key := code.scope.removeprefix("game:")) else key)
 
 
 async def consolidate(judge: Judge, codebook: Codebook, cache: ResponseCache | None = None, progress: bool | None = None) -> ConsolidationRun:
@@ -277,4 +336,16 @@ async def consolidate(judge: Judge, codebook: Codebook, cache: ResponseCache | N
             run.rejected.append(f"parent {parenting.code_id}<-{parenting.parent_id}: {error}")
             continue
         run.parented.append((parenting.code_id, parenting.parent_id))
+
+    for levelling in parsed.levels:
+        if levelling.code_id not in codebook.codes:
+            run.rejected.append(f"level {levelling.code_id}: unknown code")
+            continue
+        code = codebook.resolve(levelling.code_id)
+        scope = _generalised_scope(code, levelling.level)
+        if scope is None:
+            run.rejected.append(f"level {code.id} {code.level}->{levelling.level}: only generalisation can be decided from the codebook alone")
+            continue
+        codebook.set_level(code.id, scope)
+        run.relevelled.append((code.id, levelling.level))
     return run

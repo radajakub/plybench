@@ -224,8 +224,10 @@ class Pipeline:
             print(f"  ! judge referenced {len(run.unknown_codes)} code id(s) that do not exist: {sorted(set(run.unknown_codes))[:5]}")
         if run.rejected_evidence:
             print(f"  ! rejected {len(run.rejected_evidence)} induction label(s) without a trace quote")
-        if run.rejected_scope:
-            print(f"  ! rejected {len(run.rejected_scope)} induction assignment(s) outside the code scope")
+        if run.cross_level:
+            print(f"  {len(run.cross_level)} assignment(s) fell outside the code's declared level -- kept, and evidence the level is too narrow:")
+            for observed in sorted(set(run.cross_level))[:5]:
+                print(f"    {observed}")
         for stats in run.stats:
             for error in stats.errors:
                 print(f"  ! {error}")
@@ -295,6 +297,8 @@ class Pipeline:
                 f"  {run.n_labels} label(s) kept ({run.n_self_corrected} self-corrected, {run.n_other} uncovered by any code, "
                 f"{run.n_trimmed} quote(s) trimmed to the verbatim span), {run.n_rejected} rejected"
             )
+            if run.n_outside_level:
+                print(f"  {run.n_outside_level} label(s) used a code outside its declared level -- kept, and measured in the level table")
             for rejected in run.rejected_evidence[:3]:
                 print(f"  ! evidence not found in trace -- {rejected}")
             for rejected in sorted(set(run.rejected_unknown_code))[:3]:

@@ -9,7 +9,36 @@ The reasoning analysis separates questions that should not be answered by one me
 3. **What went wrong in the reasoning?** A codebook is induced on a small mistake-enriched sample,
    frozen, and applied to traces. Every label must cite text present in the trace.
 
+4. **Do the two agree?** The reasoning codes are crossed with the solver's own tactical labels, and with
+   the length of the trace. This is the join the separate stages cannot make.
+
 Only minimax-solvable games can enter this analysis.
+
+## The three levels
+
+A code sits at one of three tiers, recorded as its scope:
+
+- **universal** — a reasoning step that would fail the same way in any game;
+- **family** — tied to the rules underneath, so it occurs under every obfuscation of them;
+- **presentation** — only possible given one formulation.
+
+The level is a **claim, and it is measured rather than enforced**. Annotation offers every active code on
+every move, whatever level it claims, and the report says where each code was actually found. A code
+declared presentation-specific that then turns up under three presentations was mis-levelled, and that is
+a result. Restricting the codes on offer to the ones expected to apply would make "this code only occurs
+here" true by construction.
+
+Induction assigns a level per proposal one batch at a time. The restructuring pass revises them with the
+whole taxonomy in view, but only in the generalising direction — moving a code down a level needs the name
+of the family or presentation, which is not in front of that call.
+
+## Open-weight and commercial models are never pooled
+
+`trace_kind` splits cells into `raw_reasoning` (models we host, which return the chain of thought) and
+`provider_summary` (commercial APIs, which return a summary their own summariser wrote). An error rate
+over a summary is a rate over what the summariser kept and is not the same measurement. Pooling that
+crosses the two prints a warning naming the group; pool by `trace_kind` as well, or read the groups
+apart.
 
 ## How completeness is measured
 
@@ -118,6 +147,19 @@ uv run python scripts/analyze_reasoning.py --experiment ttt \
   --json analysis/ttt/confirmatory-v1.json
 ```
 
+Finally, the two joins, which need no further paid calls:
+
+```bash
+uv run python scripts/analyze_reasoning.py --experiment ttt \
+  --codebook confirmatory-v1 --report correlations --pool trace_kind
+```
+
+Read the `lift` line under each code: the code's rate in that bucket over its rate everywhere. 1.0 means
+the two classifications say nothing about each other, which is itself an answer — it would mean the trace
+is narration written beside the decision rather than an account of it. The columns overlap by
+construction, because one move carries several tactical labels, so no independence test belongs on this
+table.
+
 `--json` and `--dump-moves` write new analysis outputs; omit them for a read-only report. None of these
 commands modify benchmark results under `results/`.
 
@@ -131,6 +173,8 @@ Always inspect counts as well as percentages:
 - prevalence needs enough annotated moves;
 - decomposition needs suboptimal moves covered by both consistency and annotation;
 - rare code rates are unstable even when total coverage is large;
+- a code's denominator is every annotated move, including presentations it does not claim to cover, so a
+  presentation-level code reads low overall and its `by_presentation` row is the one to read;
 - agreement between two judges measures reliability, not validity.
 
 Before publication, manually audit a stratified sample containing detected errors, clean traces,

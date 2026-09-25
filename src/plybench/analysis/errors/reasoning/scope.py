@@ -28,5 +28,16 @@ def scope_applies(scope: str, game_key: str) -> bool:
     return False
 
 
+def move_family(move: TracedMove) -> str:
+    """The game underneath the obfuscation -- tic_tac_toe for magic_square and story_magic_square alike."""
+    game_key = move_game_key(move)
+    return original_game_name(game_key) if recognizable(game_key) else game_key
+
+
 def code_applies(code: Code, move: TracedMove) -> bool:
+    """Whether the move is inside the code's declared level.
+
+    This is a *reporting* predicate. It is deliberately not consulted when deciding which codes an
+    annotator may use: a code offered only where it is expected to occur can only ever be observed there,
+    and reporting that as a finding about levels would be assuming the conclusion."""
     return scope_applies(code.scope, move_game_key(move))

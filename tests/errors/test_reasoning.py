@@ -28,7 +28,7 @@ from plybench.analysis.errors.reasoning.annotation import (
     verified_quote,
 )
 from plybench.analysis.errors.reasoning.annotations import OTHER, Annotation, AnnotationStore, MistakeLabel
-from plybench.analysis.errors.reasoning.codebook import Code, Codebook, game_scope
+from plybench.analysis.errors.reasoning.codebook import LEVEL_FAMILY, LEVEL_PRESENTATION, LEVEL_UNIVERSAL, LEVELS, SCOPE_UNIVERSAL, Code, Codebook, family_scope, game_scope
 from plybench.analysis.errors.reasoning.etalons import ChosenEtalon, elect_etalons
 from plybench.analysis.errors.reasoning.induction import Consolidation, InducedBatch, InducedError, Merge, Parenting, consolidate, induce, induction_prompt, slug
 from plybench.analysis.errors.reasoning.protocol import rules_block
@@ -82,7 +82,7 @@ def _judge(replies: list[BaseModel], revision: str = "test:v1") -> tuple[Judge, 
     return Judge(generator, MODEL, revision), generator
 
 
-def _error(name: str = "", code_id: str = "", move: int = 1, game_specific: bool = False, self_corrected: bool = False) -> InducedError:
+def _error(name: str = "", code_id: str = "", move: int = 1, level: str = LEVEL_UNIVERSAL, self_corrected: bool = False) -> InducedError:
     return InducedError(
         move=move,
         code_id=code_id,
@@ -90,7 +90,7 @@ def _error(name: str = "", code_id: str = "", move: int = 1, game_specific: bool
         definition=f"definition of {name}" if name else "",
         evidence="Therefore the best move is A1.",
         self_corrected=self_corrected,
-        game_specific=game_specific,
+        level=level,
     )
 
 
@@ -238,13 +238,56 @@ def test_an_assignment_to_an_existing_code_adds_provenance_instead_of_a_duplicat
     assert run.unknown_codes == ["invented_by_the_judge"]  # a hallucinated id is reported, never created
 
 
-def test_a_game_specific_proposal_is_scoped_to_the_variant_it_came_from(tmp_path):
-    judge, _ = _judge([InducedBatch(errors=[_error(name="Magic constant miscomputed", game_specific=True)])])
+def _induced_at(level: str, tmp_path) -> Code:
+    judge, _ = _judge([InducedBatch(errors=[_error(name=f"Code at {level}", level=level)])])
     book = Codebook("exp")
-
     asyncio.run(induce(judge, [_traced(1)], book, batch_size=1, patience=1, cache=ResponseCache(tmp_path / "c"), progress=False))
+    return book.active()[0]
 
-    assert book.active()[0].scope == game_scope("story_magic_square")  # the key, not the full config string
+
+def test_a_proposal_is_recorded_at_the_level_it_claimed(tmp_path):
+    """The three levels are the point of the hierarchy, not a detail: a code shared by every obfuscation
+    of one game says something about the game, while one confined to a single rendering says the wording
+    introduced it. Both have to be expressible or that finding cannot be made."""
+    assert _induced_at(LEVEL_PRESENTATION, tmp_path / "p").scope == game_scope("story_magic_square")  # the key, not the config string
+    # through the obfuscation, to the game underneath -- the same name the `family` facet reports
+    assert _induced_at(LEVEL_FAMILY, tmp_path / "f").scope == family_scope("tic tac toe")
+    assert _induced_at(LEVEL_UNIVERSAL, tmp_path / "u").scope == SCOPE_UNIVERSAL
+    assert [_induced_at(level, tmp_path / level).level for level in LEVELS] == list(LEVELS)
+
+
+def test_a_malformed_level_becomes_universal_rather_than_a_narrow_guess(tmp_path):
+    # over-scoping is recoverable, since where a code actually occurs is measured either way; inventing a
+    # narrow scope out of a bad answer is not
+    assert _induced_at("nonsense", tmp_path).scope == SCOPE_UNIVERSAL
+
+
+def test_the_annotator_is_offered_every_code_including_ones_scoped_elsewhere(tmp_path):
+    """Level is measured, not enforced. Offering a code only where it is expected to occur makes
+    "this code only occurs here" true by construction, which is the finding the hierarchy is supposed to
+    produce rather than assume."""
+    book = _book(THREAT, Code("nim_sum", "Nim-sum miscomputed", "xor of pile sizes wrong", game_scope("nim")))
+    prompt = annotation_prompt(_traced(1), book)  # a story_magic_square move, nothing to do with nim
+
+    assert "nim_sum" in prompt.system and "threat_blindness" in prompt.system
+    assert "nim" not in prompt.system.split("nim_sum")[1].split("\n")[0].replace("nim_sum", "")  # the scope itself is not shown
+
+
+def test_a_code_used_outside_its_level_is_kept_and_counted_as_evidence_against_the_level(tmp_path):
+    book = _book(THREAT, Code("nim_sum", "Nim-sum miscomputed", "xor of pile sizes wrong", game_scope("nim")))
+    judge, _ = _judge([MoveAnnotation(labels=[_applied("nim_sum", "Therefore the best move is A1.")], notes="")])
+    store = AnnotationStore("exp", tmp_path / "annotations.jsonl")
+    move = _traced(1)  # story_magic_square
+
+    run = asyncio.run(run_annotation(judge, [move], book, store, ResponseCache(tmp_path / "c"), progress=False))
+
+    assert run.n_labels == 1 and run.n_rejected == 0  # the label survives
+    assert run.n_outside_level == 1  # and is counted as the level claim failing
+    report = _prevalence([move], store.by_move(judge.annotator), book, judge.annotator)
+    nim_sum = next(code for code in report.codes if code.code_id == "nim_sum")
+    assert nim_sum.n_outside_level == 1 and not nim_sum.level_holds
+    assert nim_sum.presentations == ["story_magic_square"]
+    assert nim_sum.n_moves == 1 and nim_sum.rate.value == 1.0  # denominator is every annotated move, not the declared scope
 
 
 def test_annotation_sees_the_chosen_move_but_never_the_solver_verdict():

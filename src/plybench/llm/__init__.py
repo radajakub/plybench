@@ -1,3 +1,4 @@
+from plybench.llm.errors import FailureKind, LLMCallError, LLMRateLimited, LLMTimedOut
 from plybench.llm.llm_config import (
     DEFAULT_CONCURRENCY,
     ClaudeProviderConfig,
@@ -27,6 +28,10 @@ from plybench.llm.router import LLM
 from plybench.llm.tokens import EmbeddingTokens, LLMTokens
 
 __all__ = [
+    "FailureKind",
+    "LLMCallError",
+    "LLMRateLimited",
+    "LLMTimedOut",
     "LLM",
     "LLMConfig",
     "DEFAULT_CONCURRENCY",

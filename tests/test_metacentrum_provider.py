@@ -30,8 +30,12 @@ def _model(name: str):
 
 
 def test_the_models_that_cannot_have_a_schema_enforced_are_marked():
+    # the earlier claim here was that only gemma-4 was affected. A live annotation wave disproved it:
+    # qwen-3.8-27b lost 132 of 361 calls to the same `{"labels": []` + whitespace loop, so the pathology
+    # is this endpoint's guided decoding, not one model's quirk
     assert _model("gemma-4").weak_structured_output
-    assert not _model("qwen-3.8-27b").weak_structured_output, "qwen returns valid JSON under enforcement; only the affected models are routed around it"
+    assert _model("qwen-3.8-27b").weak_structured_output
+    assert not _model("gpt-oss-120b").weak_structured_output, "the flag is per model, not a blanket switch -- unaffected models keep enforcement"
     assert _model("gemma-4").can_use_json_schema, "the model does support structured output -- enforcing it is what breaks"
 
 

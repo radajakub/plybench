@@ -70,7 +70,7 @@ def metacentrum_models() -> list[MetacentrumLLMModel]:
         MetacentrumLLMModel("glm-5.3", "glm-5.3", thinking=True, new_api=True, weak_structured_output=True),
         MetacentrumLLMModel("kimi-k3", "kimi-k3", thinking=True, new_api=True, supported_reasoning=_KIMI_REASONING),
         MetacentrumLLMModel("qwen-3.5", "qwen3.5", thinking=True, new_api=True),
-        MetacentrumLLMModel("qwen-3.8-27b", "qwen3.8-27b", thinking=True, new_api=True, supported_reasoning=_QWEN3_8_REASONING),
+        MetacentrumLLMModel("qwen-3.8-27b", "qwen3.8-27b", thinking=True, new_api=True, weak_structured_output=True, supported_reasoning=_QWEN3_8_REASONING),
         MetacentrumLLMModel("qwen-3.8-flash-next", "qwen3.8-flash-next", thinking=True, new_api=True),
         MetacentrumLLMModel("mistral-medium-3.5", "mistral-medium-3.5", thinking=True, new_api=True),
         MetacentrumLLMModel("gemma-4", "gemma4", thinking=True, new_api=True, weak_structured_output=True, supported_reasoning=_DEFAULT_REASONING),

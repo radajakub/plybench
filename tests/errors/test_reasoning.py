@@ -394,6 +394,26 @@ def test_a_label_survives_only_with_a_known_code_and_a_real_quote(tmp_path):
     assert stored.codebook_version == book.version  # which revision of the taxonomy this label was made under
 
 
+def test_a_label_that_names_its_code_is_matched_back_to_the_id(tmp_path):
+    """Ids are `slug`-truncated to four words, so a judge echoing the code's full name produces a string
+    that is not an id. Observed live: 15+ labels dropped as "unknown code id", each one an evidenced error
+    that had actually been found. Dropping them understates every prevalence the pipeline reports."""
+    reply = MoveAnnotation(
+        labels=[
+            _applied("Missed an immediate threat", "Therefore the best move is A1."),
+            _applied("missed-an-immediate-threat", "I could take A2"),
+        ],
+        notes="",
+    )
+    judge, _ = _judge([reply])
+    store = AnnotationStore("exp", tmp_path / "annotations.jsonl")
+
+    run = asyncio.run(run_annotation(judge, [_traced(1)], _book(THREAT), store, ResponseCache(tmp_path / "c"), progress=False))
+
+    assert run.n_labels == 2 and run.n_rejected == 0 and run.n_recovered_by_name == 2
+    assert [label.code_id for label in next(iter(store)).labels] == ["threat_blindness", "threat_blindness"]
+
+
 def test_annotating_without_a_codebook_is_refused(tmp_path):
     judge, generator = _judge([MoveAnnotation(labels=[], notes="")])
     store = AnnotationStore("exp", tmp_path / "annotations.jsonl")

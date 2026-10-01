@@ -318,6 +318,8 @@ class Pipeline:
             )
             if run.n_outside_level:
                 print(f"  {run.n_outside_level} label(s) used a code outside its declared level -- kept, and measured in the level table")
+            if run.n_recovered_by_name:
+                print(f"  {run.n_recovered_by_name} label(s) named their code instead of giving its id -- matched back to it rather than dropped")
             for rejected in run.rejected_evidence[:3]:
                 print(f"  ! evidence not found in trace -- {rejected}")
             for rejected in sorted(set(run.rejected_unknown_code))[:3]:

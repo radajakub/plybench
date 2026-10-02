@@ -173,6 +173,16 @@ class Codebook:
     def children(self, code_id: str) -> list[Code]:
         return [code for code in self.active() if code.parent_id == code_id]
 
+    def lookup(self, reference: str) -> "Code | None":
+        """A code by id, or failing that by name.
+
+        Every judge is shown `id -- name: definition` and asked for the id, and answers with the name
+        often enough to matter: an id is `slug`'s four-word truncation of the name, so the two rarely
+        match literally. One induction run discarded 72 of 133 attributions as unknown ids, every one
+        of them naming a code that was in the book, which left 12 of 19 codes as singletons and put
+        Chao1 at 91. Accepting both is the difference between a frequency spectrum and noise."""
+        return self.codes.get(reference) or self.by_name(reference)
+
     def add(self, code: Code) -> Code:
         if code.id in self.codes:
             raise ValueError(f"Code id already used: {code.id}")

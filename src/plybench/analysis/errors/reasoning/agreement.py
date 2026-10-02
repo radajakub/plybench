@@ -44,17 +44,20 @@ def cohen_kappa(first: Sequence[bool], second: Sequence[bool]) -> Kappa:
     return Kappa(n, observed, kappa, sum(a or b for a, b in zip(first, second, strict=True)))
 
 
-def shared_moves(store: AnnotationStore, first: str, second: str, within: Collection[str] | None = None) -> list[str]:
-    """The moves both annotators judged, restricted to `within` when given. The store is global, so a
-    per-cell figure has to intersect with that cell's moves -- without it every cell prints the same
-    corpus-wide kappa under its own header, which reads as eight measurements and is one."""
-    both = store.annotated_by(first) & store.annotated_by(second)
+def shared_moves(store: AnnotationStore, first: str, second: str, within: Collection[str] | None = None, version: str | None = None) -> list[str]:
+    """The moves both annotators judged, restricted to `within` when given and to one revision of the
+    taxonomy when `version` is. The store is global, so a per-cell figure has to intersect with that
+    cell's moves -- without it every cell prints the same corpus-wide kappa under its own header, which
+    reads as eight measurements and is one. The version matters for the same reason it does in
+    `by_move_under`: agreement between a judge coding under one codebook and a judge coding under
+    another is not reliability, it is a comparison of two taxonomies."""
+    both = store.covered(first, version) & store.covered(second, version)
     return sorted(both if within is None else both & set(within))
 
 
-def code_agreement(store: AnnotationStore, codebook: Codebook, first: str, second: str, code_id: str, within: Collection[str] | None = None) -> Kappa:
+def code_agreement(store: AnnotationStore, codebook: Codebook, first: str, second: str, code_id: str, within: Collection[str] | None = None, version: str | None = None) -> Kappa:
     """Agreement between two annotators on one code, over the moves both of them judged."""
-    shared = shared_moves(store, first, second, within)
+    shared = shared_moves(store, first, second, within, version)
     by_first, by_second = store.by_move(first), store.by_move(second)
     return cohen_kappa(
         [coded(by_first[uid], codebook, code_id) for uid in shared],
@@ -62,19 +65,20 @@ def code_agreement(store: AnnotationStore, codebook: Codebook, first: str, secon
     )
 
 
-def any_error_agreement(store: AnnotationStore, first: str, second: str, within: Collection[str] | None = None) -> Kappa:
+def any_error_agreement(store: AnnotationStore, first: str, second: str, within: Collection[str] | None = None, version: str | None = None) -> Kappa:
     """Agreement on the coarsest question there is: did this trace contain an uncorrected error at all.
     Worth reporting separately, since two annotators can agree a trace is broken and still disagree about
     which code names the break."""
-    shared = shared_moves(store, first, second, within)
+    shared = shared_moves(store, first, second, within, version)
     by_first, by_second = store.by_move(first), store.by_move(second)
     return cohen_kappa([bool(by_first[uid].uncorrected) for uid in shared], [bool(by_second[uid].uncorrected) for uid in shared])
 
 
 def reliability(store: AnnotationStore, codebook: Codebook, first: str, second: str, within: Collection[str] | None = None) -> dict[str, Kappa]:
     """Per-code agreement plus the overall any-error figure, keyed by code id (`__any__` for the latter)."""
-    report = {code.id: code_agreement(store, codebook, first, second, code.id, within) for code in codebook.active()}
-    return {"__any__": any_error_agreement(store, first, second, within), **{code_id: kappa for code_id, kappa in report.items() if kappa.n_positive}}
+    version = codebook.version
+    report = {code.id: code_agreement(store, codebook, first, second, code.id, within, version) for code in codebook.active()}
+    return {"__any__": any_error_agreement(store, first, second, within, version), **{code_id: kappa for code_id, kappa in report.items() if kappa.n_positive}}
 
 
 @dataclass(frozen=True)
@@ -107,7 +111,7 @@ def _revision(annotator: str) -> str:
     return annotator.split("|")[-1]
 
 
-def best_pair(store: AnnotationStore, within: Collection[str] | None = None) -> tuple[str, str, bool] | None:
+def best_pair(store: AnnotationStore, within: Collection[str] | None = None, version: str | None = None) -> tuple[str, str, bool] | None:
     """The two annotators to compare, and whether they share a protocol. Most moves in common wins, with
     same-revision pairs preferred over cross-revision ones.
 
@@ -118,7 +122,7 @@ def best_pair(store: AnnotationStore, within: Collection[str] | None = None) -> 
     protocol change and the judges together and must not be read as reliability."""
     annotators = store.annotators()
     keep = None if within is None else set(within)
-    covered = {annotator: store.annotated_by(annotator) if keep is None else store.annotated_by(annotator) & keep for annotator in annotators}
+    covered = {annotator: store.covered(annotator, version) if keep is None else store.covered(annotator, version) & keep for annotator in annotators}
     pairs = [
         (_revision(first) == _revision(second), len(covered[first] & covered[second]), first, second)
         for index, first in enumerate(annotators)
@@ -133,7 +137,7 @@ def reliability_report(funnel: FunnelResult, stores: AnalysisStores) -> Reliabil
     move. Two judges are what makes this measurable at all, so a missing second one is an absent report."""
     store, codebook = stores.annotations(funnel.experiment), stores.codebook(funnel.experiment)
     within = {move.uid for move in funnel.analyzable}
-    pair = best_pair(store, within)
+    pair = best_pair(store, within, codebook.version)
     if pair is None:
         return None
 
@@ -143,6 +147,6 @@ def reliability_report(funnel: FunnelResult, stores: AnalysisStores) -> Reliabil
         first=first,
         second=second,
         same_protocol=same_protocol,
-        n_shared=len(shared_moves(store, first, second, within)),
+        n_shared=len(shared_moves(store, first, second, within, codebook.version)),
         codes=reliability(store, codebook, first, second, within),
     )

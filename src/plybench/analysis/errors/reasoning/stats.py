@@ -307,5 +307,5 @@ def prevalence_reports(funnel: FunnelResult, stores: AnalysisStores) -> list[Pre
     reports = []
     for annotator in store.annotators():
         consistency, _ = consistency_join(stores, funnel.experiment, annotator)
-        reports.append(prevalence_report(Scope.of(funnel), funnel.analyzable, store.by_move(annotator), codebook, annotator, consistency))
+        reports.append(prevalence_report(Scope.of(funnel), funnel.analyzable, store.by_move_under(annotator, codebook.version), codebook, annotator, consistency))
     return [report for report in reports if report.n_annotated]

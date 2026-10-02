@@ -180,16 +180,13 @@ class LabelResolver:
         if not code_id and not description:
             self.run.rejected_unknown_code.append("(no code id and no description)")  # neither a label nor a usable escape
             return None
-        if code_id and code_id not in self.codebook.codes:
-            # judges answer with the code's name where its id was asked for, and an id is the name cut to
-            # four words, so the two do not match literally. Recovering it here keeps a real, evidenced
-            # label that would otherwise be dropped over a formatting slip
-            recovered = self.codebook.by_name(code_id)
-            if recovered is None:
+        if code_id:
+            referenced = self.codebook.lookup(code_id)  # the id asked for, or the name judges answer with
+            if referenced is None:
                 self.run.rejected_unknown_code.append(code_id)
                 return None
-            self.run.n_recovered_by_name += 1
-            code_id = recovered.id
+            self.run.n_recovered_by_name += referenced.id != code_id
+            code_id = referenced.id
         quote = verified_quote(move.trace, applied.evidence)
         if quote is None:
             self.run.rejected_evidence.append(f"{code_id or OTHER}: {applied.evidence[:60]}")

@@ -91,3 +91,32 @@ class AnnotationStore(VerdictStore[Annotation]):
         different set of options, so counting it as coverage would silently mix two taxonomies in one
         column. Extending the codebook therefore re-annotates, which is the expensive but honest answer."""
         return {record.move_uid for record in self if record.annotator == annotator and record.codebook_version == codebook_version}
+
+    def covered(self, annotator: str, codebook_version: str | None = None) -> set[str]:
+        """Moves this annotator judged, optionally only under one revision of the taxonomy."""
+        return self.annotated_by(annotator) if codebook_version is None else self.annotated_under(annotator, codebook_version)
+
+    def other_versions(self, codebook_version: str) -> dict[str, int]:
+        """Rows made under some other revision of the taxonomy, counted per annotator.
+
+        Every report is restricted to one version, which is correct -- but excluding them silently is how
+        a column that reads as complete can be a fraction of the moves it claims. Re-inducing changes the
+        version whether or not the codebook was forked, so this is the normal state of a store that has
+        seen more than one wave, not an error."""
+        counts: dict[str, int] = {}
+        for record in self:
+            if record.codebook_version != codebook_version:
+                counts[record.annotator] = counts.get(record.annotator, 0) + 1
+        return counts
+
+    def by_move_under(self, annotator: str, codebook_version: str) -> dict[str, Annotation]:
+        """`by_move`, restricted to one revision of the taxonomy. Every report wants this shape, not the
+        unrestricted one.
+
+        `annotated_under` already gives the reason, and the resume path honoured it while the reporting
+        path did not. A store holding two codebooks -- which is what `--codebook` forks produce, and what
+        the planned three-seed induction produces by design -- then counted the other revision's moves as
+        annotated. Their labels carry ids this codebook does not have, so they were dropped one by one
+        while the moves themselves stayed in the denominator: every rate deflated, every move silently
+        recorded as clean. Seen live as a pass that annotated 43 moves reporting over 59."""
+        return {uid: record for uid, record in self.by_move(annotator).items() if record.codebook_version == codebook_version}

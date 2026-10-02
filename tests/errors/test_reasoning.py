@@ -256,6 +256,22 @@ def test_an_assignment_to_an_existing_code_adds_provenance_instead_of_a_duplicat
     assert run.unknown_codes == ["invented_by_the_judge"]  # a hallucinated id is reported, never created
 
 
+def test_an_attribution_that_names_its_code_is_matched_back_to_the_id(tmp_path):
+    """The defect that made a whole induction wave unreadable. Judges are shown `id -- name: definition`
+    and answer with the name; ids are `slug`-truncated to four words, so the strings differ. One live run
+    discarded 72 of 133 attributions this way, leaving 12 of 19 codes as singletons and Chao1 at 91 --
+    an estimate of 72 unseen types that was entirely an artefact of the lost repeats."""
+    move = _traced(1)
+    judge, _ = _judge([InducedBatch(errors=[_error(code_id="Missed an immediate threat"), _error(code_id="missed-an-immediate-threat")])])
+    book = _book(THREAT)
+
+    run = asyncio.run(induce(judge, [move], book, batch_size=1, patience=1, cache=ResponseCache(tmp_path / "c"), progress=False))
+
+    assert run.assignments == 2 and run.unknown_codes == [] and len(book.active()) == 1
+    assert run.per_code == {"threat_blindness": 2}, "the spectrum the unseen-species estimators read"
+    assert run.recovered_by_name == ["threat_blindness", "threat_blindness"]
+
+
 def _induced_at(level: str, tmp_path) -> Code:
     judge, _ = _judge([InducedBatch(errors=[_error(name=f"Code at {level}", level=level)])])
     book = Codebook("exp")
@@ -343,6 +359,22 @@ def test_consolidation_applies_merges_and_parents_but_rejects_what_would_break_t
     assert run.merged == [("xor_slip", "nim_sum")] and run.parented == [("nim_sum", "threat_blindness")]
     assert len(run.rejected) == 2  # the unknown source and the self-parent
     assert book.resolve("xor_slip").id == "nim_sum" and book.codes["nim_sum"].parent_id == "threat_blindness"
+
+
+def test_consolidation_accepts_a_code_named_rather_than_identified(tmp_path):
+    """Three live runs produced zero merges and zero parent links out of books full of obvious synonyms,
+    because the consolidation judge answers with names too."""
+    book = _book(THREAT, Code("xor_slip", "XOR slip", "Same failure, different words", game_scope("nim")))
+    consolidation = Consolidation(
+        merges=[Merge(source_id="XOR slip", target_id="Missed an immediate threat", reason="same failure")],
+        parents=[],
+    )
+    judge, _ = _judge([consolidation])
+
+    run = asyncio.run(consolidate(judge, book, ResponseCache(tmp_path / "c"), progress=False))
+
+    assert run.merged == [("xor_slip", "threat_blindness")] and run.rejected == []
+    assert book.resolve("xor_slip").id == "threat_blindness"
 
 
 # --- annotation ----------------------------------------------------------------------------------
@@ -524,9 +556,9 @@ def test_a_move_with_no_error_is_recorded_as_clean_rather_than_skipped(tmp_path)
 
 
 # --- prevalence ----------------------------------------------------------------------------------
-def _annotation(uid: str, code_id: str | None = None, self_corrected: bool = False, annotator: str = "judge|v1") -> Annotation:
+def _annotation(uid: str, code_id: str | None = None, self_corrected: bool = False, annotator: str = "judge|v1", version: str = "v") -> Annotation:
     labels = (MistakeLabel(code_id, "Therefore the best move is A1.", self_corrected),) if code_id else ()
-    return Annotation(uid, annotator, "v", labels)
+    return Annotation(uid, annotator, version, labels)
 
 
 def test_prevalence_excludes_self_corrections_from_the_rate_but_keeps_them_on_the_record():
@@ -598,13 +630,42 @@ def test_reliability_reports_per_code_and_overall_agreement(tmp_path):
     store = AnnotationStore("exp", tmp_path / "annotations.jsonl")
     book = _book(THREAT, Code("other", "Other", "another failure"))
     for uid, first, second in [("u1", "threat_blindness", "threat_blindness"), ("u2", "threat_blindness", None), ("u3", None, None)]:
-        store.add(_annotation(uid, first, annotator="a|v1"))
-        store.add(_annotation(uid, second, annotator="b|v1"))
+        store.add(_annotation(uid, first, annotator="a|v1", version=book.version))
+        store.add(_annotation(uid, second, annotator="b|v1", version=book.version))
 
     report = reliability(store, book, "a|v1", "b|v1")
     assert report["threat_blindness"].n == 3 and report["threat_blindness"].observed == 2 / 3
     assert "other" not in report  # a code neither annotator ever used carries no information
     assert report["__any__"].n == 3  # the coarse "is this trace broken at all" figure is always reported
+
+
+def test_a_report_counts_only_the_moves_coded_under_its_own_codebook(tmp_path):
+    """One store holds every annotator and every codebook, and `--codebook` forks are a planned part of
+    the design, so the two mix by default. Before this, a move coded under an older taxonomy still filled
+    a row: its labels carry ids this codebook does not have and were dropped one at a time, while the
+    move stayed in the denominator as a clean trace. A live pass that annotated 43 moves reported 59."""
+    store = AnnotationStore("exp", tmp_path / "annotations.jsonl")
+    book = _book(THREAT)
+    move = _traced(1)
+    store.add(_annotation(move.uid, "threat_blindness", annotator="a|v1", version=book.version))
+    store.add(_annotation("stale", "an_id_from_the_old_book", annotator="a|v1", version="an-older-codebook"))
+
+    assert set(store.by_move_under("a|v1", book.version)) == {move.uid}
+    assert set(store.by_move("a|v1")) == {move.uid, "stale"}, "the unrestricted view still sees everything"
+    assert store.covered("a|v1", book.version) == {move.uid} and store.covered("a|v1") == {move.uid, "stale"}
+
+
+def test_the_store_says_how_much_of_itself_a_codebook_does_not_account_for(tmp_path):
+    """The exclusion is right; doing it silently is not. Re-inducing changes the content hash whether or
+    not the codebook was forked, so any store that has seen two waves holds rows no report will show."""
+    store = AnnotationStore("exp", tmp_path / "annotations.jsonl")
+    book = _book(THREAT)
+    store.add(_annotation("u1", "threat_blindness", annotator="a|v1", version=book.version))
+    store.add(_annotation("u2", "threat_blindness", annotator="a|v1", version="older"))
+    store.add(_annotation("u3", "threat_blindness", annotator="b|v1", version="older"))
+
+    assert store.other_versions(book.version) == {"a|v1": 1, "b|v1": 1}
+    assert store.other_versions("older") == {"a|v1": 1}
 
 
 def test_the_annotation_store_survives_a_codebook_version_change(tmp_path):
@@ -763,8 +824,8 @@ def test_kappa_is_computed_over_the_cell_it_is_printed_under(tmp_path):
     store = AnnotationStore("exp", tmp_path / "annotations.jsonl")
     book = _book(THREAT)
     for uid, first, second in [("here1", "threat_blindness", "threat_blindness"), ("here2", "threat_blindness", None), ("elsewhere", None, None)]:
-        store.add(_annotation(uid, first, annotator="a|v1"))
-        store.add(_annotation(uid, second, annotator="b|v1"))
+        store.add(_annotation(uid, first, annotator="a|v1", version=book.version))
+        store.add(_annotation(uid, second, annotator="b|v1", version=book.version))
 
     whole_store = reliability(store, book, "a|v1", "b|v1")
     one_cell = reliability(store, book, "a|v1", "b|v1", within={"here1", "here2"})

@@ -182,6 +182,19 @@ def _summary(passes: list[str], ledger: CostLedger, cells: int, elapsed: float) 
     return f"reasoning analysis finished: {ran} over {cells} cell(s), {total.n_calls} judge call(s), {spent}, {elapsed / 60:.1f} min"
 
 
+def _report_other_versions(stores: AnalysisStores, funnels: list[FunnelResult]) -> None:
+    """Say how much of the store this codebook does not account for, before anything is reported from it."""
+    if not funnels:
+        return
+    experiment = funnels[0].experiment
+    version = stores.codebook(experiment).version
+    stale = stores.annotations(experiment).other_versions(version)
+    if not stale:
+        return
+    columns = ", ".join(f"{annotator} ({count})" for annotator, count in sorted(stale.items()))
+    print(f"codebook {version}: {sum(stale.values())} annotation(s) were made under another codebook and are left out of every report -- {columns}")
+
+
 async def _run(args: argparse.Namespace) -> None:
     started = time.monotonic()
     op = build_op(concurrency=args.concurrency, limit_scale=args.limit_scale)
@@ -193,6 +206,7 @@ async def _run(args: argparse.Namespace) -> None:
     stores, ledger = AnalysisStores(_codebook_label(args, model)), CostLedger(op.llm)
     if stores.codebook_label:
         print(f"using the {stores.codebook_label!r} codebook, forked from the experiment's own")
+    _report_other_versions(stores, funnels)
     passes = _passes(args)
 
     if passes or args.dry_run:

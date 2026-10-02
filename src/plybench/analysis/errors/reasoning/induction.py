@@ -132,6 +132,7 @@ class InductionRun:
     per_code: dict[str, int] = field(default_factory=dict)
     reproposed: list[str] = field(default_factory=list)  # codes proposed again under a name already in the book: routed to the existing code, not a new one
     unknown_codes: list[str] = field(default_factory=list)  # ids the judge invented for codes it did not propose
+    recovered_by_name: list[str] = field(default_factory=list)  # attributions that named their code instead of giving its id
     rejected_evidence: list[str] = field(default_factory=list)  # proposals not anchored in their trace
     cross_level: list[str] = field(default_factory=list)  # codes used outside their declared level: evidence the level is wrong, not a rejection
     failed_batches: int = 0  # produced no answer at all: not evidence of anything, least of all saturation
@@ -196,18 +197,22 @@ def _apply_batch(batch: InducedBatch, moves: Sequence[TracedMove], codebook: Cod
             run.rejected_evidence.append(f"move {error.move}: {error.evidence[:60]}")
             continue
         if error.code_id:
-            if error.code_id in codebook.codes:
-                resolved = codebook.resolve(error.code_id)
-                # kept, not rejected: a code turning up outside its declared level is the evidence that
-                # the level claim is too narrow, and discarding it is how a taxonomy confirms itself
-                if not code_applies(resolved, move):
-                    run.cross_level.append(f"{resolved.id} on {_game_key(move)} (declared {resolved.level})")
-                codebook.add_example(error.code_id, move.uid)
-                run.per_code[resolved.id] = run.per_code.get(resolved.id, 0) + 1
-                run.assignments += 1
-                coded += 1
-            else:
+            referenced = codebook.lookup(error.code_id)
+            if referenced is None:
                 run.unknown_codes.append(error.code_id)
+                continue
+            if referenced.id != error.code_id:
+                run.recovered_by_name.append(referenced.id)
+            # resolve through merges, so an attribution made against a retired id lands on the survivor
+            resolved = codebook.resolve(referenced.id)
+            # kept, not rejected: a code turning up outside its declared level is the evidence that
+            # the level claim is too narrow, and discarding it is how a taxonomy confirms itself
+            if not code_applies(resolved, move):
+                run.cross_level.append(f"{resolved.id} on {_game_key(move)} (declared {resolved.level})")
+            codebook.add_example(resolved.id, move.uid)
+            run.per_code[resolved.id] = run.per_code.get(resolved.id, 0) + 1
+            run.assignments += 1
+            coded += 1
             continue
         if not error.name or not error.definition:
             continue  # neither an assignment nor a usable proposal
@@ -330,30 +335,39 @@ async def consolidate(judge: Judge, codebook: Codebook, cache: ResponseCache | N
     if parsed is None:
         return run
 
+    # every reference below goes through `lookup`, which takes the name the judge usually answers with
+    # as well as the id it was asked for. Rejecting a named code here is how three runs in a row
+    # produced zero merges and zero parent links out of books full of obvious synonyms
     for merge in parsed.merges:
-        if merge.source_id not in codebook.codes or merge.target_id not in codebook.codes:
+        source, target = codebook.lookup(merge.source_id), codebook.lookup(merge.target_id)
+        if source is None or target is None:
             run.rejected.append(f"merge {merge.source_id}->{merge.target_id}: unknown code")
             continue
         try:
-            codebook.merge(merge.source_id, merge.target_id)
+            codebook.merge(source.id, target.id)
         except (ValueError, KeyError) as error:
-            run.rejected.append(f"merge {merge.source_id}->{merge.target_id}: {error}")
+            run.rejected.append(f"merge {source.id}->{target.id}: {error}")
             continue
-        run.merged.append((merge.source_id, merge.target_id))
+        run.merged.append((source.id, target.id))
 
     for parenting in parsed.parents:
-        try:
-            codebook.set_parent(parenting.code_id, parenting.parent_id)
-        except (ValueError, KeyError) as error:
-            run.rejected.append(f"parent {parenting.code_id}<-{parenting.parent_id}: {error}")
+        child, parent = codebook.lookup(parenting.code_id), codebook.lookup(parenting.parent_id)
+        if child is None or parent is None:
+            run.rejected.append(f"parent {parenting.code_id}<-{parenting.parent_id}: unknown code")
             continue
-        run.parented.append((parenting.code_id, parenting.parent_id))
+        try:
+            codebook.set_parent(child.id, parent.id)
+        except (ValueError, KeyError) as error:
+            run.rejected.append(f"parent {child.id}<-{parent.id}: {error}")
+            continue
+        run.parented.append((child.id, parent.id))
 
     for levelling in parsed.levels:
-        if levelling.code_id not in codebook.codes:
+        referenced = codebook.lookup(levelling.code_id)
+        if referenced is None:
             run.rejected.append(f"level {levelling.code_id}: unknown code")
             continue
-        code = codebook.resolve(levelling.code_id)
+        code = codebook.resolve(referenced.id)
         scope = _generalised_scope(code, levelling.level)
         if scope is None:
             run.rejected.append(f"level {code.id} {code.level}->{levelling.level}: only generalisation can be decided from the codebook alone")

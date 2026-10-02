@@ -217,6 +217,8 @@ class Pipeline:
         print(f"  {run.instances} error instance(s) coded in total -- what the saturation claim rests on")
         if run.reproposed:
             print(f"  {len(run.reproposed)} proposal(s) re-stated a code already in the book -- routed to it rather than duplicated")
+        if run.recovered_by_name:
+            print(f"  {len(run.recovered_by_name)} attribution(s) named their code instead of giving its id -- matched back to it rather than dropped")
         if run.unmixed_batches:
             print(f"  {run.unmixed_batches} batch(es) held no suboptimal move -- coded, but they cannot end the loop, since there was little in them to find")
         if run.silent_batches:
@@ -302,7 +304,7 @@ class Pipeline:
         for funnel, moves in selection:
             run = await run_annotation(judge, moves, codebook, store, self.cache, informed=informed)
             self.ledger.record(INFORMED if informed else ANNOTATE, self.model, run.stats)
-            report = prevalence_report(Scope.of(funnel), funnel.analyzable, store.by_move(judge.annotator), codebook, judge.annotator, consistency)
+            report = prevalence_report(Scope.of(funnel), funnel.analyzable, store.by_move_under(judge.annotator, codebook.version), codebook, judge.annotator, consistency)
             print(f"\n{cell(funnel)}")
             if run.stats is not None:
                 print(f"  annotated {run.stats.n} ({run.stats.n_cached} cached, {run.stats.n_failed} without a verdict)")
@@ -347,7 +349,7 @@ class Pipeline:
         by_model: dict[Scope, list[TracedMove]] = {}
         for funnel, _ in selection:
             by_model.setdefault(Scope.of(funnel).only("model"), []).extend(funnel.analyzable)
-        reports = [prevalence_report(scope, moves, store.by_move(judge.annotator), codebook, judge.annotator) for scope, moves in by_model.items()]
+        reports = [prevalence_report(scope, moves, store.by_move_under(judge.annotator, codebook.version), codebook, judge.annotator) for scope, moves in by_model.items()]
         reports = [report for report in reports if report.n_naive]
         if not reports:
             print("\nno annotated move comes from a game induction never read -- the uncovered rate cannot measure completeness yet")

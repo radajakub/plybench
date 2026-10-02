@@ -6,6 +6,8 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+## [2.1.0] - 2026-10-02
+
 ### Added
 
 - `ModelConfig.from_string` / `to_string` / `slug`, using the `<provider>:<model>[:<options>]` tail of a

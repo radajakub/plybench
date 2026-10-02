@@ -9,10 +9,11 @@ flag does -- until now it was stored on the model and read nowhere at all.
 from __future__ import annotations
 
 import json
+import warnings
 
 from pydantic import BaseModel, Field
 
-from plybench.llm.providers.metacentrum.client import _json_body, _schema_instructions
+from plybench.llm.providers.metacentrum.client import _json_body, _schema_instructions, silence_proxy_serializer_warnings
 from plybench.llm.providers.metacentrum.models import metacentrum_models
 
 
@@ -62,3 +63,16 @@ def test_the_registry_only_names_models_the_endpoint_serves():
     served = {model.model_string for model in metacentrum_models()}
     assert "deepseek-v4.1-flash" in served
     assert _model("gemma-4").model_string == "gemma4"
+
+
+def test_the_proxys_unmodellable_responses_do_not_bury_the_log():
+    """`responses.parse` re-serialises the payload, and e-INFRA returns one the SDK cannot model, so
+    pydantic prints ~28 lines per enforced-schema call. An induction log once held 8000 of them. Only
+    that message is filtered -- a serializer warning about one of our own models still has to surface."""
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        silence_proxy_serializer_warnings()
+        warnings.warn("Pydantic serializer warnings:\n  PydanticSerializationUnexpectedValue(...)", UserWarning, stacklevel=1)
+        warnings.warn("a schema of ours really is wrong", UserWarning, stacklevel=1)
+
+    assert [str(warning.message) for warning in caught] == ["a schema of ours really is wrong"]

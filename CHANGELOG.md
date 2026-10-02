@@ -6,6 +6,12 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+### Changed
+
+- The paper's experiment definitions (`experiments/benchmarks/{ttt,nim,connect_four,connect_four_long}.json`)
+  are no longer in the repository; `templates/benchmark.json` is the starting point for a new experiment.
+  `experiments/` and `results/` are ignored.
+
 ## [2.1.0] - 2026-10-02
 
 ### Added

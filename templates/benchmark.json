@@ -1,0 +1,16 @@
+{
+  "game_configs": [
+    { "value": "tic_tac_toe:", "enabled": true },
+    { "value": "nim:", "enabled": false }
+  ],
+  "player_configs": [
+    { "value": "random:distribution=uniform", "enabled": true },
+    { "value": "llm:actions:text:openai:gpt-5-nano:thinking_enabled=True,reasoning_effort=low", "enabled": false }
+  ],
+  "opponents": [
+    { "value": "random:distribution=uniform", "enabled": true },
+    { "value": "mcts:max_simulations=1000,rollout_count=1,uct_c=2.0", "enabled": true },
+    { "value": "optimal:stochastic=True", "enabled": true }
+  ],
+  "num_games": 10
+}

@@ -311,25 +311,20 @@ when you want to re-run the exact benchmarks the paper reports, extend them with
 analysis and export pipelines on the resulting transcripts. Everything is resumable, so an interrupted
 run continues where it left off.
 
-The complete experiment definitions from the paper are prepared under
-[`experiments/benchmarks/`](experiments/benchmarks/):
-
-| Experiment         | File                | Games                                                                       |
-| ------------------ | ------------------- | --------------------------------------------------------------------------- |
-| Tic-tac-toe family | `ttt.json`          | `tic_tac_toe`, `modified_tic_tac_toe`, `magic_square`, `story_magic_square` |
-| Nim family         | `nim.json`          | `nim`, `modified_nim`, `inverse_nim`, `story_nim`                           |
-| Connect Four       | `connect_four.json` | `connect_four`                                                              |
-
-Each file declares the full sweep — the LLM players, the opponents (`random`, `mcts`, `optimal`), and
-the number of rounds — with per-item `enabled` toggles so you can narrow a run without editing the sweep.
+An experiment is a JSON file under `experiments/benchmarks/<name>.json`. Start from
+[`templates/benchmark.json`](templates/benchmark.json): it declares the sweep — the games, the players,
+the opponents (`random`, `mcts`, `optimal`), and the number of rounds — with per-item `enabled` toggles
+so you can narrow a run without editing the sweep. The template runs offline as it stands.
 
 ```bash
 git clone https://github.com/radajakub/plybench.git
 cd plybench
 uv sync
 
-# run a prepared experiment (reads experiments/benchmarks/ttt.json)
-uv run python scripts/run.py --experiment ttt
+# create an experiment from the template and run it (reads experiments/benchmarks/my_experiment.json)
+mkdir -p experiments/benchmarks
+cp templates/benchmark.json experiments/benchmarks/my_experiment.json
+uv run python scripts/run.py --experiment my_experiment
 
 # or an ad-hoc smoke run
 uv run python scripts/run.py --name smoke \
@@ -339,7 +334,7 @@ uv run python scripts/run.py --name smoke \
     --num-games 10
 
 # push progress notifications for a long run (needs NTFY_URL and NTFY_TOPIC, see Notifications)
-uv run python scripts/run.py --experiment ttt --notify
+uv run python scripts/run.py --experiment my_experiment --notify
 ```
 
 `run.py` logs matchup and round progress to the console as the run proceeds; rounds already
@@ -352,8 +347,8 @@ incur API cost; bot-vs-bot matchups run offline. Results are written under
 Then analyze or export the transcripts:
 
 ```bash
-uv run python scripts/analyze.py --experiment ttt   # compute per-matchup statistics + confidence intervals
-uv run python scripts/export.py --experiment ttt --out ttt.tar.gz   # export results for the PlyBench website
+uv run python scripts/analyze.py --experiment my_experiment   # compute per-matchup statistics + confidence intervals
+uv run python scripts/export.py --experiment my_experiment --out my_experiment.tar.gz   # export results for the PlyBench website
 uv run python scripts/play.py --game tic_tac_toe: --i human: --o optimal:stochastic=True  # play interactively
 ```
 

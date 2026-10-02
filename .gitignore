@@ -219,7 +219,9 @@ __marimo__/
 
 .DS_Store
 
+# experiments and results are symlinks into ../plybench_data (no trailing slash: git treats a symlink as a file)
+/experiments
+/results
 /analysis/
-/results/
 /cache/
 /plots/

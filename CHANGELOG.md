@@ -6,6 +6,8 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+## [2.1.1] - 2026-10-02
+
 ### Changed
 
 - The paper's experiment definitions (`experiments/benchmarks/{ttt,nim,connect_four,connect_four_long}.json`)

@@ -199,8 +199,9 @@ with clankers.Engage("my experiment", success=lambda: f"my experiment: {len(rows
     ...  # reports the start, the duration and the outcome, a crash included
 ```
 
-clankers reads its configuration from `.env`, `NTFY_`-prefixed environment variables and
-`~/.config/clankers/config.toml`. A missing configuration or an unreachable server is logged as a
+clankers reads its configuration from `.env`, `NTFY_`- and `CLANKERS_`-prefixed environment
+variables and `~/.config/clankers/config.toml`. Notifications use neutral labels (`Done`, `Info`,
+`Failed`); set `CLANKERS_THEME=starwars` for the Star Wars ones. A missing configuration or an unreachable server is logged as a
 warning and never interrupts the run.
 
 ## Extending PlyBench

@@ -6,6 +6,11 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+### Changed
+
+- Require clankers >= 3.0.0. Notifications now use neutral labels (`Done`, `Info`, `Failed`); set
+  `CLANKERS_THEME=starwars` to restore `Roger, roger`, `Blast them!` and `Uh-oh`.
+
 ## [2.1.1] - 2026-10-02
 
 ### Changed

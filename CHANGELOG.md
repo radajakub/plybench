@@ -6,6 +6,8 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+## [2.1.2] - 2026-10-05
+
 ### Changed
 
 - Require clankers >= 3.0.0. Notifications now use neutral labels (`Done`, `Info`, `Failed`); set

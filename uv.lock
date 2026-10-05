@@ -359,15 +359,15 @@ wheels = [
 
 [[package]]
 name = "clankers"
-version = "3.0.0"
+version = "3.0.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "python-dotenv" },
     { name = "requests" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/a1/d8/f7448ab5f87afd4a67c13003271fb6a801eb345eb0557d8062f08f5ace24/clankers-3.0.0.tar.gz", hash = "sha256:b54199a6a40735b14d5531d05f905507eccae5cec3d1b1d3e6a9e252d79297a2", size = 41884, upload-time = "2026-10-04T12:19:54.665Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/fb/ea/a4e9aa14a46a844c35464c7ce3322e11e64dfc007e3c5d8bf61a9bc4e349/clankers-3.0.2.tar.gz", hash = "sha256:dccc6dcf7694aa24b40c901ff0454806f9063217bfe6add1cb5ef8c5a2a9baf2", size = 42891, upload-time = "2026-10-04T18:32:07Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/f8/99/6849df4b10a366cd1333ddb0b4698db00a40be3dc20bc6b17123ff40a7d5/clankers-3.0.0-py3-none-any.whl", hash = "sha256:abc8fe25cf6bea9db2fa78f36dc4f3f3e3f3baa53b747462b210b97756eaf90c", size = 15723, upload-time = "2026-10-04T12:19:53.589Z" },
+    { url = "https://files.pythonhosted.org/packages/e7/9e/98c31e955bc8c76409cd526edcaa96a29ee0fd355855f511ac17dd77171c/clankers-3.0.2-py3-none-any.whl", hash = "sha256:522ce206ca6258d1bb7de775c0cc9c2ef97d16364e74258f1390f388ac004b6b", size = 17429, upload-time = "2026-10-04T18:32:05.728Z" },
 ]
 
 [[package]]
@@ -1830,7 +1830,7 @@ dev = [
 requires-dist = [
     { name = "anthropic", extras = ["aiohttp"], marker = "extra == 'all'", specifier = ">=0.120.2" },
     { name = "anthropic", extras = ["aiohttp"], marker = "extra == 'anthropic'", specifier = ">=0.120.2" },
-    { name = "clankers", specifier = ">=3.0.0" },
+    { name = "clankers", specifier = ">=3.0.2" },
     { name = "google-genai", marker = "extra == 'all'", specifier = ">=2.14.0" },
     { name = "google-genai", marker = "extra == 'gemini'", specifier = ">=2.14.0" },
     { name = "matplotlib", marker = "extra == 'all'", specifier = ">=3.10.0" },

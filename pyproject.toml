@@ -31,7 +31,7 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
-    "clankers>=3.0.0",
+    "clankers>=3.0.2",
     "numpy>=2.5.1",
     "open-spiel>=2.0.1",
     "pydantic>=2.13.4",

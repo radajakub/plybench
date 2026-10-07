@@ -6,6 +6,20 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+### Added
+
+- `claude-sonnet-5.5` on the Claude provider ($2.00 / $10.00, cache read $0.20; all five effort
+  levels). Thinking cannot be turned off: the API rejects `"disabled"`, and its `"between_tools"`
+  mode is not supported by the harness.
+- `gpt-6.1-sol` on the OpenAI provider ($2.00 / $10.00, cached input $0.10; `low` to `max`).
+- `mistral-large-4` on the Mistral provider, at the sale price of $0.68 / $2.09 (cached $0.07).
+  Mistral gives no end date for the sale; the list price is $1.36 / $4.18.
+
+### Deprecated
+
+- `gpt-5-mini` and `gpt-5-nano` shut down on 2026-12-11; `gpt-5.4-nano` on 2027-04-01.
+- `gemini-3.1-flash-lite` shuts down on 2027-05-07. Google recommends `gemini-3.5-flash-lite`.
+
 ## [2.1.2] - 2026-10-05
 
 ### Changed

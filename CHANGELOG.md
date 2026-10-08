@@ -14,6 +14,23 @@ All notable changes to this project are documented in this file. The format is b
 - `gpt-6.1-sol` on the OpenAI provider ($2.00 / $10.00, cached input $0.10; `low` to `max`).
 - `mistral-large-4` on the Mistral provider, at the sale price of $0.68 / $2.09 (cached $0.07).
   Mistral gives no end date for the sale; the list price is $1.36 / $4.18.
+- A request timeout for every remote provider: 600 s by default, set per provider with
+  `OPENAI_TIMEOUT`, `GROK_TIMEOUT`, `CLAUDE_TIMEOUT`, `GEMINI_TIMEOUT` or `MISTRAL_TIMEOUT` (seconds).
+  OpenAI, Grok and Claude used to wait without limit.
+
+### Changed
+
+- One retry rule for every provider: only 408, 409, 429 and 5xx responses and transport failures are
+  retried. OpenAI, Grok, Claude and Metacentrum used to retry every error, so a rejected request
+  (400, 401, ...) was sent ten times before it failed.
+- Claude sends one request instead of streaming, like every other provider. The timeout now caps the
+  whole answer, so raise `CLAUDE_TIMEOUT` for long max-effort runs.
+
+### Fixed
+
+- Gemini: connection failures and timeouts raised by the HTTP layer are retried and classified as
+  `connection` or `timeout` instead of failing at once as `other`. The client now always uses httpx;
+  genai used to switch to aiohttp whenever it was installed (the `anthropic` extra pulls it in).
 
 ### Deprecated
 

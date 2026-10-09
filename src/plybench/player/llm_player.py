@@ -10,11 +10,14 @@ from plybench.core.game import TurnBasedGame
 from plybench.core.interface import InterfaceAction, InterfaceObservation
 from plybench.core.output_strategy import OutputStrategy
 from plybench.core.prompt_adapter import PromptAdapter
-from plybench.llm import LLM, LLMMessage, LLMResponse, ModelConfig, Provider
+from plybench.llm import LLM, FailureKind, LLMCallError, LLMMessage, LLMResponse, ModelConfig, Provider
 from plybench.llm.model_config import options_to_string, parse_options
 from plybench.player.player import Player, PlayerIdentifier, PlayerOutput
 from plybench.trackers.player_tracker import PlayerTracker
 from plybench.trackers.step_data import StepData
+
+# failures that are the model's answer rather than the transport's; see LLMPlayer.__call__
+_MODEL_FAILURES = frozenset({FailureKind.UNPARSEABLE, FailureKind.REFUSAL})
 
 
 @dataclass(frozen=True, eq=True)
@@ -71,7 +74,16 @@ class LLMPlayer(Player):
 
         system_message, messages = self._prompt_adapter.build_messages(observation, legal_moves, self._output_strategy)
 
-        response = await self._llm.generate(self._params.model, system_message, messages, output_schema=self._output_strategy.get_output_schema())
+        try:
+            response = await self._llm.generate(self._params.model, system_message, messages, output_schema=self._output_strategy.get_output_schema())
+        except LLMCallError as error:
+            # an answer that arrived but cannot be played is the model's move, recorded as a failure like any
+            # malformed text. Raising would abort the run, and a resume would replay the game until the model
+            # happened to answer, hiding these failures from the results. Transport failures still raise.
+            if error.kind not in _MODEL_FAILURES or error.response is None:
+                raise
+            reason = f"Wrong action format ({error.response.output_text})" if error.kind is FailureKind.UNPARSEABLE else f"Refusal ({error})"
+            return self._player_output(error.response, None, reason, system_message, messages)
 
         return self._process_response(response, legal_moves, system_message, messages)
 
@@ -88,8 +100,12 @@ class LLMPlayer(Player):
             if selected_action is None:
                 failure_reason = f"Illegal action selected ({extracted.action})"
 
+        return self._player_output(response, selected_action, failure_reason, system_message, messages)
+
+    @staticmethod
+    def _player_output(response: LLMResponse, action: InterfaceAction | None, failure_reason: str | None, system_message: LLMMessage, messages: list[LLMMessage]) -> PlayerOutput:
         return PlayerOutput(
-            action=selected_action,
+            action=action,
             system_message=system_message.content,
             prompt_message="\n".join(message.content for message in messages),
             reasoning_trace="\n".join(response.reasoning),

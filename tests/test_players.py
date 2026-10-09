@@ -9,7 +9,7 @@ import pytest
 
 from plybench.app import PlyBench
 from plybench.common.enums import GameResults
-from plybench.llm import LLMConfig, LLMResponse, LLMTokens
+from plybench.llm import FailureKind, LLMCallError, LLMConfig, LLMResponse, LLMTokens, Provider
 from plybench.llm.response import OutputText, ReasoningTrace
 from plybench.player.llm_player import LLMPlayer, LLMPlayerTracker
 from plybench.player.output_strategies import StructuredOutputStrategy
@@ -127,3 +127,44 @@ def test_llm_player_produces_move_and_tokens_with_stub_llm():
     data = LLMPlayerTracker().record(out)
     assert data["reasoning_trace"] == "thinking about C1R1"
     assert data["full_output"] == '{"action": "C1R1"}'
+
+
+class _FailingLLM:
+    def __init__(self, error: Exception) -> None:
+        self._error = error
+
+    async def generate(self, model_config, system, messages, output_schema=None):
+        raise self._error
+
+
+def _answer(text: str) -> LLMResponse:
+    return LLMResponse.from_parts(Provider.OPENAI, "gpt-5.4", text, ["thinking"], LLMTokens(input_tokens=10, output_tokens=20, reasoning_tokens=5), None)
+
+
+def _llm_move(llm) -> PlayerOutput:
+    engine = _tic_tac_toe()
+    llm_player = LLMPlayer(registry.player_config("llm:actions:structured:openai:gpt-5.4:"), StructuredOutputStrategy(), llm, "i")
+    llm_player.initialize_policy(engine.game, engine.prompt_adapter)
+    observation, moves = _first_move(engine)
+    return asyncio.run(llm_player(engine.game, observation, moves))
+
+
+@pytest.mark.parametrize(
+    ("kind", "reason_prefix"),
+    [(FailureKind.UNPARSEABLE, "Wrong action format ("), (FailureKind.REFUSAL, "Refusal (")],
+)
+def test_an_unplayable_answer_is_a_failed_move_not_a_crash(kind, reason_prefix):
+    """Raising aborted the run, and the resume replayed the game until the model happened to answer, so
+    these failures never reached the results. They are the model's move and are recorded like one."""
+    out = _llm_move(_FailingLLM(LLMCallError(kind, "no", _answer('{"action": 4'))))
+
+    assert out.action is None
+    assert out.failure_reason is not None and out.failure_reason.startswith(reason_prefix)
+    assert out.full_output == '{"action": 4'
+    assert (out.input_tokens, out.output_tokens, out.reasoning_tokens) == (10, 20, 5), "the failed call's cost is kept"
+
+
+def test_a_transport_failure_still_aborts_the_move():
+    # says nothing about the model, so the game is better replayed than scored
+    with pytest.raises(LLMCallError):
+        _llm_move(_FailingLLM(LLMCallError(FailureKind.TIMEOUT, "slow")))

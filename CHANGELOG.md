@@ -8,9 +8,12 @@ All notable changes to this project are documented in this file. The format is b
 
 ### Added
 
-- `claude-sonnet-5.5` on the Claude provider ($2.00 / $10.00, cache read $0.20; all five effort
+- `claude-sonnet-5.5` on the Claude provider ($2.00 / $10.00, cache read $0.10; all five effort
   levels). Thinking cannot be turned off: the API rejects `"disabled"`, and its `"between_tools"`
   mode is not supported by the harness.
+- `claude-haiku-5.5` on the Claude provider ($0.10 / $0.50, cache read $0.01, for prompts up to 100k
+  tokens; prompts over 100k cost $0.50 / $2.50 and are not modelled). All five effort levels; thinking
+  can be turned off at `high` or below. The live tests use it instead of `claude-sonnet-5`.
 - `gpt-6.1-sol` on the OpenAI provider ($2.00 / $10.00, cached input $0.10; `low` to `max`).
 - `mistral-large-4` on the Mistral provider, at the sale price of $0.68 / $2.09 (cached $0.07).
   Mistral gives no end date for the sale; the list price is $1.36 / $4.18.
@@ -22,6 +25,12 @@ All notable changes to this project are documented in this file. The format is b
   has no such signal.
 - `LLMCallError.response`: for `unparseable` and `refusal` failures, the answer that did arrive, with
   its text, reasoning and tokens.
+- `LLM.served_models(provider)`: the model ids a provider's endpoint lists right now (free; every
+  remote provider), to catch a retired or mistyped model before a run.
+- `retired=True` on a registry model: it still resolves and costs, so recorded results load, but a new
+  call fails with a clear message instead of the provider's 400. The five models e-INFRA no longer
+  serves (`deepseek-v4-flash`, `deepseek-v3.2-thinking`, `qwen-3.5-122b`, `glm-5.2`,
+  `mistral-small-4`) are marked retired.
 
 ### Changed
 
@@ -35,6 +44,11 @@ All notable changes to this project are documented in this file. The format is b
   `LLMCallError(unparseable)` with the raw answer attached. Providers send the schema themselves
   instead of using the SDKs' parse helpers; the requests are unchanged.
 
+- `claude-haiku-4.5` sends the pinned snapshot `claude-haiku-4-5-20251001` instead of the
+  `claude-haiku-4-5` alias. It is the same model; the models endpoint lists only the snapshot.
+- `grok-4.20-reasoning` no longer accepts `reasoning_effort`. xAI documents the parameter only for
+  `grok-4.7`, `grok-4.6`, `grok-4.5` and `grok-4.3`; a config that sets it now fails before the request.
+
 - One retry rule for every provider: only 408, 409, 429 and 5xx responses and transport failures are
   retried. OpenAI, Grok, Claude and Metacentrum used to retry every error, so a rejected request
   (400, 401, ...) was sent ten times before it failed.
@@ -46,9 +60,20 @@ All notable changes to this project are documented in this file. The format is b
 - Claude: a refusal under a schema is reported as `refusal`. The SDK's parse helper used to fail on
   the refusal text first, so it surfaced as a schema failure.
 - Metacentrum: the inline `<think>` block is stripped from schema-enforced answers too.
+- Metacentrum: models that get the schema in the prompt (`gemma-4`, `glm-5.3`, `qwen-3.8-27b`) are told
+  to fill in an instance of it. **Affects results** of the `structured` strategy on these models: with
+  the old wording, `gemma-4` copied the schema back in 5 of 6 game prompts (2026-10-09, 10 prompts
+  per wording); the new one answered all 10.
+- Mistral: `reasoning_effort` accepts only `high`. The API rejects the other levels the SDK lists
+  (`mistral-small-2603`: "Must be one of (none, high)"), so such a config now fails before the request.
 - Gemini: connection failures and timeouts raised by the HTTP layer are retried and classified as
   `connection` or `timeout` instead of failing at once as `other`. The client now always uses httpx;
   genai used to switch to aiohttp whenever it was installed (the `anthropic` extra pulls it in).
+
+### Removed
+
+- `grok-4.7` and `grok-4.6` from the Grok provider. xAI's docs still list them, but the API answers
+  404 ("does not exist or your team does not have access to it") for this account, and no run used them.
 
 ### Deprecated
 

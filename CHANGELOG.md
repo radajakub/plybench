@@ -17,8 +17,23 @@ All notable changes to this project are documented in this file. The format is b
 - A request timeout for every remote provider: 600 s by default, set per provider with
   `OPENAI_TIMEOUT`, `GROK_TIMEOUT`, `CLAUDE_TIMEOUT`, `GEMINI_TIMEOUT` or `MISTRAL_TIMEOUT` (seconds).
   OpenAI, Grok and Claude used to wait without limit.
+- `FailureKind.REFUSAL`, raised by every provider that signals a declined request: a refusal item
+  (OpenAI, Grok, Metacentrum), `stop_reason: "refusal"` (Claude) or a safety block (Gemini). Mistral
+  has no such signal.
+- `LLMCallError.response`: for `unparseable` and `refusal` failures, the answer that did arrive, with
+  its text, reasoning and tokens.
 
 ### Changed
+
+- **Affects results.** `LLMPlayer` records an answer that does not fit the schema, or a refusal, as a
+  failed move (`Wrong action format (...)` or `Refusal (...)`) instead of aborting the run. Before, a
+  resumed run replayed the game until the model answered, so these failures never reached the results.
+  This only applies to the `structured` output strategy and to refusals; no released benchmark uses
+  either. With the `text` strategy, an OpenAI, Grok, Metacentrum or Gemini refusal used to be recorded
+  as `Wrong action format ()`; it is now `Refusal (...)`.
+- Structured output is checked in one place for every provider, and a mismatch raises
+  `LLMCallError(unparseable)` with the raw answer attached. Providers send the schema themselves
+  instead of using the SDKs' parse helpers; the requests are unchanged.
 
 - One retry rule for every provider: only 408, 409, 429 and 5xx responses and transport failures are
   retried. OpenAI, Grok, Claude and Metacentrum used to retry every error, so a rejected request
@@ -28,6 +43,9 @@ All notable changes to this project are documented in this file. The format is b
 
 ### Fixed
 
+- Claude: a refusal under a schema is reported as `refusal`. The SDK's parse helper used to fail on
+  the refusal text first, so it surfaced as a schema failure.
+- Metacentrum: the inline `<think>` block is stripped from schema-enforced answers too.
 - Gemini: connection failures and timeouts raised by the HTTP layer are retried and classified as
   `connection` or `timeout` instead of failing at once as `other`. The client now always uses httpx;
   genai used to switch to aiohttp whenever it was installed (the `anthropic` extra pulls it in).

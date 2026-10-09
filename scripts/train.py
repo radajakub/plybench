@@ -65,15 +65,18 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     add_training_source_args(parser)
     parser.add_argument("--sync", action="store_true", help="run the runs sequentially instead of concurrently (epochs within a run are always sequential)")
-    parser.add_argument("--concurrency", type=int, help=f"max in-flight requests per provider -- set this to your API rate quota (default: {DEFAULT_CONCURRENCY})")
+    parser.add_argument(
+        "--concurrency", type=int, help=f"max in-flight requests per provider -- set this to your API rate quota (default: the provider's own, {DEFAULT_CONCURRENCY} for most)"
+    )
     parser.add_argument("--rounds-concurrency", type=int, help="max concurrent rounds per evaluation phase (default: --concurrency); the provider limit still caps actual requests")
     parser.add_argument("--runs-concurrency", type=int, help="max runs in flight at once (default: all of them)")
     parser.add_argument("--metric", type=str, default=MetricName.WIN_RATE.value, choices=[name.value for name in MetricName], help="metric to print the learning curve on")
     parser.add_argument("--notify", action="store_true", help="push a notification on each epoch end, a final summary, and on failure (needs NTFY_URL and NTFY_TOPIC)")
     args = parser.parse_args()
 
-    concurrency = args.concurrency if args.concurrency is not None else DEFAULT_CONCURRENCY
-    rounds_concurrency = args.rounds_concurrency if args.rounds_concurrency is not None else concurrency
+    # None leaves each provider at its own default (Metacentrum takes fewer parallel calls than the rest)
+    concurrency = args.concurrency
+    rounds_concurrency = args.rounds_concurrency if args.rounds_concurrency is not None else (concurrency if concurrency is not None else DEFAULT_CONCURRENCY)
 
     op = build_op(concurrency=concurrency)
     harness = training_from_args(op, args)

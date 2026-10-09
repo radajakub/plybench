@@ -43,6 +43,10 @@ All notable changes to this project are documented in this file. The format is b
 - Structured output is checked in one place for every provider, and a mismatch raises
   `LLMCallError(unparseable)` with the raw answer attached. Providers send the schema themselves
   instead of using the SDKs' parse helpers; the requests are unchanged.
+- Without an explicit concurrency, each provider now uses its own default: 4 in-flight requests for
+  Metacentrum (was 10; the shared endpoint answered 429 to 10 parallel calls), 20 for Gemini (was 10)
+  and 10 for the rest. `LLMConfig.default_concurrency` is now `int | None`, with `None` as the default.
+  `--concurrency N` and `PlyBench(concurrency=N)` work as before. Speed only; answers are unchanged.
 
 - `claude-haiku-4.5` sends the pinned snapshot `claude-haiku-4-5-20251001` instead of the
   `claude-haiku-4-5` alias. It is the same model; the models endpoint lists only the snapshot.

@@ -69,6 +69,10 @@ packages = ["src/plybench"]
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 testpaths = ["tests"]
+markers = [
+    "online: free calls that need network and the API keys; skipped unless pytest runs with --online (make test-models)",
+    "live: real, paid API calls; skipped unless pytest runs with --live (make test-live)",
+]
 
 [tool.ruff]
 line-length = 180

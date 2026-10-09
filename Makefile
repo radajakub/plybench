@@ -1,4 +1,4 @@
-.PHONY: lint typecheck format check fix test build clean release release-dry-run require-version
+.PHONY: lint typecheck format check fix test test-models test-live build clean release release-dry-run require-version
 
 # Check lint and formatting (same checks as CI)
 lint:
@@ -24,6 +24,21 @@ fix: format
 
 test:
 	uv run --group dev pytest -q
+
+# Free: checks every active model in the registries is still served (needs network and the keys in .env)
+test-models:
+	uv run --group dev pytest -q -m online --online -rs
+
+# Real, paid API calls to every provider with a key in .env (a few cents per run), plus the free model
+# check; asks before running. CONFIRM=yes skips the question, for a future CI job that runs only when
+# src/plybench/llm changed
+test-live:
+	@if [ "$(CONFIRM)" != "yes" ]; then \
+		printf "This makes real, paid API calls to every provider configured in .env (a few cents). Continue? [y/N] "; \
+		read answer; \
+		case "$$answer" in y|Y|yes) ;; *) echo "Aborted."; exit 1 ;; esac; \
+	fi
+	uv run --group dev pytest -q -m "live or online" --live --online -rs
 
 # Build wheel and sdist into dist/, then validate the metadata PyPI will see
 build: clean

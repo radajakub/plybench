@@ -58,6 +58,21 @@ All notable changes to this project are documented in this file. The format is b
   (400, 401, ...) was sent ten times before it failed.
 - Claude sends one request instead of streaming, like every other provider. The timeout now caps the
   whole answer, so raise `CLAUDE_TIMEOUT` for long max-effort runs.
+- An option a model cannot honour raises `ValueError` before the request instead of being dropped:
+  - `temperature` on a model that rejects it: Grok, the effort-based Claude models, and OpenAI models
+    while reasoning (OpenAI and Claude Sonnet 4.6 / Haiku 4.5 take it only with thinking off);
+  - `reasoning_effort` with thinking off, except on the Claude models with an effort parameter, where
+    it also sets answer length;
+  - thinking on without an effort on models that would then not reason (`gpt-5.4`, `gpt-5.4-mini`,
+    `gpt-5.4-nano`, whose default effort is `none`, and Metacentrum `gemma-4`);
+  - thinking off on models that always reason: `gpt-6-astra`, `gpt-6.1-sol`, the Pro models,
+    `gpt-5-mini`, `gpt-5-nano`, `grok-4.5`, `grok-4.20-reasoning`, Metacentrum `gpt-oss-120b` and
+    `deepseek-v4.1-flash`.
+    No benchmark config is affected: their request parameters are unchanged.
+- Metacentrum `mistral-medium-3.5` no longer accepts `thinking_enabled=True`: with it, the model
+  returned no reasoning (probe, 2026-10-09), so the flag claimed reasoning that did not happen.
+- OpenAI: thinking on asks for the reasoning summary even without an explicit effort; before, the
+  trace came back empty in that case.
 
 ### Fixed
 
@@ -74,8 +89,18 @@ All notable changes to this project are documented in this file. The format is b
   `connection` or `timeout` instead of failing at once as `other`. The client now always uses httpx;
   genai used to switch to aiohttp whenever it was installed (the `anthropic` extra pulls it in).
 
+- Thinking off now turns reasoning off. Before, these models kept reasoning at their default: OpenAI
+  (sends effort `none`), `grok-4.3` (effort `none`), `gemini-2.5-flash` and `gemini-2.5-flash-lite`
+  (`thinking_budget=0`), and Metacentrum `qwen-3.5`, `qwen-3.8-27b`, `qwen-3.8-flash-next`
+  (`enable_thinking: false`; the `thinking: false` sent before had no effect) and `kimi-k3`
+  (`thinking: false`). Checked on Metacentrum with reasoning-token counts on 2026-10-09. **Affects
+  results** only of configs with thinking off; no benchmark config has one.
+- Metacentrum: `temperature` is sent. It was dropped on every model.
+
 ### Removed
 
+- The `new_api` flag on OpenAI, Grok and Metacentrum models. It was set on every model, so the only
+  thing it did was drop `temperature`.
 - `grok-4.7` and `grok-4.6` from the Grok provider. xAI's docs still list them, but the API answers
   404 ("does not exist or your team does not have access to it") for this account, and no run used them.
 

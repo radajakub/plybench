@@ -22,9 +22,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 from _shared import add_source_args, benchmark_from_args, build_op  # noqa: E402
+from plyllm import LLM  # noqa: E402
 
 from plybench.analysis.usage import MatchupUsage, TokenUsage, benchmark_usage, group_by, model_label, total_cost, total_usage  # noqa: E402
-from plybench.llm.router import LLM  # noqa: E402
 
 GROUPS: dict[str, Callable[[MatchupUsage], str]] = {
     "model": lambda usage: model_label(usage.model),

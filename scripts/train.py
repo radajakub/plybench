@@ -27,6 +27,7 @@ from clankers.core.models import describe
 
 sys.path.insert(0, str(Path(__file__).parent))
 from _shared import add_training_source_args, build_op, training_from_args  # noqa: E402
+from plyllm import DEFAULT_CONCURRENCY  # noqa: E402
 
 from plybench.analysis.training import TrainingAnalysis  # noqa: E402
 from plybench.callbacks.console_callbacks import console_training_callbacks  # noqa: E402
@@ -34,7 +35,6 @@ from plybench.callbacks.notification_callbacks import notification_training_call
 from plybench.callbacks.training_callbacks import TrainingCallbacks  # noqa: E402
 from plybench.common.enums import MetricName  # noqa: E402
 from plybench.harness.training.results import TrainingResults  # noqa: E402
-from plybench.llm import DEFAULT_CONCURRENCY  # noqa: E402
 from plybench.registry import Registry  # noqa: E402
 
 

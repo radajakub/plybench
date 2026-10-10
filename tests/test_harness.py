@@ -8,6 +8,8 @@ import asyncio
 import json
 from dataclasses import dataclass
 
+from plyllm import LLMConfig
+
 from plybench.app import PlyBench
 from plybench.callbacks.benchmark_callbacks import BenchmarkCallbacks
 from plybench.callbacks.game_callbacks import GameCallbacks
@@ -17,7 +19,6 @@ from plybench.configs.matchup import Matchup
 from plybench.configs.player_params import PlayerParams
 from plybench.harness.benchmark.benchmark import Benchmark
 from plybench.harness.matchup import run_matchup_concurrent
-from plybench.llm import LLMConfig
 from plybench.player.player import Player, PlayerOutput
 from plybench.player.spec import PlayerSpec
 
@@ -196,3 +197,17 @@ def test_external_agent_plays_through_registry(tmp_path, monkeypatch):
     tracker = asyncio.run(run_matchup_concurrent(agent_op, Matchup(game, agent, baseline, 2), experiment="agent_exp", max_concurrent=1))
     assert tracker.is_complete()
     assert all(not step.move.startswith("FAIL") for game_tracker in tracker.games if game_tracker for step in game_tracker.steps)
+
+
+def test_plybench_keeps_its_own_prompt_cache_key(monkeypatch):
+    # plyllm defaults to "PlyLLM"; plybench keeps "PlyBench" so its requests share the cache they used before the split
+    seen: dict[str, object] = {}
+
+    def from_env(**kwargs):
+        seen.update(kwargs)
+        return LLMConfig()
+
+    monkeypatch.setattr(LLMConfig, "from_env", from_env)
+    PlyBench()
+
+    assert seen["prompt_cache_key"] == "PlyBench"

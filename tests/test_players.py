@@ -6,11 +6,11 @@ from __future__ import annotations
 import asyncio
 
 import pytest
+from plyllm import FailureKind, LLMCallError, LLMConfig, LLMResponse, LLMTokens, Provider
+from plyllm.response import OutputText, ReasoningTrace
 
 from plybench.app import PlyBench
 from plybench.common.enums import GameResults
-from plybench.llm import FailureKind, LLMCallError, LLMConfig, LLMResponse, LLMTokens, Provider
-from plybench.llm.response import OutputText, ReasoningTrace
 from plybench.player.llm_player import LLMPlayer, LLMPlayerTracker
 from plybench.player.output_strategies import StructuredOutputStrategy
 from plybench.player.player import PlayerOutput

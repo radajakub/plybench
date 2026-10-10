@@ -10,9 +10,10 @@ import json
 import tarfile
 from pathlib import Path
 
+from plyllm import LLMConfig
+
 from plybench.app import PlyBench
 from plybench.harness.benchmark.benchmark import Benchmark
-from plybench.llm import LLMConfig
 from plybench.trackers.game_tracker import GameStep, GameTracker
 
 _spec = importlib.util.spec_from_file_location("_website_export", Path(__file__).parent.parent / "scripts" / "_website_export.py")

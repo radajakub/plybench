@@ -9,12 +9,13 @@ from __future__ import annotations
 import argparse
 import json
 
+from plyllm import ModelLimits, Provider
+
 from plybench.app import PlyBench
 from plybench.common.paths import BenchmarkPathBuilder
 from plybench.harness.benchmark.benchmark import Benchmark
 from plybench.harness.benchmark.results import BenchmarkResults
 from plybench.harness.training.training import TrainingHarness
-from plybench.llm import ModelLimits, Provider
 
 # Per-model quotas for *this* account, keyed by provider and model name (read them off the provider's
 # console -- for Mistral, Admin -> API -> Limits). They live here rather than in the package because

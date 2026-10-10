@@ -2,9 +2,10 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
+from plyllm import LLM
+
 from plybench.configs.player_config import PlayerConfig
 from plybench.core.game import TurnBasedGame
-from plybench.llm import LLM
 from plybench.player.llm_player import LLMParams, LLMPlayer, LLMPlayerTracker
 from plybench.player.output_strategies import build_output_strategy
 from plybench.player.player import Player, PlayerIdentifier

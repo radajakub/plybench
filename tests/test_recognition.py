@@ -5,13 +5,14 @@ from __future__ import annotations
 
 import asyncio
 
+from plyllm import LLMConfig
+
 from plybench.analysis import BenchmarkAnalysis
 from plybench.analysis.extractors.recognition import recognition_extractors
 from plybench.analysis.recognition import original_game_name, recognizable, step_reasoning_trace, trace_mentions_original_game
 from plybench.app import PlyBench
 from plybench.common.enums import MetricName
 from plybench.harness.benchmark.benchmark import Benchmark
-from plybench.llm import LLMConfig
 from plybench.trackers.game_tracker import GameStep, GameTracker
 
 op = PlyBench(LLMConfig())

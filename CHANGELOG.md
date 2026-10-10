@@ -41,6 +41,16 @@ All notable changes to this project are documented in this file. The format is b
 
 ### Changed
 
+- **Breaking.** The LLM layer moved to its own package, [plyllm](https://pypi.org/project/plyllm/)
+  (1.0.0), which PlyBench now depends on. Replace `from plybench.llm import ...` (and its submodules) with
+  `from plyllm import ...`; the API is otherwise the same. The provider extras (`plybench[openai]`, ...,
+  `plybench[all]`) install the matching plyllm extras. The LLM entries in this section describe the code
+  as it moved, so they hold for plyllm 1.0.0. `make test-models` and `make test-live` moved with it.
+- Metacentrum is configured only through `METACENTRUM_API_KEY` and `METACENTRUM_BASE_URL` (plyllm reads
+  no `OS_API_KEY` / `OS_BASE_URL`).
+- `PlyBench()` passes the prompt cache key `PlyBench` to plyllm (whose default is `PlyLLM`), so OpenAI,
+  Grok and Mistral requests keep sharing the cache they used before.
+
 - **Affects results.** `LLMPlayer` records an answer that does not fit the schema, or a refusal, as a
   failed move (`Wrong action format (...)` or `Refusal (...)`) instead of aborting the run. Before, a
   resumed run replayed the game until the model answered, so these failures never reached the results.

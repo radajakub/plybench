@@ -23,11 +23,11 @@ from clankers.core.models import describe
 
 sys.path.insert(0, str(Path(__file__).parent))
 from _shared import add_source_args, benchmark_from_args, build_op  # noqa: E402
+from plyllm import DEFAULT_CONCURRENCY  # noqa: E402
 
 from plybench.callbacks.benchmark_callbacks import BenchmarkCallbacks  # noqa: E402
 from plybench.callbacks.console_callbacks import console_benchmark_callbacks  # noqa: E402
 from plybench.callbacks.notification_callbacks import notification_benchmark_callbacks  # noqa: E402
-from plybench.llm import DEFAULT_CONCURRENCY  # noqa: E402
 
 
 def warn_if_unconfigured() -> None:

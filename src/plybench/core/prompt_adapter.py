@@ -4,11 +4,12 @@ import copy
 from abc import ABC, abstractmethod
 from typing import Generic, ParamSpec
 
+from plyllm import LLMMessage
+
 from plybench.common.enums import ObservationType
 from plybench.core.interface import InterfaceAction, InterfaceObservation
 from plybench.core.llm_interface import LLMAction, LLMObservation
 from plybench.core.output_strategy import OutputStrategy
-from plybench.llm.message import LLMMessage
 from plybench.utils.text import inline_multiline_string
 
 _SYSTEM_PROMPT = """

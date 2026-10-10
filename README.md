@@ -48,7 +48,8 @@ pip install "plybench[huggingface]"    # local HuggingFace models (torch + trans
 pip install "plybench[all]"            # everything
 ```
 
-Providers whose SDK is not installed are simply skipped when building `PlyBench()`.
+The extras install the matching [plyllm](https://pypi.org/project/plyllm/) extra. Providers whose SDK is
+not installed are simply skipped when building `PlyBench()`.
 
 ## Quickstart
 
@@ -92,7 +93,12 @@ Extend either set at runtime via `op.registry.register_game(...)` / `op.registry
 
 ## Configuration
 
-LLM providers are configured through environment variables (a `.env` file is loaded automatically).
+Model calls go through [plyllm](https://github.com/radajakub/plyllm), the LLM package PlyBench uses (it
+was `plybench.llm` up to PlyBench 2.1.2). Import LLM types from it, e.g. `from plyllm import ModelLimits, Provider`.
+Its README covers rate limits, retries, structured output, costs and the HuggingFace provider; this
+section lists only what PlyBench sets.
+
+Providers are configured through environment variables (a `.env` file is loaded automatically).
 `PlyBench()` self-disables any provider whose key is absent, so bot-only benchmarks run offline.
 See [`.env.example`](.env.example):
 
@@ -121,80 +127,16 @@ NTFY_TOPIC=...
 NTFY_TOKEN=...
 ```
 
-### Rate limits
+`PlyBench()` builds its LLM router from these variables, with three settings of its own:
 
-Two independent layers protect against provider throttling:
+- `PlyBench(concurrency=...)` caps in-flight requests per provider (`None` keeps each provider's default).
+- `PlyBench(hf_models=[...])` names the local HuggingFace models to download and verify at startup.
+- Requests use the prompt cache key `PlyBench` (OpenAI, Grok and Mistral), so runs share one provider cache.
 
-- **Provider concurrency** (`ProviderSemaphore`) caps in-flight requests per provider. This is the
-  only mechanism most providers need — set it with `PlyBench(concurrency=...)` or
-  `llm.set_concurrency(provider, n)`.
-- **Per-model quotas** (`ModelLimits`) additionally pace a single model by in-flight share, requests
-  per second and tokens per minute.
-
-Both layers apply to **every** provider — the gate is enforced in the shared dispatch path each client
-routes its API call through, so nothing is provider-specific.
-
-**No model ships with a quota**, because published allowances are account-specific — they depend on
-your tier and differ per model. Apply your own when you know them:
-
-```python
-from plybench.llm import ModelLimits, Provider
-
-op.llm.set_model_limits(Provider.MISTRAL, "mistral-small-4", ModelLimits(max_concurrent=8, rps=1.67, tpm=100_000))
-op.llm.set_model_limits(Provider.MISTRAL, "mistral-small-4", None)  # back to unlimited
-```
-
-Every field is optional, so you can pace on tokens alone and leave requests unbounded. Unset limits
-mean a model is governed only by the provider semaphore, which is why adding this changed nothing for
-existing providers. The repo-local scripts keep their quotas in `LIMITS` in `scripts/_shared.py`, keyed
-by provider and model name — a useful pattern to copy, since that file is not part of the installed
-package.
-
-Token pacing reserves an estimate before each call (prompt length plus `max_tokens`, or the model's
-default output guess) and reconciles it against reported usage once the response lands, so an
-inaccurate estimate costs a little throughput rather than correctness. Because quotas are account-wide
-while each process paces only itself, pass a `scale` below `1.0` when several runs share an account.
-`safe_call`'s backoff remains the backstop for any 429 that slips through.
-
-When per-model shares exceed the provider cap they queue behind it, so set the provider concurrency at
-or above their sum (`--concurrency 24` for the two models above) to keep one model from holding slots
-the other's quota could use.
-
-### Retries and HTTP transport
-
-A failed call is retried with exponential backoff only when another attempt can help: a connection
-failure, a timeout, or HTTP 408, 409, 429 or 5xx. Any other error (400, 401, 404, ...) fails at once. A call
-that still fails raises `LLMCallError`, whose `kind` says why (`timeout`, `rate_limit`, `connection`, ...).
-This rule only works if every provider raises errors of a known type. That is why all providers talk HTTP
-through **httpx**:
-
-- OpenAI, Grok, Metacentrum, Claude and Mistral use httpx through their SDKs.
-- `google-genai` switches its async calls to **aiohttp** whenever aiohttp is importable. Then a network
-  failure surfaces as an aiohttp exception, which the retry rule does not know. The call would fail at once
-  as `other` instead of being retried. The Gemini client therefore passes genai its own `httpx.AsyncClient`,
-  which is genai's only switch that forces httpx. Gemini then behaves the same whatever else is installed
-  (`plybench[all]` installs aiohttp, and so can any other package).
-
-Supporting aiohttp's errors instead was rejected. It would need aiohttp as a required dependency of the
-`gemini` extra, a second set of error types in the Gemini retry rule, and per-event-loop session cleanup.
-And it gains nothing measurable here: each call waits seconds to minutes for the model, so transport
-overhead does not matter. genai does not close a client it was given, so `LLM.aclose()` closes this one
-itself.
-
-### HuggingFace (local models)
-
-The HuggingFace provider runs models locally instead of calling a remote API — it exposes
-`embed()` (generation is not supported yet). `hf_models` selects which of the supported models
-(see `providers/huggingface/models.py`) this environment uses; they are downloaded/verified into
-the local HF cache at bootstrap:
-
-```python
-op = PlyBench(hf_models=["sup-simcse-bert"])
-resp = await op.llm.embed(Provider.HUGGINGFACE, "sup-simcse-bert", ["hello"])
-```
-
-Requesting a supported model that was not part of `hf_models` raises an error telling you to add
-it to the bootstrap list. Needs the `huggingface` extra installed.
+Pass `PlyBench(llm_config=LLMConfig(...))` to configure plyllm yourself instead; the three settings
+above then come from that config. Per-model quotas are account-specific, so none ship with the package.
+Set them with `op.llm.set_model_limits(...)`; the repo-local scripts keep theirs in `LIMITS` in
+`scripts/_shared.py`, keyed by provider and model name.
 
 ### Notifications
 

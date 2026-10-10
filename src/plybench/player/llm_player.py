@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, cast
 
+from plyllm import LLM, FailureKind, LLMCallError, LLMMessage, LLMResponse, ModelConfig, Provider, options_to_string, parse_options
+
 from plybench.common.enums import ObservationType, OutputStrategies
 from plybench.configs.player_config import PlayerConfig
 from plybench.configs.player_params import PlayerParams
@@ -10,8 +12,6 @@ from plybench.core.game import TurnBasedGame
 from plybench.core.interface import InterfaceAction, InterfaceObservation
 from plybench.core.output_strategy import OutputStrategy
 from plybench.core.prompt_adapter import PromptAdapter
-from plybench.llm import LLM, FailureKind, LLMCallError, LLMMessage, LLMResponse, ModelConfig, Provider
-from plybench.llm.model_config import options_to_string, parse_options
 from plybench.player.player import Player, PlayerIdentifier, PlayerOutput
 from plybench.trackers.player_tracker import PlayerTracker
 from plybench.trackers.step_data import StepData

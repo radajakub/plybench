@@ -4,12 +4,13 @@ double count in self-play, and no bot step folded in as a zero."""
 
 from __future__ import annotations
 
+from plyllm import LLMConfig, LLMTokens
+from plyllm.llm_config import OpenAIProviderConfig
+
 from plybench.analysis.usage import benchmark_usage, entry_cost, game_usage, group_by, matchup_usage, model_label, player_model, total_cost, total_usage
 from plybench.app import PlyBench
 from plybench.common.paths import BenchmarkPathBuilder
 from plybench.harness.benchmark.results import BenchmarkResults
-from plybench.llm import LLMConfig, LLMTokens
-from plybench.llm.llm_config import OpenAIProviderConfig
 from plybench.trackers.game_tracker import GameStep, GameTracker
 from plybench.trackers.result_tracker import ResultTracker
 

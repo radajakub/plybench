@@ -2,9 +2,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from plyllm import ReasoningEffort
+
 from plybench.analysis.visual.core.palette import CATEGORICAL, LINESTYLES
 from plybench.analysis.visual.core.style import Linestyle, SeriesStyle
-from plybench.llm.options import ReasoningEffort
 from plybench.utils.enums import ExtendedEnum
 
 # Reasoning effort rides on the marker rather than the line, keeping the linestyle free to mean

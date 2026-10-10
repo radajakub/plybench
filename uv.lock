@@ -1454,8 +1454,6 @@ dependencies = [
 all = [
     { name = "matplotlib" },
     { name = "plyllm", extra = ["all"] },
-    { name = "torch" },
-    { name = "transformers" },
 ]
 anthropic = [
     { name = "plyllm", extra = ["anthropic"] },
@@ -1464,14 +1462,13 @@ gemini = [
     { name = "plyllm", extra = ["gemini"] },
 ]
 grok = [
-    { name = "plyllm", extra = ["openai"] },
+    { name = "plyllm", extra = ["grok"] },
 ]
 huggingface = [
-    { name = "torch" },
-    { name = "transformers" },
+    { name = "plyllm", extra = ["huggingface"] },
 ]
 metacentrum = [
-    { name = "plyllm", extra = ["openai"] },
+    { name = "plyllm", extra = ["metacentrum"] },
 ]
 mistral = [
     { name = "plyllm", extra = ["mistral"] },
@@ -1499,22 +1496,19 @@ requires-dist = [
     { name = "matplotlib", marker = "extra == 'viz'", specifier = ">=3.10.0" },
     { name = "numpy", specifier = ">=2.5.1" },
     { name = "open-spiel", specifier = ">=2.0.1" },
-    { name = "plyllm", specifier = ">=1.0.0" },
+    { name = "plyllm", specifier = ">=1.0.0,<2" },
     { name = "plyllm", extras = ["all"], marker = "extra == 'all'" },
     { name = "plyllm", extras = ["anthropic"], marker = "extra == 'anthropic'" },
     { name = "plyllm", extras = ["gemini"], marker = "extra == 'gemini'" },
+    { name = "plyllm", extras = ["grok"], marker = "extra == 'grok'" },
+    { name = "plyllm", extras = ["huggingface"], marker = "extra == 'huggingface'" },
+    { name = "plyllm", extras = ["metacentrum"], marker = "extra == 'metacentrum'" },
     { name = "plyllm", extras = ["mistral"], marker = "extra == 'mistral'" },
-    { name = "plyllm", extras = ["openai"], marker = "extra == 'grok'" },
-    { name = "plyllm", extras = ["openai"], marker = "extra == 'metacentrum'" },
     { name = "plyllm", extras = ["openai"], marker = "extra == 'openai'" },
     { name = "pydantic", specifier = ">=2.13.4" },
     { name = "python-dotenv", specifier = ">=1.2.2" },
     { name = "scipy", specifier = ">=1.18.0" },
-    { name = "torch", marker = "extra == 'all'", specifier = ">=2.4.0" },
-    { name = "torch", marker = "extra == 'huggingface'", specifier = ">=2.4.0" },
     { name = "tqdm", specifier = ">=4.69.1" },
-    { name = "transformers", marker = "extra == 'all'", specifier = ">=4.44.0" },
-    { name = "transformers", marker = "extra == 'huggingface'", specifier = ">=4.44.0" },
 ]
 provides-extras = ["openai", "gemini", "grok", "anthropic", "mistral", "metacentrum", "huggingface", "viz", "all"]
 
@@ -1554,6 +1548,16 @@ anthropic = [
 ]
 gemini = [
     { name = "google-genai" },
+]
+grok = [
+    { name = "openai" },
+]
+huggingface = [
+    { name = "torch" },
+    { name = "transformers" },
+]
+metacentrum = [
+    { name = "openai" },
 ]
 mistral = [
     { name = "mistralai" },

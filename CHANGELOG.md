@@ -83,6 +83,9 @@ All notable changes to this project are documented in this file. The format is b
 
 ### Fixed
 
+- Claude: `claude-haiku-4.5` sends `max_tokens` 32000 by default, like the other Claude models, instead
+  of 16000. At `reasoning_effort=high` the 16000 cap cut the thinking budget from 16384 to 14976 and left
+  1024 tokens for the answer. **Affects results** of `claude-haiku-4.5` at `high`; it has not been run.
 - Claude: a refusal under a schema is reported as `refusal`. The SDK's parse helper used to fail on
   the refusal text first, so it surfaced as a schema failure.
 - Metacentrum: the inline `<think>` block is stripped from schema-enforced answers too.

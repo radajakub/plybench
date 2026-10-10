@@ -4,6 +4,7 @@ it is the layer that decides what a tick, a legend entry and a line look like.""
 from __future__ import annotations
 
 import pytest
+from plyllm import LLMConfig
 
 from plybench.analysis.visual import (
     CATEGORICAL,
@@ -25,7 +26,6 @@ from plybench.analysis.visual import (
     tier_rank,
 )
 from plybench.app import PlyBench
-from plybench.llm import LLMConfig
 
 op = PlyBench(LLMConfig())
 

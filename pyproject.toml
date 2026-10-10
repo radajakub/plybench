@@ -38,19 +38,19 @@ dependencies = [
     "python-dotenv>=1.2.2",
     "scipy>=1.18.0",
     "tqdm>=4.69.1",
-    "plyllm>=1.0.0",
+    "plyllm>=1.0.0,<2",
 ]
 
 [project.optional-dependencies]
 openai = ["plyllm[openai]"]
 gemini = ["plyllm[gemini]"]
-grok = ["plyllm[openai]"]
+grok = ["plyllm[grok]"]
 anthropic = ["plyllm[anthropic]"]
 mistral = ["plyllm[mistral]"]
-metacentrum = ["plyllm[openai]"]
-huggingface = ["torch>=2.4.0", "transformers>=4.44.0"]
+metacentrum = ["plyllm[metacentrum]"]
+huggingface = ["plyllm[huggingface]"]
 viz = ["matplotlib>=3.10.0"]
-all = ["plyllm[all]", "torch>=2.4.0", "transformers>=4.44.0", "matplotlib>=3.10.0"]
+all = ["plyllm[all]", "matplotlib>=3.10.0"]
 
 [project.urls]
 Homepage = "https://plybench.jakubrada.com"

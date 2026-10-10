@@ -6,12 +6,12 @@ from __future__ import annotations
 import asyncio
 
 import pytest
+from plyllm import LLMConfig
 
 from plybench.app import PlyBench
 from plybench.callbacks.console_callbacks import console_benchmark_callbacks
 from plybench.configs.matchup import Matchup
 from plybench.harness.matchup import run_matchup_concurrent
-from plybench.llm import LLMConfig
 from plybench.utils.text import compress_ranges
 
 op = PlyBench(LLMConfig())

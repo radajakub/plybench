@@ -2,9 +2,10 @@ from __future__ import annotations
 
 from dataclasses import replace
 
+from plyllm import ReasoningEffort
+
 from plybench.configs.game_config import GameConfig
 from plybench.configs.player_config import PlayerConfig
-from plybench.llm.options import ReasoningEffort
 from plybench.player.llm_player import LLMParams
 
 Overrides = dict[str, str]

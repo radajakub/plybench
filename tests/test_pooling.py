@@ -4,13 +4,13 @@ chart plots. The point of these tests is that pooling happens on observations, n
 from __future__ import annotations
 
 import pytest
+from plyllm import LLMConfig
 
 from plybench.analysis import pooling
 from plybench.analysis.pooling import GameSplit, MetricOptions, pooled_bundle
 from plybench.app import PlyBench
 from plybench.common.enums import GameResults, MetricName
 from plybench.common.paths import BenchmarkPathBuilder
-from plybench.llm import LLMConfig
 from plybench.trackers.game_tracker import GameEnding, GameTracker
 from plybench.trackers.result_tracker import ResultTracker
 

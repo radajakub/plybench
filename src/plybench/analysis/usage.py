@@ -15,13 +15,12 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from typing import TypeVar
 
+from plyllm import LLM, LLMTokens, ModelConfig
+
 from plybench.common.progress import track
 from plybench.configs.game_config import GameConfig
 from plybench.configs.player_config import PlayerConfig
 from plybench.harness.benchmark.results import BenchmarkResults
-from plybench.llm.model_config import ModelConfig
-from plybench.llm.router import LLM
-from plybench.llm.tokens import LLMTokens
 from plybench.player.llm_player import LLMParams, options_to_string
 from plybench.trackers.game_tracker import GameTracker
 from plybench.trackers.result_tracker import ResultTracker

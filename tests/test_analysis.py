@@ -7,6 +7,8 @@ from __future__ import annotations
 import asyncio
 import json
 
+from plyllm import LLMConfig
+
 from plybench.analysis import BenchmarkAnalysis
 from plybench.analysis.statistics.bundle import mean_bundle, ratio_bundle
 from plybench.analysis.statistics.distribution import Distribution
@@ -14,7 +16,6 @@ from plybench.analysis.statistics.intervals import bootstrap_ci, sem_ci, t_ci, w
 from plybench.app import PlyBench
 from plybench.common.enums import MetricName
 from plybench.harness.benchmark.benchmark import Benchmark
-from plybench.llm import LLMConfig
 
 op = PlyBench(LLMConfig())
 registry = op.registry

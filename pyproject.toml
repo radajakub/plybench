@@ -38,20 +38,19 @@ dependencies = [
     "python-dotenv>=1.2.2",
     "scipy>=1.18.0",
     "tqdm>=4.69.1",
+    "plyllm>=1.0.0",
 ]
 
 [project.optional-dependencies]
-openai = ["openai>=2.48.0"]
-gemini = ["google-genai>=2.14.0"]
-grok = ["openai>=2.48.0"]
-anthropic = ["anthropic>=0.120.2"]
-mistral = ["mistralai>=2.9.1"]
-# metacentrum is an OpenAI-compatible endpoint and reuses the openai SDK
-metacentrum = ["openai>=2.48.0"]
+openai = ["plyllm[openai]"]
+gemini = ["plyllm[gemini]"]
+grok = ["plyllm[openai]"]
+anthropic = ["plyllm[anthropic]"]
+mistral = ["plyllm[mistral]"]
+metacentrum = ["plyllm[openai]"]
 huggingface = ["torch>=2.4.0", "transformers>=4.44.0"]
-# plotting is not needed to run benchmarks, only to render figures from recorded results
 viz = ["matplotlib>=3.10.0"]
-all = ["openai>=2.48.0", "google-genai>=2.14.0", "anthropic>=0.120.2", "mistralai>=2.9.1", "torch>=2.4.0", "transformers>=4.44.0", "matplotlib>=3.10.0"]
+all = ["plyllm[all]", "torch>=2.4.0", "transformers>=4.44.0", "matplotlib>=3.10.0"]
 
 [project.urls]
 Homepage = "https://plybench.jakubrada.com"
@@ -69,10 +68,7 @@ packages = ["src/plybench"]
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 testpaths = ["tests"]
-markers = [
-    "online: free calls that need network and the API keys; skipped unless pytest runs with --online (make test-models)",
-    "live: real, paid API calls; skipped unless pytest runs with --live (make test-live)",
-]
+markers = []
 
 [tool.ruff]
 line-length = 180
@@ -93,12 +89,7 @@ venv = ".venv"
 dev = [
     "pytest>=9.1.1",
     "ruff>=0.16.0",
-    # provider SDKs are optional extras; include the API-based ones so the test suite runs
-    "openai>=2.48.0",
-    "google-genai>=2.14.0",
-    "anthropic>=0.120.2",
-    "mistralai>=2.9.1",
-    # the visual module is importable in tests without installing the viz extra
+    "plyllm[openai,gemini,anthropic,mistral]",
     "matplotlib>=3.10.0",
     "pyright>=1.1.414",
 ]

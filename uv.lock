@@ -1443,6 +1443,7 @@ dependencies = [
     { name = "clankers" },
     { name = "numpy" },
     { name = "open-spiel" },
+    { name = "plyllm" },
     { name = "pydantic" },
     { name = "python-dotenv" },
     { name = "scipy" },
@@ -1451,35 +1452,32 @@ dependencies = [
 
 [package.optional-dependencies]
 all = [
-    { name = "anthropic" },
-    { name = "google-genai" },
     { name = "matplotlib" },
-    { name = "mistralai" },
-    { name = "openai" },
+    { name = "plyllm", extra = ["all"] },
     { name = "torch" },
     { name = "transformers" },
 ]
 anthropic = [
-    { name = "anthropic" },
+    { name = "plyllm", extra = ["anthropic"] },
 ]
 gemini = [
-    { name = "google-genai" },
+    { name = "plyllm", extra = ["gemini"] },
 ]
 grok = [
-    { name = "openai" },
+    { name = "plyllm", extra = ["openai"] },
 ]
 huggingface = [
     { name = "torch" },
     { name = "transformers" },
 ]
 metacentrum = [
-    { name = "openai" },
+    { name = "plyllm", extra = ["openai"] },
 ]
 mistral = [
-    { name = "mistralai" },
+    { name = "plyllm", extra = ["mistral"] },
 ]
 openai = [
-    { name = "openai" },
+    { name = "plyllm", extra = ["openai"] },
 ]
 viz = [
     { name = "matplotlib" },
@@ -1487,11 +1485,8 @@ viz = [
 
 [package.dev-dependencies]
 dev = [
-    { name = "anthropic" },
-    { name = "google-genai" },
     { name = "matplotlib" },
-    { name = "mistralai" },
-    { name = "openai" },
+    { name = "plyllm", extra = ["anthropic", "gemini", "mistral", "openai"] },
     { name = "pyright" },
     { name = "pytest" },
     { name = "ruff" },
@@ -1499,21 +1494,19 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "anthropic", marker = "extra == 'all'", specifier = ">=0.120.2" },
-    { name = "anthropic", marker = "extra == 'anthropic'", specifier = ">=0.120.2" },
     { name = "clankers", specifier = ">=3.0.2" },
-    { name = "google-genai", marker = "extra == 'all'", specifier = ">=2.14.0" },
-    { name = "google-genai", marker = "extra == 'gemini'", specifier = ">=2.14.0" },
     { name = "matplotlib", marker = "extra == 'all'", specifier = ">=3.10.0" },
     { name = "matplotlib", marker = "extra == 'viz'", specifier = ">=3.10.0" },
-    { name = "mistralai", marker = "extra == 'all'", specifier = ">=2.9.1" },
-    { name = "mistralai", marker = "extra == 'mistral'", specifier = ">=2.9.1" },
     { name = "numpy", specifier = ">=2.5.1" },
     { name = "open-spiel", specifier = ">=2.0.1" },
-    { name = "openai", marker = "extra == 'all'", specifier = ">=2.48.0" },
-    { name = "openai", marker = "extra == 'grok'", specifier = ">=2.48.0" },
-    { name = "openai", marker = "extra == 'metacentrum'", specifier = ">=2.48.0" },
-    { name = "openai", marker = "extra == 'openai'", specifier = ">=2.48.0" },
+    { name = "plyllm", specifier = ">=1.0.0" },
+    { name = "plyllm", extras = ["all"], marker = "extra == 'all'" },
+    { name = "plyllm", extras = ["anthropic"], marker = "extra == 'anthropic'" },
+    { name = "plyllm", extras = ["gemini"], marker = "extra == 'gemini'" },
+    { name = "plyllm", extras = ["mistral"], marker = "extra == 'mistral'" },
+    { name = "plyllm", extras = ["openai"], marker = "extra == 'grok'" },
+    { name = "plyllm", extras = ["openai"], marker = "extra == 'metacentrum'" },
+    { name = "plyllm", extras = ["openai"], marker = "extra == 'openai'" },
     { name = "pydantic", specifier = ">=2.13.4" },
     { name = "python-dotenv", specifier = ">=1.2.2" },
     { name = "scipy", specifier = ">=1.18.0" },
@@ -1527,14 +1520,46 @@ provides-extras = ["openai", "gemini", "grok", "anthropic", "mistral", "metacent
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "anthropic", specifier = ">=0.120.2" },
-    { name = "google-genai", specifier = ">=2.14.0" },
     { name = "matplotlib", specifier = ">=3.10.0" },
-    { name = "mistralai", specifier = ">=2.9.1" },
-    { name = "openai", specifier = ">=2.48.0" },
+    { name = "plyllm", extras = ["openai", "gemini", "anthropic", "mistral"] },
     { name = "pyright", specifier = ">=1.1.414" },
     { name = "pytest", specifier = ">=9.1.1" },
     { name = "ruff", specifier = ">=0.16.0" },
+]
+
+[[package]]
+name = "plyllm"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pydantic" },
+    { name = "python-dotenv" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/67/6e/0070d08add5cf17c342e9d14676b38a8a239b317518bd4e4e7c89b966d4c/plyllm-1.0.0.tar.gz", hash = "sha256:45480771bfabe87cb988f092bc4b0d88d9823c7ad0fb6d69d6334743786df340", size = 188416, upload-time = "2026-10-10T14:16:01.933Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/15/5e/d5592082c91252c03d24c04103db031a791f41f820341ba322b58e578162/plyllm-1.0.0-py3-none-any.whl", hash = "sha256:270a73af1c85ba66b6f0e77952fbcff9d7731e070b144de4019d55e78ae28e18", size = 56622, upload-time = "2026-10-10T14:16:00.572Z" },
+]
+
+[package.optional-dependencies]
+all = [
+    { name = "anthropic" },
+    { name = "google-genai" },
+    { name = "mistralai" },
+    { name = "openai" },
+    { name = "torch" },
+    { name = "transformers" },
+]
+anthropic = [
+    { name = "anthropic" },
+]
+gemini = [
+    { name = "google-genai" },
+]
+mistral = [
+    { name = "mistralai" },
+]
+openai = [
+    { name = "openai" },
 ]
 
 [[package]]

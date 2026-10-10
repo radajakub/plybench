@@ -54,7 +54,8 @@ require-version:
 
 # Cut a release: make release VERSION=1.3.0
 # Bumps the version, tags it, and publishes a GitHub Release, which triggers the PyPI upload.
-release: require-version lint test
+# test-models first, so a release never ships a registry with a model the provider has dropped
+release: require-version lint test test-models
 	uv run python scripts/release.py $(VERSION)
 
 # Print every step of a release without changing anything

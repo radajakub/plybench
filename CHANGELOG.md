@@ -86,6 +86,11 @@ All notable changes to this project are documented in this file. The format is b
 - Claude: `claude-haiku-4.5` sends `max_tokens` 32000 by default, like the other Claude models, instead
   of 16000. At `reasoning_effort=high` the 16000 cap cut the thinking budget from 16384 to 14976 and left
   1024 tokens for the answer. **Affects results** of `claude-haiku-4.5` at `high`; it has not been run.
+- Claude: cache writes are costed at 1.25x the input price, the 5-minute cache-write rate, instead of
+  the plain input price. The system prompt is cached on every call, so the first call on a prompt was
+  under-charged. `LLMTokens` has a new `cache_write_tokens` field (part of `input_tokens`), and
+  `LLMModel` a `cache_write_cost` (`None` = the input price, as on every other provider). Recorded
+  results carry no cache split, so their costs do not change.
 - Claude: a refusal under a schema is reported as `refusal`. The SDK's parse helper used to fail on
   the refusal text first, so it surfaced as a schema failure.
 - Metacentrum: the inline `<think>` block is stripped from schema-enforced answers too.

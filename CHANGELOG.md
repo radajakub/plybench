@@ -8,6 +8,13 @@ All notable changes to this project are documented in this file. The format is b
 
 ### Added
 
+- `LLM.calculate_cost(..., batch=True)`: the cost at the provider's Batch API price. Each model carries a
+  `batch_ratio` (0.5 for OpenAI, Claude, Gemini and Mistral; 0.8 for `grok-4.3` and `grok-4.20-reasoning`;
+  none for `grok-4.5` and Metacentrum, which raise), and Gemini models whose batch cache-read price
+  differs from half the standard one carry it as `batch_cached_input_cost`. Nothing sends batch requests
+  yet; standard prices are unchanged.
+- `LLM.aclose()` closes every provider's connection pool. Await it at the end of the `asyncio.run()` that
+  made the calls; the live tests do, which removes their "Event loop is closed" log noise.
 - `claude-sonnet-5.5` on the Claude provider ($2.00 / $10.00, cache read $0.10; all five effort
   levels). Thinking cannot be turned off: the API rejects `"disabled"`, and its `"between_tools"`
   mode is not supported by the harness.
@@ -44,8 +51,8 @@ All notable changes to this project are documented in this file. The format is b
   `LLMCallError(unparseable)` with the raw answer attached. Providers send the schema themselves
   instead of using the SDKs' parse helpers; the requests are unchanged.
 - Without an explicit concurrency, each provider now uses its own default: 4 in-flight requests for
-  Metacentrum (was 10; the shared endpoint answered 429 to 10 parallel calls), 20 for Gemini (was 10)
-  and 10 for the rest. `LLMConfig.default_concurrency` is now `int | None`, with `None` as the default.
+  Metacentrum (was 10; the shared endpoint answered 429 to 10 parallel calls) and 10 for the rest.
+  `LLMConfig.default_concurrency` is now `int | None`, with `None` as the default.
   `--concurrency N` and `PlyBench(concurrency=N)` work as before. Speed only; answers are unchanged.
 
 - `claude-haiku-4.5` sends the pinned snapshot `claude-haiku-4-5-20251001` instead of the
@@ -96,6 +103,9 @@ All notable changes to this project are documented in this file. The format is b
   (`thinking: false`). Checked on Metacentrum with reasoning-token counts on 2026-10-09. **Affects
   results** only of configs with thinking off; no benchmark config has one.
 - Metacentrum: `temperature` is sent. It was dropped on every model.
+- Gemini: cached input tokens are priced at the context-caching rate (for example $0.03 on
+  `gemini-2.5-flash`). They were costed at $0. 3.7 Flash and 3.5 Flash stay at $0: Google's pricing page
+  lists no price for them. Recorded results are not affected: their steps carry no cached-token split.
 
 ### Removed
 

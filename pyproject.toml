@@ -44,14 +44,14 @@ dependencies = [
 openai = ["openai>=2.48.0"]
 gemini = ["google-genai>=2.14.0"]
 grok = ["openai>=2.48.0"]
-anthropic = ["anthropic[aiohttp]>=0.120.2"]
+anthropic = ["anthropic>=0.120.2"]
 mistral = ["mistralai>=2.9.1"]
 # metacentrum is an OpenAI-compatible endpoint and reuses the openai SDK
 metacentrum = ["openai>=2.48.0"]
 huggingface = ["torch>=2.4.0", "transformers>=4.44.0"]
 # plotting is not needed to run benchmarks, only to render figures from recorded results
 viz = ["matplotlib>=3.10.0"]
-all = ["openai>=2.48.0", "google-genai>=2.14.0", "anthropic[aiohttp]>=0.120.2", "mistralai>=2.9.1", "torch>=2.4.0", "transformers>=4.44.0", "matplotlib>=3.10.0"]
+all = ["openai>=2.48.0", "google-genai>=2.14.0", "anthropic>=0.120.2", "mistralai>=2.9.1", "torch>=2.4.0", "transformers>=4.44.0", "matplotlib>=3.10.0"]
 
 [project.urls]
 Homepage = "https://plybench.jakubrada.com"
@@ -96,7 +96,7 @@ dev = [
     # provider SDKs are optional extras; include the API-based ones so the test suite runs
     "openai>=2.48.0",
     "google-genai>=2.14.0",
-    "anthropic[aiohttp]>=0.120.2",
+    "anthropic>=0.120.2",
     "mistralai>=2.9.1",
     # the visual module is importable in tests without installing the viz extra
     "matplotlib>=3.10.0",

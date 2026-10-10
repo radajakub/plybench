@@ -160,6 +160,27 @@ When per-model shares exceed the provider cap they queue behind it, so set the p
 or above their sum (`--concurrency 24` for the two models above) to keep one model from holding slots
 the other's quota could use.
 
+### Retries and HTTP transport
+
+A failed call is retried with exponential backoff only when another attempt can help: a connection
+failure, a timeout, or HTTP 408, 409, 429 or 5xx. Any other error (400, 401, 404, ...) fails at once. A call
+that still fails raises `LLMCallError`, whose `kind` says why (`timeout`, `rate_limit`, `connection`, ...).
+This rule only works if every provider raises errors of a known type. That is why all providers talk HTTP
+through **httpx**:
+
+- OpenAI, Grok, Metacentrum, Claude and Mistral use httpx through their SDKs.
+- `google-genai` switches its async calls to **aiohttp** whenever aiohttp is importable. Then a network
+  failure surfaces as an aiohttp exception, which the retry rule does not know. The call would fail at once
+  as `other` instead of being retried. The Gemini client therefore passes genai its own `httpx.AsyncClient`,
+  which is genai's only switch that forces httpx. Gemini then behaves the same whatever else is installed
+  (`plybench[all]` installs aiohttp, and so can any other package).
+
+Supporting aiohttp's errors instead was rejected. It would need aiohttp as a required dependency of the
+`gemini` extra, a second set of error types in the Gemini retry rule, and per-event-loop session cleanup.
+And it gains nothing measurable here: each call waits seconds to minutes for the model, so transport
+overhead does not matter. genai does not close a client it was given, so `LLM.aclose()` closes this one
+itself.
+
 ### HuggingFace (local models)
 
 The HuggingFace provider runs models locally instead of calling a remote API — it exposes

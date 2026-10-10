@@ -6,6 +6,8 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+## [3.0.0] - 2026-10-10
+
 ### Added
 
 - `LLM.calculate_cost(..., batch=True)`: the cost at the provider's Batch API price. Each model carries a

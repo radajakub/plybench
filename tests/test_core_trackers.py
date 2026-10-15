@@ -8,7 +8,7 @@ from typing import Never
 
 import pytest
 
-from plybench.common.enums import GameResults
+from plybench.common.enums import GameResults, MoveFailure
 from plybench.configs.player_config import PlayerConfig
 from plybench.configs.player_params import PlayerParams
 from plybench.core.game import OpenSpielAction, OpenSpielObservation, TurnBasedGame
@@ -125,11 +125,39 @@ def test_simple_bot_step_is_minimal():
     assert set(tracker.steps[-1].to_dict()) == {"seq", "player_name", "player_hash", "serialized_state", "observation", "move"}
 
 
-def test_fail_move_records_failure_reason():
+def test_fail_move_records_its_failure():
     i = PlayerConfig("ai", _StubParams("i"))
     tracker = GameTracker(1, i, PlayerConfig("stub", _StubParams("o")), {})
-    tracker.add_move(i, _StubObservation(), PlayerOutput(action=None, failure_reason="illegal"), "STATE", registry)
-    assert tracker.steps[-1].move == "FAIL: illegal"
+    tracker.add_move(i, _StubObservation(), PlayerOutput(action=None, failure=MoveFailure.ILLEGAL, failure_detail="<Z9>"), "STATE", registry)
+    assert tracker.steps[-1].move == "FAIL: Illegal action selected (<Z9>)"
+
+
+def test_a_failure_without_a_reason_is_recorded_as_no_action():
+    i = PlayerConfig("ai", _StubParams("i"))
+    tracker = GameTracker(1, i, PlayerConfig("stub", _StubParams("o")), {})
+    tracker.add_move(i, _StubObservation(), PlayerOutput(action=None), "STATE", registry)
+    assert tracker.steps[-1].move == "FAIL: No action ()"
+
+
+@pytest.mark.parametrize(
+    ("move", "failure"),
+    [
+        # recorded before MoveFailure existed, so results already on disk parse the same way
+        ("FAIL: Wrong action format ()", MoveFailure.MALFORMED),
+        ("FAIL: Illegal action selected (<Action: <C1R1>>)", MoveFailure.ILLEGAL),
+        ("FAIL: Refusal (Model gemini-4-argon refused the request: prompt blocked (OTHER))", MoveFailure.REFUSAL),
+        ("FAIL: Prompt blocked (Provider blocked the prompt to model gemini-4-argon: prompt blocked (OTHER))", MoveFailure.PROMPT_BLOCKED),
+        ("FAIL: None", None),
+        ("<C4>", None),
+    ],
+)
+def test_a_recorded_move_gives_back_its_failure(move: str, failure: MoveFailure | None):
+    assert MoveFailure.from_move(move) is failure
+
+
+@pytest.mark.parametrize("failure", list(MoveFailure))
+def test_every_failure_round_trips_through_its_move(failure: MoveFailure):
+    assert MoveFailure.from_move(failure.to_move("detail (with brackets)")) is failure
 
 
 def test_game_tracker_round_trip():

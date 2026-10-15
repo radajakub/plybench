@@ -4,6 +4,7 @@ from collections.abc import Callable
 
 from plyllm import LLM
 
+from plybench.common.paths import BasePathBuilder
 from plybench.configs.player_config import PlayerConfig
 from plybench.core.game import TurnBasedGame
 from plybench.player.llm_player import LLMParams, LLMPlayer, LLMPlayerTracker
@@ -21,7 +22,7 @@ def _llm_builder(llm: LLM) -> Callable[[TurnBasedGame, PlayerConfig, PlayerIdent
     def build(game: TurnBasedGame, player_config: PlayerConfig, identifier: PlayerIdentifier) -> Player:
         params = player_config.params
         assert isinstance(params, LLMParams)
-        return LLMPlayer(player_config, build_output_strategy(params.output_strategy), llm, identifier)
+        return LLMPlayer(player_config, build_output_strategy(params.output_strategy), llm, identifier, BasePathBuilder().llm_blocks_log())
 
     return build
 

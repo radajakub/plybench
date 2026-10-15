@@ -60,3 +60,15 @@ class ThreadSafeSaveable(Serializable[[]]):
         Path(filepath).with_suffix(".tmp").unlink(missing_ok=True)
         Path(part_filepath).unlink(missing_ok=True)
         Path(part_filepath).with_suffix(".lock").unlink(missing_ok=True)
+
+
+class ThreadSafeAppendable(Serializable[[]]):
+    def append(self, filepath: Path) -> None:
+        # adds one JSON line. The file is locked while it is written, so lines from processes appending at
+        # the same time are never interleaved
+        filepath.parent.mkdir(parents=True, exist_ok=True)
+        with open(filepath, "a", encoding="utf-8") as file:
+            fcntl.flock(file, fcntl.LOCK_EX)
+            file.write(json.dumps(self.to_dict(), ensure_ascii=False) + "\n")
+            file.flush()
+            fcntl.flock(file, fcntl.LOCK_UN)

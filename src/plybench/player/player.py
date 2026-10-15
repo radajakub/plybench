@@ -5,6 +5,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Any, Literal
 
+from plybench.common.enums import MoveFailure
 from plybench.configs.player_config import PlayerConfig
 from plybench.core.game import TurnBasedGame
 from plybench.core.interface import InterfaceAction, InterfaceObservation
@@ -25,7 +26,9 @@ class PlayerOutput:
     output_tokens: int | None = None
     # reasoning_tokens is the reasoning subset of output_tokens (agents/LLM players supply it)
     reasoning_tokens: int | None = None
-    failure_reason: str | None = None
+    # set when action is None; failure_detail is what the move records in brackets after the label
+    failure: MoveFailure | None = None
+    failure_detail: str = ""
     # freeform per-player extras; the player's registered PlayerTracker decides what to persist
     data: dict[str, Any] | None = None
 

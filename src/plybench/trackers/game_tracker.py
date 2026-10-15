@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from plybench.common.enums import GameResults
+from plybench.common.enums import GameResults, MoveFailure
 from plybench.common.serializable import Serializable
 from plybench.configs.parser import ConfigParser
 from plybench.configs.player_config import PlayerConfig
@@ -139,7 +139,8 @@ class GameTracker(Serializable[[ConfigParser]]):
         self, player: PlayerConfig, observation: InterfaceObservation, player_output: PlayerOutput, serialized_state: str, trackers: PlayerTrackerResolver | None = None
     ) -> None:
         if player_output.action is None:
-            move = f"FAIL: {player_output.failure_reason}"
+            failure = player_output.failure if player_output.failure is not None else MoveFailure.NO_ACTION
+            move = failure.to_move(player_output.failure_detail)
         else:
             move = player_output.action.to_llm().string
 

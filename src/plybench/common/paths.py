@@ -23,6 +23,10 @@ class BasePathBuilder(ABC):
         self.base_analysis_dir = _build_dir("analysis")
         self.base_cache_dir = _build_dir("cache")
 
+    def llm_blocks_log(self) -> Path:
+        # every prompt a provider blocked, across experiments, kept to investigate the blocks
+        return self.base_results_dir / "llm_blocks.jsonl"
+
 
 class ExperimentPathBuilder(BasePathBuilder):
     def __init__(self, key: str) -> None:

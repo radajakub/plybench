@@ -6,6 +6,27 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+### Added
+
+- `results/llm_blocks.jsonl`: one JSON line (`PromptBlock`) for each prompt the provider blocked. It holds
+  the time, the player, the reason, the attempt and the number of attempts, the input tokens, and the
+  system and prompt messages. It is appended under an exclusive lock (`ThreadSafeAppendable`), so
+  benchmark processes running at the same time do not interleave lines.
+- `MoveFailure` in `common.enums`: why a player gave no playable move (`MALFORMED`, `ILLEGAL`, `REFUSAL`,
+  `PROMPT_BLOCKED`, `NO_ACTION`). `to_move(detail)` writes the recorded `FAIL: <label> (<detail>)` text
+  and `MoveFailure.from_move(move)` reads it back, also from results recorded before this release.
+
+### Changed
+
+- `PlayerOutput.failure_reason: str` is replaced by `failure: MoveFailure | None` and `failure_detail: str`.
+  The recorded move text is unchanged, except a player that returns no action and no reason: it was
+  recorded as `FAIL: None` and is now `FAIL: No action ()`.
+
+- The LLM player sends a blocked prompt (plyllm's `FailureKind.PROMPT_BLOCKED`) again, up to 3 times. The
+  same Gemini prompt was blocked in one game and answered in another, so a block was not the model's move.
+  If every attempt is blocked, the move fails as `Prompt blocked (...)`; before, it failed as `Refusal (...)`.
+  Needs plyllm 1.2.2, which adds `PROMPT_BLOCKED`.
+
 ## [3.0.0] - 2026-10-10
 
 ### Added

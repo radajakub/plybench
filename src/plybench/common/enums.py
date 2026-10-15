@@ -2,6 +2,9 @@ from __future__ import annotations
 
 from plybench.utils.enums import ExtendedEnum
 
+# how a failed move starts in the results; see MoveFailure
+_FAIL_PREFIX = "FAIL: "
+
 
 class PlayerOrder(ExtendedEnum):
     FIRST = "first"
@@ -27,6 +30,29 @@ class ObservationType(ExtendedEnum):
 class OutputStrategies(ExtendedEnum):
     TEXT = "text"
     STRUCTURED = "structured"
+
+
+class MoveFailure(ExtendedEnum):
+    # why a player gave no playable move. A failed move is recorded as "FAIL: <value> (<detail>)", the
+    # same text results held before this enum, so older results parse too
+    MALFORMED = "Wrong action format"
+    ILLEGAL = "Illegal action selected"
+    REFUSAL = "Refusal"
+    PROMPT_BLOCKED = "Prompt blocked"
+    # a player returned no action and no reason (a bot with no legal move to choose); recorded as
+    # "FAIL: None" before this enum
+    NO_ACTION = "No action"
+
+    def to_move(self, detail: str) -> str:
+        return f"{_FAIL_PREFIX}{self.value} ({detail})"
+
+    @classmethod
+    def from_move(cls, move: str) -> MoveFailure | None:
+        # the failure a recorded move holds; None for a played move or a failure no member labels
+        if not move.startswith(_FAIL_PREFIX):
+            return None
+        reason = move.removeprefix(_FAIL_PREFIX)
+        return next((failure for failure in cls if reason.startswith(f"{failure.value} (")), None)
 
 
 class GameResults(ExtendedEnum):

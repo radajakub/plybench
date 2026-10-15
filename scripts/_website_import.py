@@ -83,10 +83,11 @@ def _wrapper_prefix(names: list[str]) -> str:
 
 
 def _safe_target(dest: Path, relative: str) -> Path:
-    target = (dest / relative).resolve()
-    if not target.is_relative_to(dest.resolve()):
+    # checked lexically: results/ may be a symlink to a data directory outside the repository
+    path = Path(relative)
+    if path.is_absolute() or ".." in path.parts:
         raise SystemExit(f"archive member escapes the destination directory: {relative}")
-    return target
+    return dest / path
 
 
 def _write(target: Path, payload: dict[str, Any], counts: ImportCounts, dry_run: bool) -> None:

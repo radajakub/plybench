@@ -38,7 +38,7 @@ dependencies = [
     "python-dotenv>=1.2.2",
     "scipy>=1.18.0",
     "tqdm>=4.69.1",
-    "plyllm>=1.2.0,<2",
+    "plyllm>=1.2.1,<2",
 ]
 
 [project.optional-dependencies]

@@ -6,6 +6,8 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+## [3.0.1] - 2026-10-16
+
 ### Added
 
 - `results/llm_blocks.jsonl`: one JSON line (`PromptBlock`) for each prompt the provider blocked. It holds

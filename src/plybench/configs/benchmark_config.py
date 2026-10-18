@@ -7,6 +7,8 @@ from plybench.common.serializable import Serializable
 from plybench.configs.toggle_item import ToggleItem
 
 DEFAULT_OPPONENT = "optimal:stochastic=True"
+# who moves first in each round; a name from `COLOUR_RULES` in harness/matchup.py
+DEFAULT_COLOUR_RULE = "first_starts"
 
 
 @dataclass(frozen=True, eq=True)
@@ -15,6 +17,7 @@ class BenchmarkConfig(Serializable):
     player_configs: list[ToggleItem]
     opponent_configs: list[ToggleItem]
     num_games: int
+    colour_rule: str = DEFAULT_COLOUR_RULE
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> BenchmarkConfig:
@@ -23,6 +26,7 @@ class BenchmarkConfig(Serializable):
             [ToggleItem.from_dict(player_config) for player_config in data["player_configs"]],
             cls._parse_opponents(data),
             int(data["num_games"]),
+            str(data.get("colour_rule", DEFAULT_COLOUR_RULE)),
         )
 
     @staticmethod
@@ -48,4 +52,5 @@ class BenchmarkConfig(Serializable):
             "player_configs": [item.to_dict() for item in self.player_configs],
             "opponents": [item.to_dict() for item in self.opponent_configs],
             "num_games": self.num_games,
+            "colour_rule": self.colour_rule,
         }

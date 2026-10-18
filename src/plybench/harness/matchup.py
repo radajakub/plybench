@@ -30,6 +30,10 @@ def first_starts_by_parity(game_round: int, num_games: int) -> bool:
     return game_round % 2 == 1
 
 
+# the rules a benchmark config can name in its `colour_rule`
+COLOUR_RULES: dict[str, ColourRule] = {"first_starts": first_starts, "first_starts_by_parity": first_starts_by_parity}
+
+
 def order_players_for_game(i: Player, o: Player, game_round: int, num_games: int, colour_rule: ColourRule = first_starts) -> tuple[Player, Player]:
     # colour balancing: the first half of the rounds the i-player moves first, the second half the o-player does
     return (i, o) if colour_rule(game_round, num_games) else (o, i)

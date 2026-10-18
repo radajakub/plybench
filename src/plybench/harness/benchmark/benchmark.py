@@ -11,7 +11,7 @@ from plybench.common.progress import track
 from plybench.configs.benchmark_config import BenchmarkConfig
 from plybench.configs.matchup import Matchup
 from plybench.harness.benchmark.results import BenchmarkResults
-from plybench.harness.matchup import run_matchup_concurrent
+from plybench.harness.matchup import COLOUR_RULES, ColourRule, first_starts, run_matchup_concurrent
 from plybench.trackers.result_tracker import ResultTracker
 
 
@@ -26,6 +26,9 @@ class Benchmark:
         with open(path) as f:
             config = BenchmarkConfig.from_dict(json.load(f))
 
+        if config.colour_rule not in COLOUR_RULES:
+            raise ValueError(f"{path}: unknown colour_rule {config.colour_rule!r}; expected one of {sorted(COLOUR_RULES)}")
+
         return cls(
             path.stem,
             op,
@@ -34,6 +37,7 @@ class Benchmark:
             opponent_override if opponent_override is not None else config.get_opponent_configs(),
             config.num_games,
             path_builder,
+            COLOUR_RULES[config.colour_rule],
         )
 
     def __init__(
@@ -45,6 +49,7 @@ class Benchmark:
         opponent_configs: list[str],
         num_games: int,
         path_builder: BenchmarkPathBuilder | None = None,
+        colour_rule: ColourRule = first_starts,
     ) -> None:
         self.experiment = experiment
         self.op = op
@@ -53,6 +58,7 @@ class Benchmark:
         self.opponent_configs = opponent_configs
         self.num_games = num_games
         self.path_builder = path_builder if path_builder is not None else BenchmarkPathBuilder()
+        self.colour_rule = colour_rule
 
     def _matrix(self) -> list[tuple[str, str, str]]:
         return [(game, player, opponent) for player in self.player_configs for opponent in self.opponent_configs for game in self.game_configs]
@@ -105,6 +111,7 @@ class Benchmark:
             path_builder=self.path_builder,
             experiment=self.experiment,
             max_concurrent=concurrency,
+            colour_rule=self.colour_rule,
         )
         return str(tracker.base_path)
 

@@ -8,6 +8,7 @@ import asyncio
 import json
 from dataclasses import dataclass
 
+import pytest
 from plyllm import LLMConfig
 
 from plybench.app import PlyBench
@@ -157,6 +158,46 @@ def test_axis_overrides_restrict_matrix(tmp_path, monkeypatch):
 
     results = asyncio.run(benchmark.run(sync=True, concurrency=1))
     assert len(results.trackers) == 1
+
+
+def test_colour_rule_from_config(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    config = BenchmarkConfig(
+        game_configs=[ToggleItem("tic_tac_toe:", True)],
+        player_configs=[ToggleItem("random:distribution=uniform", True)],
+        opponent_configs=[ToggleItem("random:distribution=normal", True)],
+        num_games=4,
+        colour_rule="first_starts_by_parity",
+    )
+    with open(BenchmarkPathBuilder().experiment_path("parity_exp"), "w") as f:
+        json.dump(config.to_dict(), f)
+
+    results = asyncio.run(Benchmark.load_experiment(op, "parity_exp").run(sync=True, concurrency=1))
+    player = registry.player_config("random:distribution=uniform")
+    # a game's i-player is the one that moved first: the player in odd rounds, the opponent in even ones
+    games = [game for game in results.trackers[0].games if game is not None]
+    assert [game.i_player.hash == player.hash for game in games] == [True, False, True, False]
+
+    # a config without the key keeps the half split
+    legacy = config.to_dict()
+    del legacy["colour_rule"]
+    assert BenchmarkConfig.from_dict(legacy).colour_rule == "first_starts"
+
+
+def test_unknown_colour_rule_is_refused(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    config = BenchmarkConfig(
+        game_configs=[ToggleItem("tic_tac_toe:", True)],
+        player_configs=[ToggleItem("random:distribution=uniform", True)],
+        opponent_configs=[ToggleItem("random:distribution=normal", True)],
+        num_games=2,
+        colour_rule="parity",
+    )
+    with open(BenchmarkPathBuilder().experiment_path("bad_rule_exp"), "w") as f:
+        json.dump(config.to_dict(), f)
+
+    with pytest.raises(ValueError, match="unknown colour_rule 'parity'"):
+        Benchmark.load_experiment(op, "bad_rule_exp")
 
 
 def test_external_agent_plays_through_registry(tmp_path, monkeypatch):

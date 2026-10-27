@@ -1,18 +1,25 @@
 from __future__ import annotations
 
+import os
+import shutil
 from abc import ABC, abstractmethod
+from collections.abc import Awaitable, Callable
 from pathlib import Path
 
 from plybench.common.enums import Mode
 from plybench.configs.player_config import PlayerConfig
 from plybench.configs.player_params import CheckpointedParams
 from plybench.core.game import TurnBasedGame
+from plybench.core.interface import InterfaceAction, InterfaceObservation
 from plybench.core.prompt_adapter import PromptAdapter
-from plybench.player.player import Player, PlayerIdentifier
+from plybench.player.player import Player, PlayerIdentifier, PlayerOutput
 from plybench.trackers.game_tracker import GameTracker
 
 
-class LearnablePlayer(Player, ABC):
+class LearnablePlayer[U](Player, ABC):
+    # marks a cached proposal that was None: the game taught nothing, so there is nothing to commit
+    _NO_UPDATE = "no_update"
+
     def __init__(self, player_config: PlayerConfig, identifier: PlayerIdentifier) -> None:
         super().__init__(player_config, identifier)
         params = player_config.params
@@ -71,16 +78,68 @@ class LearnablePlayer(Player, ABC):
         if not self.is_training:
             raise RuntimeError(f"{self} is frozen: {action}() is only legal inside a training phase")
 
+    async def _observe(self, game: GameTracker) -> None:
+        update = await self._cached(f"game_{game.game_round}", lambda: self.propose(game))
+        if update is not None:
+            self.commit(update)
+
+    async def _update(self, games: list[GameTracker]) -> None:
+        update = await self._cached("epoch", lambda: self.propose_epoch(games))
+        if update is not None:
+            self.commit_epoch(update)
+
+    async def _cached(self, name: str, propose: Callable[[], Awaitable[U | None]]) -> U | None:
+        # an update is proposed once per epoch and name; a replay loads it instead of proposing again
+        if self.workdir is None:
+            raise RuntimeError(f"{self} has no workdir: begin_epoch() must be called before it learns")
+        directory = self.workdir / name
+        if directory.exists():
+            return None if (directory / LearnablePlayer._NO_UPDATE).exists() else self.load_update(directory)
+
+        update = await propose()
+        # the directory's existence marks the update done, so stage the write and rename it into place,
+        # as the harness does for checkpoints: an interruption mid-write leaves no half update behind
+        staged = directory.with_name(f"{name}.tmp")
+        shutil.rmtree(staged, ignore_errors=True)
+        staged.mkdir(parents=True)
+        if update is None:
+            (staged / LearnablePlayer._NO_UPDATE).touch()
+        else:
+            self.save_update(update, staged)
+        os.replace(staged, directory)
+        return update
+
     @abstractmethod
     def _initialize_policy(self, game: TurnBasedGame, prompt_adapter_template: PromptAdapter) -> None:
         raise NotImplementedError
 
+    # the move, written by the learner: read the learned state, never change it; what propose needs later goes into PlayerOutput.data, which the engine records
     @abstractmethod
-    async def _observe(self, game: GameTracker) -> None:
+    async def __call__(self, game: TurnBasedGame, observation: InterfaceObservation, legal_moves: list[InterfaceAction]) -> PlayerOutput:
+        raise NotImplementedError
+
+    # resume rule: a resumed epoch loads the cached updates and commits them again, so it lands on the same state only if everything sampled happens in propose,
+    # commit depends only on the current state and the update, and nothing reads outside the records (wall-clock, process state, callbacks)
+    @abstractmethod
+    async def propose(self, game: GameTracker) -> U | None:
         raise NotImplementedError
 
     @abstractmethod
-    async def _update(self, games: list[GameTracker]) -> None:
+    def commit(self, update: U) -> None:
+        raise NotImplementedError
+
+    async def propose_epoch(self, games: list[GameTracker]) -> U | None:
+        return None
+
+    def commit_epoch(self, update: U) -> None:
+        pass
+
+    @abstractmethod
+    def save_update(self, update: U, directory: Path) -> None:
+        raise NotImplementedError
+
+    @abstractmethod
+    def load_update(self, directory: Path) -> U:
         raise NotImplementedError
 
     @abstractmethod

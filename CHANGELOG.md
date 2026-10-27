@@ -13,6 +13,12 @@ All notable changes to this project are documented in this file. The format is b
   between the state and the legal moves. `LLMPlayer.__call__` makes its moves through it; its prompts
   and records are unchanged.
 
+### Changed
+
+- **Breaking:** `LearnablePlayer.train()` / `.eval()` and the `training` attribute are replaced by
+  `set_mode(Mode.TRAIN | Mode.EVAL)` with the properties `mode` and `is_training`; `Mode` is in
+  `plybench.common.enums`. A learner is still built in `Mode.EVAL`.
+
 ## [3.0.6] - 2026-10-27
 
 ### Changed

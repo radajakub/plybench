@@ -3,6 +3,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from pathlib import Path
 
+from plybench.common.enums import Mode
 from plybench.configs.player_config import PlayerConfig
 from plybench.configs.player_params import CheckpointedParams
 from plybench.core.game import TurnBasedGame
@@ -18,7 +19,7 @@ class LearnablePlayer(Player, ABC):
         if not isinstance(params, CheckpointedParams):
             raise TypeError(f"{player_config.to_string()} is learnable, so its params must be CheckpointedParams, got {type(params).__name__}")
         self.params = params
-        self.training = False
+        self._mode = Mode.EVAL
         self.workdir: Path | None = None
         self._restored = False
 
@@ -26,11 +27,20 @@ class LearnablePlayer(Player, ABC):
     def checkpoint(self) -> Path | None:
         return self.params.checkpoint
 
-    def train(self) -> None:
-        self.training = True
+    @property
+    def mode(self) -> Mode:
+        return self._mode
 
-    def eval(self) -> None:
-        self.training = False
+    @property
+    def is_training(self) -> bool:
+        return self._mode is Mode.TRAIN
+
+    @property
+    def is_eval(self) -> bool:
+        return self._mode is Mode.EVAL
+
+    def set_mode(self, mode: Mode) -> None:
+        self._mode = mode
 
     def begin_epoch(self, workdir: Path) -> None:
         # durable per-epoch scratch, handed over before the training phase starts
@@ -58,7 +68,7 @@ class LearnablePlayer(Player, ABC):
         await self._update(games)
 
     def _require_training(self, action: str) -> None:
-        if not self.training:
+        if not self.is_training:
             raise RuntimeError(f"{self} is frozen: {action}() is only legal inside a training phase")
 
     @abstractmethod

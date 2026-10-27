@@ -22,6 +22,12 @@ class PlayerOrder(ExtendedEnum):
         return self == PlayerOrder.FIRST
 
 
+class Mode(ExtendedEnum):
+    # what a learnable player may do: learn in TRAIN; in EVAL its state is frozen
+    TRAIN = "train"
+    EVAL = "eval"
+
+
 class ObservationType(ExtendedEnum):
     ACTIONS = "actions"
     STATE = "state"

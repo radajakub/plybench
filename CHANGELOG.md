@@ -18,6 +18,17 @@ All notable changes to this project are documented in this file. The format is b
 - **Breaking:** `LearnablePlayer.train()` / `.eval()` and the `training` attribute are replaced by
   `set_mode(Mode.TRAIN | Mode.EVAL)` with the properties `mode` and `is_training`; `Mode` is in
   `plybench.common.enums`. A learner is still built in `Mode.EVAL`.
+- **Breaking:** `LearnablePlayer[U]` is generic in its update type, and a learner now writes
+  `propose(game) -> U | None` (all sampled work) and `commit(update)` (deterministic), plus
+  `save_update` / `load_update`, instead of `_observe` / `_update`. `propose_epoch` / `commit_epoch`
+  are optional, once per epoch. `_observe` / `_update` are now concrete: each proposed update is
+  saved under the epoch's `workdir` (`game_<round>/`, `epoch/`) and, on a resumed epoch, loaded and
+  committed again instead of proposed again, so the resume rule holds for every learner.
+
+### Tests
+
+- The first tests of `TrainingHarness`: a stub learner with sampled proposals is trained for two
+  epochs, interrupted and resumed (`tests/test_learnable.py`).
 
 ## [3.0.6] - 2026-10-27
 

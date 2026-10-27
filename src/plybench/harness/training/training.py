@@ -10,6 +10,7 @@ from typing import cast
 from plybench.app import PlyBench
 from plybench.callbacks.game_callbacks import GameCallbacks
 from plybench.callbacks.training_callbacks import TrainingCallbacks
+from plybench.common.enums import Mode
 from plybench.common.paths import TrainingHarnessPathBuilder
 from plybench.common.progress import track
 from plybench.configs.matchup import Matchup
@@ -191,7 +192,7 @@ class TrainingHarness:
             # the learner is the one thing an epoch carries across its games; the trainer is rebuilt per round
             return learner if identifier == "i" else self.op.registry.build_player(game, player_config, identifier)
 
-        learner.train()
+        learner.set_mode(Mode.TRAIN)
         try:
             tracker = await run_matchup_sequential(
                 self.op,
@@ -207,7 +208,7 @@ class TrainingHarness:
             await learner.update([game for game in tracker.games if game is not None])
         finally:
             # whatever happens in the phase, the checkpoint that leaves it is frozen
-            learner.eval()
+            learner.set_mode(Mode.EVAL)
         return tracker
 
     async def _test(self, epoch: Epoch, sync: bool, concurrency: int | None, game_callbacks: GameCallbacks | None, training_callbacks: TrainingCallbacks) -> list[ResultTracker]:

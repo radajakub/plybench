@@ -84,51 +84,68 @@ class LLMPlayer(Player):
     async def __call__(self, game: TurnBasedGame, observation: InterfaceObservation, legal_moves: list[InterfaceAction]) -> PlayerOutput:
         assert self._prompt_adapter is not None, "Prompt adapter not initialized; call initialize_policy first"
 
-        system_message, messages = self._prompt_adapter.build_messages(observation, legal_moves, self._output_strategy)
+        return await LLMPlayer.move(
+            self._llm, self._params.model, self._prompt_adapter, self._output_strategy, observation, legal_moves, label=str(self), block_log=self._block_log
+        )
 
-        try:
-            response = await self._generate(system_message, messages)
-        except LLMCallError as error:
-            # an answer that arrived but cannot be played is the model's move, recorded as a failure like any
-            # malformed text. Raising would abort the run, and a resume would replay the game until the model
-            # happened to answer, hiding these failures from the results. Transport failures still raise.
-            failure = _MODEL_FAILURES.get(error.kind)
-            if failure is None or error.response is None:
-                raise
-            # malformed text is shown as itself, like below; a refusal or a block only has the error to show
-            detail = error.response.output_text if error.kind is FailureKind.UNPARSEABLE else str(error)
-            return self._player_output(error.response, None, failure, detail, system_message, messages)
+    @staticmethod
+    async def move(
+        llm: LLM,
+        model: ModelConfig,
+        prompt_adapter: PromptAdapter,
+        output_strategy: OutputStrategy,
+        observation: InterfaceObservation,
+        legal_moves: list[InterfaceAction],
+        *,
+        label: str,
+        context: str | None = None,
+        block_log: Path | None = None,
+    ) -> PlayerOutput:
+        system_message, messages = prompt_adapter.build_messages(observation, legal_moves, output_strategy, context)
 
-        return self._process_response(response, legal_moves, system_message, messages)
-
-    async def _generate(self, system_message: LLMMessage, messages: list[LLMMessage]) -> LLMResponse:
-        # a blocked prompt is sent again and each block recorded; the last block raises like any failure
+        # a blocked prompt is sent again and each block recorded; the last block is a failed move like below
         max_attempts = _BLOCK_RETRIES + 1
         for attempt in range(1, max_attempts + 1):
             try:
-                return await self._llm.generate(self._params.model, system_message, messages, output_schema=self._output_strategy.get_output_schema())
+                response = await llm.generate(model, system_message, messages, output_schema=output_strategy.get_output_schema())
             except LLMCallError as error:
-                if error.kind is not FailureKind.PROMPT_BLOCKED:
+                if error.kind is FailureKind.PROMPT_BLOCKED:
+                    if block_log is not None:
+                        prompt_message = "\n".join(message.content for message in messages)
+                        PromptBlock.from_error(error, label, attempt, max_attempts, system_message.content, prompt_message).append(block_log)
+                    if attempt < max_attempts:
+                        continue
+                # an answer that arrived but cannot be played is the model's move, recorded as a failure like any
+                # malformed text. Raising would abort the run, and a resume would replay the game until the model
+                # happened to answer, hiding these failures from the results. Transport failures still raise.
+                failure = _MODEL_FAILURES.get(error.kind)
+                if failure is None or error.response is None:
                     raise
-                if self._block_log is not None:
-                    prompt_message = "\n".join(message.content for message in messages)
-                    PromptBlock.from_error(error, self.player_config.to_string(), attempt, max_attempts, system_message.content, prompt_message).append(self._block_log)
-                if attempt == max_attempts:
-                    raise
+                # malformed text is shown as itself, like below; a refusal or a block only has the error to show
+                detail = error.response.output_text if error.kind is FailureKind.UNPARSEABLE else str(error)
+                return LLMPlayer._player_output(error.response, None, failure, detail, system_message, messages)
+            return LLMPlayer._process_response(prompt_adapter, output_strategy, response, legal_moves, system_message, messages)
         raise AssertionError("unreachable: the last attempt returns or raises")
 
-    def _process_response(self, response: LLMResponse, legal_moves: list[InterfaceAction], system_message: LLMMessage, messages: list[LLMMessage]) -> PlayerOutput:
-        assert self._prompt_adapter is not None
-        extracted = self._output_strategy.extract(response.output_text)
+    @staticmethod
+    def _process_response(
+        prompt_adapter: PromptAdapter,
+        output_strategy: OutputStrategy,
+        response: LLMResponse,
+        legal_moves: list[InterfaceAction],
+        system_message: LLMMessage,
+        messages: list[LLMMessage],
+    ) -> PlayerOutput:
+        extracted = output_strategy.extract(response.output_text)
 
         if extracted.action is None:
-            return self._player_output(response, None, MoveFailure.MALFORMED, response.output_text, system_message, messages)
+            return LLMPlayer._player_output(response, None, MoveFailure.MALFORMED, response.output_text, system_message, messages)
 
-        selected_action = self._prompt_adapter.lookup_move(legal_moves, extracted.action)
+        selected_action = prompt_adapter.lookup_move(legal_moves, extracted.action)
         if selected_action is None:
-            return self._player_output(response, None, MoveFailure.ILLEGAL, extracted.action, system_message, messages)
+            return LLMPlayer._player_output(response, None, MoveFailure.ILLEGAL, extracted.action, system_message, messages)
 
-        return self._player_output(response, selected_action, None, "", system_message, messages)
+        return LLMPlayer._player_output(response, selected_action, None, "", system_message, messages)
 
     @staticmethod
     def _player_output(

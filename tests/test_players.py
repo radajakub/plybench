@@ -13,7 +13,7 @@ from plyllm import FailureKind, LLMCallError, LLMConfig, LLMResponse, LLMTokens,
 from plyllm.response import OutputText, ReasoningTrace
 
 from plybench.app import PlyBench
-from plybench.common.enums import GameResults, MoveFailure
+from plybench.common.enums import GameResults, MoveFailure, ObservationType
 from plybench.player.llm_player import _BLOCK_RETRIES, LLMPlayer, LLMPlayerTracker
 from plybench.player.output_strategies import StructuredOutputStrategy
 from plybench.player.player import PlayerOutput
@@ -242,6 +242,49 @@ def test_a_refusal_is_not_retried_or_recorded_as_a_block(tmp_path):
 
     assert llm.calls == 1 and out.action is None
     assert not block_log.exists()
+
+
+class _RecordingLLM(_StubLLM):
+    # answers like _StubLLM and keeps the messages it was sent
+    def __init__(self) -> None:
+        self.sent: list = []
+
+    async def generate(self, model_config, system, messages, output_schema=None):
+        self.sent.append((system, messages))
+        return await super().generate(model_config, system, messages, output_schema)
+
+
+def test_the_llm_player_sends_the_prompt_without_context():
+    # LLMPlayer.move was split out of LLMPlayer.__call__; the benchmark's prompt must not change with it
+    engine = _tic_tac_toe()
+    llm = _RecordingLLM()
+    llm_player = LLMPlayer(registry.player_config("llm:actions:structured:openai:gpt-5.4:"), StructuredOutputStrategy(), llm, "i")  # type: ignore[arg-type]
+    llm_player.initialize_policy(engine.game, engine.prompt_adapter)
+    observation, moves = _first_move(engine)
+
+    out = asyncio.run(llm_player(engine.game, observation, moves))
+
+    adapter = engine.prompt_adapter.for_observation_type(ObservationType.ACTIONS)
+    system, messages = adapter.build_messages(observation, moves, StructuredOutputStrategy())
+    assert llm.sent == [(system, messages)]
+    assert out.system_message == system.content and out.prompt_message == messages[0].content
+
+
+def test_move_puts_the_context_between_the_state_and_the_legal_moves():
+    engine = _tic_tac_toe()
+    llm = _RecordingLLM()
+    observation, moves = _first_move(engine)
+    model = registry.player_config("llm:actions:structured:openai:gpt-5.4:").params.model  # type: ignore[attr-defined]
+    strategy = StructuredOutputStrategy()
+    adapter = engine.prompt_adapter.for_observation_type(ObservationType.ACTIONS)
+
+    out = asyncio.run(LLMPlayer.move(llm, model, adapter, strategy, observation, moves, label="agent", context="MEMORY: take the centre"))  # type: ignore[arg-type]
+
+    prompt = llm.sent[0][1][0].content
+    state = adapter.build_state_content(observation)
+    legal = adapter.legal_moves_prompt(adapter.format_legal_actions(moves))
+    assert prompt.index(state) < prompt.index("MEMORY: take the centre") < prompt.index(legal)
+    assert out.action is not None and out.prompt_message == prompt
 
 
 _BLOCK = PromptBlock("2026-10-15T12:00:00+00:00", "llm:actions:text:gemini:gemini-4-argon:", "prompt blocked (OTHER)", 2, 4, None, "rules", "your move")

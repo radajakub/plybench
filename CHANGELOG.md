@@ -6,6 +6,13 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+### Added
+
+- `LLMPlayer.move`, a static method: one move of the `llm` player (prompt, call, parse, failed moves
+  recorded as the model's), usable by any player that holds an LLM, with optional `context` placed
+  between the state and the legal moves. `LLMPlayer.__call__` makes its moves through it; its prompts
+  and records are unchanged.
+
 ## [3.0.6] - 2026-10-27
 
 ### Changed

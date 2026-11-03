@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import math
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Literal
 
 import numpy as np
@@ -12,6 +12,7 @@ from plybench.configs.player_config import PlayerConfig
 from plybench.core.game import TurnBasedGame
 from plybench.core.interface import InterfaceAction, InterfaceObservation
 from plybench.core.prompt_adapter import PromptAdapter
+from plybench.trackers.llm_call import LLMCall
 
 type PlayerIdentifier = Literal["i", "o"]
 
@@ -35,6 +36,15 @@ class PlayerOutput:
     data: dict[str, Any] | None = None
     # the seed the LLM call carried (LLMResponse.seed); None for a bot, an unseeded call or a provider that takes none
     llm_seed: int | None = None
+    # every call of a move that takes several, added with add_call; empty for a move of one call, which the fields above describe
+    calls: list[LLMCall] = field(default_factory=list)
+
+    def add_call(self, call: LLMCall) -> None:
+        # the token fields stay the move's totals, which the usage analysis reads
+        self.calls.append(call)
+        self.input_tokens = (self.input_tokens or 0) + call.input_tokens
+        self.output_tokens = (self.output_tokens or 0) + call.output_tokens
+        self.reasoning_tokens = (self.reasoning_tokens or 0) + call.reasoning_tokens
 
 
 class Player(ABC):

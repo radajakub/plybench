@@ -3,12 +3,14 @@ and GameTracker round-trip. Uses an instance-scoped Registry (no globals)."""
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from typing import Any, Never
 
 import numpy as np
 import pytest
 
+from plybench.analysis.usage import game_usage
 from plybench.common.enums import GameResults, MoveFailure
 from plybench.configs.player_config import PlayerConfig
 from plybench.configs.player_params import PlayerParams
@@ -19,6 +21,7 @@ from plybench.player.player import PlayerIdentifier, PlayerOutput
 from plybench.player.spec import PlayerSpec
 from plybench.registry import Registry
 from plybench.trackers.game_tracker import GameTracker
+from plybench.trackers.llm_call import LLMCall
 from plybench.trackers.player_tracker import PlayerTracker
 
 
@@ -211,3 +214,42 @@ def test_step_data_of_plain_json_types_is_recorded():
     tracker.add_move(agent, _StubObservation(), PlayerOutput(action=_StubLLMAction("<a>"), data=data), "STATE", registry)
 
     assert tracker.steps[-1].data == data
+
+
+def _call(role: str, input_tokens: int, output_tokens: int) -> LLMCall:
+    return LLMCall(role, "model-x", "system", "prompt", "", "answer", input_tokens, output_tokens, 1, seed=7)
+
+
+def test_a_move_of_several_calls_records_each_and_their_token_totals():
+    agent = PlayerConfig("agent", _StubParams("i"))
+    tracker = GameTracker(1, agent, PlayerConfig("stub", _StubParams("o")), {})
+    output = PlayerOutput(action=_StubLLMAction("<a>"))
+    output.add_call(_call("plan", 10, 5))
+    output.add_call(_call("act", 20, 8))
+
+    tracker.add_move(agent, _StubObservation(), output, "STATE", registry)
+
+    step = tracker.steps[-1]
+    assert [call.role for call in step.calls] == ["plan", "act"]
+    assert (step.input_tokens, step.output_tokens, step.reasoning_tokens) == (30, 13, 2)
+    restored = GameTracker.from_dict(json.loads(json.dumps(tracker.to_dict())), registry)
+    assert restored.steps[-1].calls == step.calls
+    # a move without its own calls stores none
+    plain = GameTracker(1, agent, PlayerConfig("stub", _StubParams("o")), {})
+    plain.add_move(agent, _StubObservation(), PlayerOutput(action=_StubLLMAction("<a>")), "STATE", registry)
+    assert "calls" not in plain.to_dict()["steps"][0]
+
+
+def test_usage_counts_the_calls_of_a_move_not_the_move():
+    agent = PlayerConfig("agent", _StubParams("i"))
+    tracker = GameTracker(1, agent, PlayerConfig("stub", _StubParams("o")), {})
+    several = PlayerOutput(action=_StubLLMAction("<a>"))
+    for role in ("plan", "act", "check"):
+        several.add_call(_call(role, 1, 1))
+    tracker.add_move(agent, _StubObservation(), several, "S1", registry)
+    tracker.add_move(agent, _StubObservation(), PlayerOutput(action=_StubLLMAction("<b>"), input_tokens=4, output_tokens=2), "S2", registry)
+
+    usage = game_usage(tracker, agent)
+
+    assert usage.calls == 4
+    assert (usage.tokens.input_tokens, usage.tokens.output_tokens) == (7, 5)

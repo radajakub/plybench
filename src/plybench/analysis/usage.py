@@ -73,7 +73,8 @@ def game_usage(game: GameTracker, player: PlayerConfig) -> TokenUsage:
         (LLMTokens(input_tokens=step.input_tokens or 0, output_tokens=step.output_tokens or 0, reasoning_tokens=step.reasoning_tokens or 0) for step in steps),
         LLMTokens(),
     )
-    return TokenUsage(tokens, len(steps))
+    # a move that took several calls lists them; any other recorded move was one call
+    return TokenUsage(tokens, sum(len(step.calls) or 1 for step in steps))
 
 
 def matchup_usage(tracker: ResultTracker) -> list[MatchupUsage]:

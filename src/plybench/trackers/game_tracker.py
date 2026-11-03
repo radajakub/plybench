@@ -8,6 +8,7 @@ from plybench.configs.parser import ConfigParser
 from plybench.configs.player_config import PlayerConfig
 from plybench.core.interface import InterfaceObservation
 from plybench.player.player import PlayerOutput
+from plybench.trackers.llm_call import LLMCall
 from plybench.trackers.player_tracker import PlayerTrackerResolver
 
 
@@ -49,6 +50,7 @@ class GameStep(Serializable):
             reasoning_tokens=data.get("reasoning_tokens"),
             data=data.get("data", None),
             llm_seed=data.get("llm_seed"),
+            calls=[LLMCall.from_dict(call) for call in data.get("calls", [])],
         )
 
     def __init__(
@@ -64,6 +66,7 @@ class GameStep(Serializable):
         reasoning_tokens: int | None = None,
         data: dict[str, Any] | None = None,
         llm_seed: int | None = None,
+        calls: list[LLMCall] | None = None,
     ) -> None:
         # core benchmark-trackable fields
         self.seq = seq
@@ -81,6 +84,8 @@ class GameStep(Serializable):
         self.data = data
         # the seed the move's LLM call carried; None for a bot, an unseeded call or a provider that takes none
         self.llm_seed = llm_seed
+        # every call of a move that took several; empty for a move of one call or none
+        self.calls = calls if calls is not None else []
 
     def to_dict(self) -> dict[str, Any]:
         res: dict[str, Any] = {
@@ -99,6 +104,8 @@ class GameStep(Serializable):
             res["reasoning_tokens"] = self.reasoning_tokens
         if self.llm_seed is not None:
             res["llm_seed"] = self.llm_seed
+        if self.calls:
+            res["calls"] = [call.to_dict() for call in self.calls]
         if self.data:
             res["data"] = self.data
         return res
@@ -179,6 +186,7 @@ class GameTracker(Serializable[[ConfigParser]]):
                 reasoning_tokens=player_output.reasoning_tokens,
                 data=data or None,
                 llm_seed=player_output.llm_seed,
+                calls=list(player_output.calls),
             )
         )
 

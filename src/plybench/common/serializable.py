@@ -12,6 +12,17 @@ LoadArgs = ParamSpec("LoadArgs")
 LoadPath = TypeVar("LoadPath", str, Path)
 
 
+def require_json_round_trip(value: Any, what: str) -> None:
+    # a value kept as JSON must read back equal, or what a run uses now differs from what a resumed run reads (tuples come back
+    # as lists, non-string keys as strings, numpy integers do not serialise); refused when it is made, not found when it is read
+    try:
+        restored = json.loads(json.dumps(value))
+    except (TypeError, ValueError) as error:
+        raise ValueError(f"{what} is not JSON: {error}") from error
+    if restored != value:
+        raise ValueError(f"{what} does not read back from JSON unchanged; keep to dicts with string keys, lists, strings, numbers, booleans and None")
+
+
 class Serializable(ABC, Generic[DeserializeArgs]):
     @abstractmethod
     def to_dict(self) -> dict[str, Any]:

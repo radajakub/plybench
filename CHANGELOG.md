@@ -30,6 +30,11 @@ All notable changes to this project are documented in this file. The format is b
 ### Changed
 
 - Requires `plyllm>=1.5.0` (the per-call seed).
+- What is stored must read back unchanged, so a resumed run reads what the first run used. `GameTracker.add_move`
+  refuses step data (`PlayerOutput.data` as the player's tracker records it) that JSON would change or cannot hold
+  (tuples, non-string keys, numpy integers, NaN), with a `ValueError` naming the player. A learner's update is
+  loaded back after `save_update` and must equal the proposed one, so the update type must compare by content
+  (e.g. a dataclass); otherwise the update is refused before it is cached.
 - The `random`, `optimal` (`eps`, `stochastic`) and `mcts` players and the sampled instances no longer draw from
   numpy's global or unseeded streams, so their draws differ from earlier runs. Earlier results stay valid; they
   were not reproducible before either.

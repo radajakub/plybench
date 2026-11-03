@@ -8,6 +8,16 @@ from plybench.configs.game_config import GameConfig
 from plybench.configs.player_config import PlayerConfig
 from plybench.configs.training_run import EpochPhase, TrainingRun
 
+# the longest file or directory name most file systems accept, in bytes
+_MAX_COMPONENT = 255
+
+
+def _component(name: str) -> str:
+    # a directory named after configs can outgrow the file system's limit; say which, instead of an OSError deep in a run
+    if len(name.encode()) > _MAX_COMPONENT:
+        raise ValueError(f"Path component is {len(name.encode())} bytes, over the {_MAX_COMPONENT}-byte limit; shorten the configs' path_suffix: {name}")
+    return name
+
 
 def _build_dir(dir_name: str | Path) -> Path:
     directory = Path(dir_name)
@@ -40,8 +50,8 @@ class ExperimentPathBuilder(BasePathBuilder):
         return self.experiments_dir / f"{experiment_name}.json"
 
     def game_base(self, experiment: str, game: GameConfig, i: PlayerConfig, o: PlayerConfig, num_games: int) -> Path:
-        game_string = f"{game.path}_{num_games}"
-        player_string = f"{i.path}_{o.path}"
+        game_string = _component(f"{game.path}_{num_games}")
+        player_string = _component(f"{i.path}_{o.path}")
         return self.results_dir / experiment / game_string / player_string
 
     def game_file(self, base: Path, game_round: int) -> Path:
@@ -61,7 +71,7 @@ class TrainingHarnessPathBuilder(ExperimentPathBuilder):
         super().__init__("training")
 
     def run_dir(self, experiment: str, run: TrainingRun) -> Path:
-        return self.results_dir / experiment / run.game.path / f"{run.trainee.path}_vs_{run.trainer.path}" / f"replicate_{run.replicate}"
+        return self.results_dir / experiment / _component(run.game.path) / _component(f"{run.trainee.path}_vs_{run.trainer.path}") / f"replicate_{run.replicate}"
 
     def manifest(self, experiment: str, run: TrainingRun) -> Path:
         return self.run_dir(experiment, run) / "run.json"
@@ -78,7 +88,7 @@ class TrainingHarnessPathBuilder(ExperimentPathBuilder):
     def scope(self, experiment: str, phase: EpochPhase) -> str:
         # every phase of every epoch is an ordinary matchup; the run coordinates ride along in the
         # experiment segment so ResultTracker keeps its per-game resume without knowing about training
-        return str((self.epoch_dir(experiment, phase.run, phase.epoch.index) / phase.dir_name).relative_to(self.results_dir))
+        return str((self.epoch_dir(experiment, phase.run, phase.epoch.index) / _component(phase.dir_name)).relative_to(self.results_dir))
 
     def game_base(self, experiment: str, game: GameConfig, i: PlayerConfig, o: PlayerConfig, num_games: int) -> Path:
         # `experiment` is a scope(), which already names the game, the players and the phase

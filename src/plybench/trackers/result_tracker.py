@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import warnings
 from pathlib import Path
 from typing import Any
 
@@ -11,6 +12,7 @@ from plybench.configs.game_config import GameConfig
 from plybench.configs.parser import ConfigParser
 from plybench.configs.player_config import PlayerConfig
 from plybench.trackers.game_tracker import GameTracker
+from plybench.utils.seed import derive_seed
 
 
 class ResultTracker(Saveable[[ConfigParser, ExperimentPathBuilder], Path, [ConfigParser, ExperimentPathBuilder]]):
@@ -31,9 +33,10 @@ class ResultTracker(Saveable[[ConfigParser, ExperimentPathBuilder], Path, [Confi
         parser: ConfigParser,
         path_builder: ExperimentPathBuilder | None = None,
         save_on_record: bool = True,
+        seed: int | None = None,
     ) -> ResultTracker:
         path_builder = path_builder if path_builder is not None else BenchmarkPathBuilder()
-        return cls(experiment, i, o, game, n, set(), parser, path_builder=path_builder, save_on_record=save_on_record)
+        return cls(experiment, i, o, game, n, set(), parser, path_builder=path_builder, save_on_record=save_on_record, seed=seed)
 
     @classmethod
     def from_dict(cls, data: dict[str, Any], parser: ConfigParser, path_builder: ExperimentPathBuilder) -> ResultTracker:
@@ -46,6 +49,7 @@ class ResultTracker(Saveable[[ConfigParser, ExperimentPathBuilder], Path, [Confi
             {int(x) for x in data["completed"]},
             parser,
             path_builder=path_builder,
+            seed=data.get("seed"),
         )
 
     @classmethod
@@ -72,6 +76,7 @@ class ResultTracker(Saveable[[ConfigParser, ExperimentPathBuilder], Path, [Confi
         path_builder: ExperimentPathBuilder,
         games: list[GameTracker | None] | None = None,
         save_on_record: bool = True,
+        seed: int | None = None,
     ) -> None:
         self.experiment = experiment
         self.i = i
@@ -82,6 +87,8 @@ class ResultTracker(Saveable[[ConfigParser, ExperimentPathBuilder], Path, [Confi
         self.parser = parser
         self.path_builder = path_builder
         self.save_on_record = save_on_record
+        # the experiment's base seed, from which each game's seed is derived (see game_seed); None in metadata from before seeding
+        self.seed = seed
 
         self.base_path = self.path_builder.game_base(self.experiment, self.game, self.i, self.o, self.n)
         self.metadata_path = self.path_builder.metadata(self.base_path)
@@ -126,6 +133,29 @@ class ResultTracker(Saveable[[ConfigParser, ExperimentPathBuilder], Path, [Confi
             temp_path.unlink(missing_ok=True)
             raise
 
+    def check_seed(self) -> None:
+        # a matchup is seeded throughout or not at all, so its metadata says what all its games were played under.
+        # Only playing checks it; loading results to analyse them does not need the seed
+        if not self.metadata_path.exists():
+            return
+        recorded = self.load_metadata_only(self.metadata_path, self.parser, self.path_builder).seed
+        if recorded is None:
+            # recorded unseeded (before seeding, or with seed None): its missing games are played unseeded too
+            if self.seed is not None:
+                warnings.warn(f"{self.metadata_path} was recorded without a seed; its missing games are played unseeded too, not under seed {self.seed}", stacklevel=2)
+                self.seed = None
+            return
+        if recorded != self.seed:
+            # continuing under another seed would mix two experiments in one place
+            raise ValueError(f"{self.metadata_path} was recorded with seed {recorded}, not {self.seed}; give another seed another experiment name")
+
+    def game_seed(self, game_round: int) -> int | None:
+        # derived from where the game is recorded, which names the experiment, the game, both players and the round
+        # (in training also the run, replicate, epoch and phase): a replayed round gets its seed back, any other game another
+        if self.seed is None:
+            return None
+        return derive_seed(self.seed, self.path_builder.game_file(self.base_path, game_round).as_posix())
+
     def get_completed_games(self) -> list[int]:
         return sorted(self.completed)
 
@@ -150,6 +180,7 @@ class ResultTracker(Saveable[[ConfigParser, ExperimentPathBuilder], Path, [Confi
             path_builder=self.path_builder,
             games=self.games,
             save_on_record=self.save_on_record,
+            seed=self.seed,
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -160,4 +191,5 @@ class ResultTracker(Saveable[[ConfigParser, ExperimentPathBuilder], Path, [Confi
             "game_config": self.game.to_string(),
             "n_games": self.n,
             "completed": list(self.completed),
+            **({"seed": self.seed} if self.seed is not None else {}),
         }

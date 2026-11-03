@@ -12,5 +12,6 @@
     { "value": "mcts:max_simulations=1000,rollout_count=1,uct_c=2.0", "enabled": true },
     { "value": "optimal:stochastic=True", "enabled": true }
   ],
-  "num_games": 10
+  "num_games": 10,
+  "seed": 0
 }

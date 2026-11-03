@@ -64,6 +64,9 @@ class StoryNimTransformer(InterfaceTransformer[NimAction, NimObservation, [list[
     def reset(self) -> None:
         self.instance = self.nim_gen.new()
 
+    def seed(self, seed: int) -> None:
+        self.nim_gen.seed(seed)
+
     def set_state(self, pile_sizes: list[int], max_pile_size: int) -> None:
         self.instance = NimInstance(pile_sizes, max_pile_size)
 

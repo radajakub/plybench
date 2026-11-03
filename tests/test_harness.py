@@ -252,3 +252,13 @@ def test_plybench_keeps_its_own_prompt_cache_key(monkeypatch):
     PlyBench()
 
     assert seen["prompt_cache_key"] == "PlyBench"
+
+
+def test_a_result_directory_over_the_file_system_limit_is_refused_by_name(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    game = registry.game_config("tic_tac_toe:")
+    i = registry.player_config("random:distribution=uniform")
+    o = registry.player_config("random:distribution=" + "n" * 300)
+
+    with pytest.raises(ValueError, match="over the 255-byte limit"):
+        BenchmarkPathBuilder().game_base("exp", game, i, o, 2)

@@ -55,6 +55,7 @@ class TrainingHarness:
             training_override if training_override is not None else config.get_training_configs(),
             config.num_replicates,
             path_builder,
+            config.seed,
         )
 
     def __init__(
@@ -68,6 +69,7 @@ class TrainingHarness:
         training_configs: list[str],
         num_replicates: int,
         path_builder: TrainingHarnessPathBuilder | None = None,
+        seed: int | None = None,
     ) -> None:
         self.experiment = experiment
         self.op = op
@@ -78,6 +80,7 @@ class TrainingHarness:
         self.training_configs = training_configs
         self.num_replicates = num_replicates
         self.path_builder = path_builder if path_builder is not None else TrainingHarnessPathBuilder()
+        self.seed = seed
 
     def _testers(self) -> list[PlayerConfig]:
         return [self.op.registry.player_config(tester) for tester in self.tester_configs]
@@ -204,6 +207,7 @@ class TrainingHarness:
                 player_builder=build_player,
                 after_game=learner.observe,
                 colour_rule=first_starts_by_parity,
+                seed=self.seed,
             )
             await learner.update([game for game in tracker.games if game is not None])
         finally:
@@ -230,6 +234,7 @@ class TrainingHarness:
             experiment=self.path_builder.scope(self.experiment, phase),
             max_concurrent=max_concurrent,
             colour_rule=first_starts_by_parity,
+            seed=self.seed,
         )
 
     def _policy_config(self, run: TrainingRun, epoch: int) -> PlayerConfig:
@@ -252,7 +257,7 @@ class TrainingHarness:
         manifest = self.path_builder.manifest(self.experiment, run)
         manifest.parent.mkdir(parents=True, exist_ok=True)
         with open(manifest, "w") as f:
-            json.dump({**run.to_dict(), "testers": self.tester_configs}, f, indent=2)
+            json.dump({**run.to_dict(), "testers": self.tester_configs, "seed": self.seed}, f, indent=2)
 
     def _load_phase(self, phase: EpochPhase) -> ResultTracker:
         tracker = ResultTracker.new(
@@ -263,6 +268,7 @@ class TrainingHarness:
             phase.num_games,
             self.op.registry,
             path_builder=self.path_builder,
+            seed=self.seed,
         )
         tracker.load_if_exists()
         return tracker

@@ -12,6 +12,7 @@ from plybench.core.prompt_adapter import PromptAdapter
 from plybench.player.player import Player
 from plybench.trackers.game_tracker import GameTracker
 from plybench.trackers.player_tracker import PlayerTrackerResolver
+from plybench.utils.seed import derive_seed
 
 TransformerT = TypeVar("TransformerT", bound=InterfaceTransformer)
 AdapterT = TypeVar("AdapterT", bound=PromptAdapter)
@@ -58,8 +59,16 @@ class TurnBasedEngine(ABC, Generic[TransformerT, AdapterT]):
             return GameResults.LOSS, GameResults.WIN
         return GameResults.DRAW, GameResults.DRAW
 
-    async def play(self, players: tuple[Player, Player], game_callbacks: GameCallbacks | None = None, game_round: int = 1, verbose: bool = False) -> GameTracker:
+    async def play(
+        self, players: tuple[Player, Player], game_callbacks: GameCallbacks | None = None, game_round: int = 1, verbose: bool = False, seed: int | None = None
+    ) -> GameTracker:
         game_callbacks = game_callbacks if game_callbacks is not None else GameCallbacks()
+
+        # the game's seed fixes the sampled instance and each player's draws, each from its own stream; None leaves them unseeded
+        if seed is not None:
+            self.interface_transformer.seed(derive_seed(seed, "game"))
+            for player in players:
+                player.seed(derive_seed(seed, player.identifier))
 
         self.reset()
         for player in players:
@@ -75,6 +84,7 @@ class TurnBasedEngine(ABC, Generic[TransformerT, AdapterT]):
             None,
             0,
             other_params,
+            seed,
         )
 
         game_callbacks.on_game_start(tracker)
@@ -110,7 +120,7 @@ class TurnBasedEngine(ABC, Generic[TransformerT, AdapterT]):
 
             # (5) handle a failed move (illegal / malformed) and exit early
             if player_output.action is None:
-                tracker.add_fail(player.player_config, self._get_ending(1 - pid))
+                tracker.add_fail(player.player_config, self._get_ending(1 - pid), self.game.serialize_state())
                 results = (GameResults.MY_FAIL, GameResults.OPPONENT_FAIL) if pid == 0 else (GameResults.OPPONENT_FAIL, GameResults.MY_FAIL)
                 game_callbacks.on_game_end(tracker, results)
                 return tracker
@@ -119,7 +129,7 @@ class TurnBasedEngine(ABC, Generic[TransformerT, AdapterT]):
             self.game.step(player_output.action.to_openspiel())
 
         result1, result2 = self._get_game_result()
-        tracker.end_game(result1, self._get_ending(1 - pid))
+        tracker.end_game(result1, self._get_ending(1 - pid), self.game.serialize_state())
         game_callbacks.on_game_end(tracker, (result1, result2))
 
         return tracker

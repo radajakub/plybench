@@ -5,6 +5,8 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Any, Literal
 
+import numpy as np
+
 from plybench.common.enums import MoveFailure
 from plybench.configs.player_config import PlayerConfig
 from plybench.core.game import TurnBasedGame
@@ -31,6 +33,8 @@ class PlayerOutput:
     failure_detail: str = ""
     # freeform per-player extras; the player's registered PlayerTracker decides what to persist
     data: dict[str, Any] | None = None
+    # the seed the LLM call carried (LLMResponse.seed); None for a bot, an unseeded call or a provider that takes none
+    llm_seed: int | None = None
 
 
 class Player(ABC):
@@ -48,6 +52,15 @@ class Player(ABC):
     def __init__(self, player_config: PlayerConfig, identifier: PlayerIdentifier) -> None:
         self.player_config = player_config
         self.identifier = identifier
+        # every random choice of the player draws from this; the engine seeds it before each game, so a player outside
+        # the engine still plays, unseeded
+        self.rng = np.random.default_rng()
+        # whether the stream is seeded; what the player passes on (an LLM call's seed) is a number only then
+        self.seeded = False
+
+    def seed(self, seed: int) -> None:
+        self.rng = np.random.default_rng(seed)
+        self.seeded = True
 
     @abstractmethod
     def initialize_policy(self, game: TurnBasedGame, prompt_adapter_template: PromptAdapter) -> None:

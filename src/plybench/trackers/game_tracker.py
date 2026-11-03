@@ -17,15 +17,21 @@ class GameEnding(Serializable):
         result = GameResults.from_value(data["result"])
         if result is None:
             raise ValueError(f"Invalid game result: {data['result']}")
-        return cls(data["seq"], data["observation"], result)
+        return cls(data["seq"], data["observation"], result, data.get("serialized_state"))
 
-    def __init__(self, seq: int, observation: str, result: GameResults) -> None:
+    def __init__(self, seq: int, observation: str, result: GameResults, serialized_state: str | None = None) -> None:
         self.seq = seq
         self.observation = observation
         self.result = result
+        # the state the game ended in (the terminal state, or the one a failed move left unchanged), so it can be rebuilt in any
+        # format, as each step's can; None in records from before it was kept
+        self.serialized_state = serialized_state
 
     def to_dict(self) -> dict[str, Any]:
-        return {"seq": self.seq, "observation": self.observation, "result": self.result.value}
+        res: dict[str, Any] = {"seq": self.seq, "observation": self.observation, "result": self.result.value}
+        if self.serialized_state is not None:
+            res["serialized_state"] = self.serialized_state
+        return res
 
 
 class GameStep(Serializable):
@@ -42,6 +48,7 @@ class GameStep(Serializable):
             output_tokens=data.get("output_tokens"),
             reasoning_tokens=data.get("reasoning_tokens"),
             data=data.get("data", None),
+            llm_seed=data.get("llm_seed"),
         )
 
     def __init__(
@@ -56,6 +63,7 @@ class GameStep(Serializable):
         output_tokens: int | None = None,
         reasoning_tokens: int | None = None,
         data: dict[str, Any] | None = None,
+        llm_seed: int | None = None,
     ) -> None:
         # core benchmark-trackable fields
         self.seq = seq
@@ -71,6 +79,8 @@ class GameStep(Serializable):
         self.reasoning_tokens = reasoning_tokens
         # player-specific extras produced by the registered PlayerTracker
         self.data = data
+        # the seed the move's LLM call carried; None for a bot, an unseeded call or a provider that takes none
+        self.llm_seed = llm_seed
 
     def to_dict(self) -> dict[str, Any]:
         res: dict[str, Any] = {
@@ -87,6 +97,8 @@ class GameStep(Serializable):
             res["output_tokens"] = self.output_tokens
         if self.reasoning_tokens is not None:
             res["reasoning_tokens"] = self.reasoning_tokens
+        if self.llm_seed is not None:
+            res["llm_seed"] = self.llm_seed
         if self.data:
             res["data"] = self.data
         return res
@@ -104,6 +116,7 @@ class GameTracker(Serializable[[ConfigParser]]):
             GameEnding.from_dict(data["ending"]) if data["ending"] else None,
             int(data["seq"]),
             data.get("other_params", {}),
+            data.get("seed"),
         )
 
     def __init__(
@@ -116,6 +129,7 @@ class GameTracker(Serializable[[ConfigParser]]):
         ending: GameEnding | None = None,
         seq: int = 0,
         other_params: dict[str, Any] | None = None,
+        seed: int | None = None,
     ) -> None:
         self.game_round = game_round
         self.seq = seq
@@ -125,6 +139,8 @@ class GameTracker(Serializable[[ConfigParser]]):
         self.other_params = other_params
         self.steps: list[GameStep] = steps if steps is not None else []
         self.ending: GameEnding | None = ending
+        # the game's seed (see TurnBasedEngine.play); None in records from before seeding
+        self.seed = seed
 
     def _next_seq(self) -> int:
         self.seq += 1
@@ -160,19 +176,20 @@ class GameTracker(Serializable[[ConfigParser]]):
                 output_tokens=player_output.output_tokens,
                 reasoning_tokens=player_output.reasoning_tokens,
                 data=data or None,
+                llm_seed=player_output.llm_seed,
             )
         )
 
-    def add_fail(self, player: PlayerConfig, observation: InterfaceObservation) -> None:
+    def add_fail(self, player: PlayerConfig, observation: InterfaceObservation, serialized_state: str | None = None) -> None:
         if player.hash == self.i_player.hash:
-            self.end_game(GameResults.MY_FAIL, observation)
+            self.end_game(GameResults.MY_FAIL, observation, serialized_state)
         elif player.hash == self.o_player.hash:
-            self.end_game(GameResults.OPPONENT_FAIL, observation)
+            self.end_game(GameResults.OPPONENT_FAIL, observation, serialized_state)
         else:
             raise ValueError(f"Invalid player hash: {player.hash}")
 
-    def end_game(self, result: GameResults, observation: InterfaceObservation) -> None:
-        self.ending = GameEnding(self._next_seq(), str(observation), result)
+    def end_game(self, result: GameResults, observation: InterfaceObservation, serialized_state: str | None = None) -> None:
+        self.ending = GameEnding(self._next_seq(), str(observation), result, serialized_state)
 
     def get_result(self, player: PlayerConfig) -> GameResults:
         assert self.ending is not None, "Game must be ended to get the result"
@@ -190,4 +207,5 @@ class GameTracker(Serializable[[ConfigParser]]):
             "steps": [step.to_dict() for step in self.steps],
             "ending": self.ending.to_dict() if self.ending else None,
             "seq": self.seq,
+            **({"seed": self.seed} if self.seed is not None else {}),
         }

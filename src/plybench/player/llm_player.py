@@ -17,6 +17,7 @@ from plybench.player.player import Player, PlayerIdentifier, PlayerOutput
 from plybench.trackers.player_tracker import PlayerTracker
 from plybench.trackers.prompt_block import PromptBlock
 from plybench.trackers.step_data import StepData
+from plybench.utils.seed import SEED_LIMIT
 
 # failures recorded as a failed move rather than raised; see LLMPlayer.__call__. Each is about the answer
 # or the prompt, not the transport
@@ -84,8 +85,11 @@ class LLMPlayer(Player):
     async def __call__(self, game: TurnBasedGame, observation: InterfaceObservation, legal_moves: list[InterfaceAction]) -> PlayerOutput:
         assert self._prompt_adapter is not None, "Prompt adapter not initialized; call initialize_policy first"
 
+        # one seed per move, drawn from the player's seeded stream, so the calls of a game form a fixed sequence; an unseeded
+        # game sends none
+        seed = int(self.rng.integers(SEED_LIMIT)) if self.seeded else None
         return await LLMPlayer.move(
-            self._llm, self._params.model, self._prompt_adapter, self._output_strategy, observation, legal_moves, label=str(self), block_log=self._block_log
+            self._llm, self._params.model, self._prompt_adapter, self._output_strategy, observation, legal_moves, label=str(self), seed=seed, block_log=self._block_log
         )
 
     @staticmethod
@@ -99,6 +103,7 @@ class LLMPlayer(Player):
         *,
         label: str,
         context: str | None = None,
+        seed: int | None = None,
         block_log: Path | None = None,
     ) -> PlayerOutput:
         system_message, messages = prompt_adapter.build_messages(observation, legal_moves, output_strategy, context)
@@ -107,7 +112,7 @@ class LLMPlayer(Player):
         max_attempts = _BLOCK_RETRIES + 1
         for attempt in range(1, max_attempts + 1):
             try:
-                response = await llm.generate(model, system_message, messages, output_schema=output_strategy.get_output_schema())
+                response = await llm.generate(model, system_message, messages, output_schema=output_strategy.get_output_schema(), seed=seed)
             except LLMCallError as error:
                 if error.kind is FailureKind.PROMPT_BLOCKED:
                     if block_log is not None:
@@ -162,6 +167,7 @@ class LLMPlayer(Player):
             reasoning_tokens=response.tokens.reasoning_tokens,
             failure=failure,
             failure_detail=failure_detail,
+            llm_seed=response.seed,
         )
 
     def format_llm_output(self, player_output: PlayerOutput) -> str:

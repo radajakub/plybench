@@ -38,6 +38,7 @@ class Benchmark:
             config.num_games,
             path_builder,
             COLOUR_RULES[config.colour_rule],
+            config.seed,
         )
 
     def __init__(
@@ -50,6 +51,7 @@ class Benchmark:
         num_games: int,
         path_builder: BenchmarkPathBuilder | None = None,
         colour_rule: ColourRule = first_starts,
+        seed: int | None = None,
     ) -> None:
         self.experiment = experiment
         self.op = op
@@ -59,6 +61,7 @@ class Benchmark:
         self.num_games = num_games
         self.path_builder = path_builder if path_builder is not None else BenchmarkPathBuilder()
         self.colour_rule = colour_rule
+        self.seed = seed
 
     def _matrix(self) -> list[tuple[str, str, str]]:
         return [(game, player, opponent) for player in self.player_configs for opponent in self.opponent_configs for game in self.game_configs]
@@ -112,6 +115,7 @@ class Benchmark:
             experiment=self.experiment,
             max_concurrent=concurrency,
             colour_rule=self.colour_rule,
+            seed=self.seed,
         )
         return str(tracker.base_path)
 
@@ -131,6 +135,7 @@ class Benchmark:
                 self.num_games,
                 self.op.registry,
                 path_builder=self.path_builder,
+                seed=self.seed,
             )
             tracker.load_if_exists()
             trackers.append(tracker)

@@ -47,6 +47,11 @@ class MCTSPlayer(Player):
 
         self._bot: mcts.MCTSBot | None = None
 
+    def seed(self, seed: int) -> None:
+        super().seed(seed)
+        # pyspiel's MCTS draws from a legacy RandomState, not a Generator; the bot is built after this, in initialize_policy
+        self._rng = np.random.RandomState(seed)
+
     def initialize_policy(self, game: TurnBasedGame, prompt_adapter_template: PromptAdapter) -> None:
         self._bot = mcts.MCTSBot(
             game=game.game,

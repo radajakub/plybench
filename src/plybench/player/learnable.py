@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import shutil
 from abc import ABC, abstractmethod
@@ -14,6 +15,10 @@ from plybench.core.interface import InterfaceAction, InterfaceObservation
 from plybench.core.prompt_adapter import PromptAdapter
 from plybench.player.player import Player, PlayerIdentifier, PlayerOutput
 from plybench.trackers.game_tracker import GameTracker
+from plybench.trackers.llm_call import LLMCall
+
+# the LLM calls of one proposal, next to its update in the update cache; a name save_update must not use
+LEARNER_CALLS = "llm_calls.json"
 
 
 class LearnablePlayer[U](Player, ABC):
@@ -29,6 +34,8 @@ class LearnablePlayer[U](Player, ABC):
         self._mode = Mode.EVAL
         self.workdir: Path | None = None
         self._restored = False
+        # the calls of the proposal under way, reported with record_call; None outside propose / propose_epoch
+        self._calls: list[LLMCall] | None = None
 
     @property
     def checkpoint(self) -> Path | None:
@@ -96,12 +103,19 @@ class LearnablePlayer[U](Player, ABC):
         if directory.exists():
             return None if (directory / LearnablePlayer._NO_UPDATE).exists() else self.load_update(directory)
 
-        update = await propose()
+        self._calls = []
+        try:
+            update = await propose()
+            calls = self._calls
+        finally:
+            self._calls = None
         # the directory's existence marks the update done, so stage the write and rename it into place,
         # as the harness does for checkpoints: an interruption mid-write leaves no half update behind
         staged = directory.with_name(f"{name}.tmp")
         shutil.rmtree(staged, ignore_errors=True)
         staged.mkdir(parents=True)
+        # kept for a proposal that taught nothing too: its calls were made and paid for
+        (staged / LEARNER_CALLS).write_text(json.dumps([call.to_dict() for call in calls]))
         if update is None:
             (staged / LearnablePlayer._NO_UPDATE).touch()
         else:
@@ -111,6 +125,13 @@ class LearnablePlayer[U](Player, ABC):
                 raise ValueError(f"{self}: load_update does not give back the update save_update stored; store all of it, as a type that compares by content (e.g. a dataclass)")
         os.replace(staged, directory)
         return update
+
+    def record_call(self, call: LLMCall) -> None:
+        # every LLM call of propose / propose_epoch is reported here and stored with its update, so the cost of learning shows in
+        # the results; a call made in a move belongs in PlayerOutput (add_call) instead
+        if self._calls is None:
+            raise RuntimeError(f"{self}: record_call() is only legal inside propose() or propose_epoch(); a move records its calls in PlayerOutput")
+        self._calls.append(call)
 
     @abstractmethod
     def _initialize_policy(self, game: TurnBasedGame, prompt_adapter_template: PromptAdapter) -> None:

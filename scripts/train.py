@@ -27,14 +27,16 @@ from clankers.core.models import describe
 
 sys.path.insert(0, str(Path(__file__).parent))
 from _shared import add_training_source_args, build_op, training_from_args  # noqa: E402
-from plyllm import DEFAULT_CONCURRENCY  # noqa: E402
+from plyllm import DEFAULT_CONCURRENCY, LLM  # noqa: E402
 
 from plybench.analysis.training import TrainingAnalysis  # noqa: E402
+from plybench.analysis.usage import TokenUsage, calls_cost, calls_usage, learning_calls  # noqa: E402
 from plybench.callbacks.console_callbacks import console_training_callbacks  # noqa: E402
 from plybench.callbacks.notification_callbacks import notification_training_callbacks  # noqa: E402
 from plybench.callbacks.training_callbacks import TrainingCallbacks  # noqa: E402
 from plybench.common.enums import MetricName  # noqa: E402
 from plybench.harness.training.results import TrainingResults  # noqa: E402
+from plybench.harness.training.training import TrainingHarness  # noqa: E402
 from plybench.registry import Registry  # noqa: E402
 
 
@@ -59,6 +61,21 @@ def report_curves(results: TrainingResults, registry: Registry, tester_configs: 
                 interval = f" [{bundle.wilson.lower:.2f}, {bundle.wilson.upper:.2f}]" if bundle.wilson is not None else ""
                 print(f"  epoch {point.epoch:>2}: {bundle.value:.3f}{interval}  (n={bundle.n})")
             print(f"  delta: {curve.delta(metric):+.3f}")
+
+
+def report_learning_cost(harness: TrainingHarness, llm: LLM) -> None:
+    # the calls a learner made in its proposals, per epoch; the moves' tokens are in the game records, as for any player
+    for run in harness._matrix():
+        epochs = [(index, learning_calls(harness.path_builder.learner_dir(harness.experiment, run, index))) for index in range(1, run.training_config.num_epochs + 1)]
+        if not any(calls for _, calls in epochs):
+            continue
+        print(f"\n{run.game.path}: {run.trainee.path} vs {run.trainer.path} rep{run.replicate} -- learning calls")
+        for index, calls in epochs:
+            usage = sum(calls_usage(calls).values(), TokenUsage())
+            cost, unpriced = calls_cost(llm, calls)
+            roles = ", ".join(f"{role} {role_usage.calls}" for role, role_usage in sorted(calls_usage(calls).items()))
+            priced = f"${cost:.4f}" + (f" (+{unpriced} unpriced)" if unpriced else "")
+            print(f"  epoch {index:>2}: {usage.calls} calls, {usage.tokens.input_tokens} in / {usage.tokens.output_tokens} out tokens, {priced}  [{roles}]")
 
 
 def main() -> None:
@@ -103,6 +120,7 @@ def main() -> None:
         parser.error(f"Invalid metric: {args.metric}")
 
     report_curves(results, op.registry, harness.tester_configs, metric)
+    report_learning_cost(harness, op.llm)
     print(f"\nresults under results/training/{harness.experiment}/")
 
 

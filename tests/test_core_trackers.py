@@ -217,7 +217,7 @@ def test_step_data_of_plain_json_types_is_recorded():
 
 
 def _call(role: str, input_tokens: int, output_tokens: int) -> LLMCall:
-    return LLMCall(role, "model-x", "system", "prompt", "", "answer", input_tokens, output_tokens, 1, seed=7)
+    return LLMCall(role, "openai", "model-x", "model-x-2026", "system", "prompt", "", "answer", input_tokens, output_tokens, 1, seed=7)
 
 
 def test_a_move_of_several_calls_records_each_and_their_token_totals():

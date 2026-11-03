@@ -28,7 +28,7 @@ All notable changes to this project are documented in this file. The format is b
   start time and the rounds it played. The training `run.json` gets a session each time the run is started
   (`plybench.common.provenance`).
 - Player plugins: `PlyBench()` registers the players of every installed package that names a `register(registry,
-  llm)` function in the `plybench.players` entry point group (e.g. plyagents), after the builtins. So the scripts can
+llm)` function in the `plybench.players` entry point group (e.g. plyagents), after the builtins. So the scripts can
   run those players and read their results. A plugin that fails to load stops `PlyBench()` with its name; one that
   takes a key already registered is refused.
 - Moves of several LLM calls: `LLMCall` (`plybench.trackers.llm_call`) records one call (role, provider, model

@@ -22,6 +22,11 @@ All notable changes to this project are documented in this file. The format is b
   in `metadata.json` and the training `run.json`. Continuing a matchup under another base seed is refused; loading
   results needs no seed. A matchup is seeded throughout or not at all: one recorded without a seed (before seeding)
   plays its missing games unseeded, with a warning, and its metadata keeps no seed.
+- Provenance. Each run that plays games in a matchup adds a session to its `metadata.json`: package versions
+  (plybench, plyllm and the package of each player, e.g. plyagents), the commit of each package run from a checkout
+  and of the working directory, with a `dirty` flag for uncommitted changes, the command, the Python version, the
+  start time and the rounds it played. The training `run.json` gets a session each time the run is started
+  (`plybench.common.provenance`).
 - `GameEnding.serialized_state`: the state the game ended in (terminal, or the one a failed move left), so the
   last position can be rebuilt in any format, like every step's. `None` in older records.
 - A directory named after configs (matchup, run, test phase) that is longer than 255 bytes is refused with a

@@ -8,6 +8,7 @@ from plybench.app import PlyBench
 from plybench.callbacks.game_callbacks import GameCallbacks
 from plybench.callbacks.matchup_callbacks import MatchupCallbacks
 from plybench.common.paths import BenchmarkPathBuilder, ExperimentPathBuilder
+from plybench.common.provenance import package_of, provenance
 from plybench.configs.game_config import GameConfig
 from plybench.configs.matchup import Matchup
 from plybench.configs.player_config import PlayerConfig
@@ -97,6 +98,8 @@ def _open_matchup(
     )
     result_tracker.check_seed()
     result_tracker.load_if_exists()
+    if save_on_record and not result_tracker.is_complete():
+        result_tracker.begin_session(provenance([package_of(matchup.i.params), package_of(matchup.o.params)]))
     matchup_callbacks.on_matchup_start(result_tracker, matchup.game, matchup.i, matchup.o)
     return result_tracker, matchup_callbacks
 

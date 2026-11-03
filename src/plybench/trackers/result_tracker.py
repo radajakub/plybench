@@ -50,6 +50,7 @@ class ResultTracker(Saveable[[ConfigParser, ExperimentPathBuilder], Path, [Confi
             parser,
             path_builder=path_builder,
             seed=data.get("seed"),
+            sessions=data.get("sessions", []),
         )
 
     @classmethod
@@ -77,6 +78,7 @@ class ResultTracker(Saveable[[ConfigParser, ExperimentPathBuilder], Path, [Confi
         games: list[GameTracker | None] | None = None,
         save_on_record: bool = True,
         seed: int | None = None,
+        sessions: list[dict[str, Any]] | None = None,
     ) -> None:
         self.experiment = experiment
         self.i = i
@@ -89,6 +91,9 @@ class ResultTracker(Saveable[[ConfigParser, ExperimentPathBuilder], Path, [Confi
         self.save_on_record = save_on_record
         # the experiment's base seed, from which each game's seed is derived (see game_seed); None in metadata from before seeding
         self.seed = seed
+        # one entry per run that played games here: what produced them (see common/provenance.py) and the rounds it played
+        self.sessions: list[dict[str, Any]] = sessions if sessions is not None else []
+        self._session: dict[str, Any] | None = None
 
         self.base_path = self.path_builder.game_base(self.experiment, self.game, self.i, self.o, self.n)
         self.metadata_path = self.path_builder.metadata(self.base_path)
@@ -98,6 +103,7 @@ class ResultTracker(Saveable[[ConfigParser, ExperimentPathBuilder], Path, [Confi
         if self.metadata_path.exists():
             reference = self.load_metadata_only(self.metadata_path, self.parser, self.path_builder)
             self.completed = reference.completed
+            self.sessions = reference.sessions
             self.games = [None for _ in range(self.n)]
             for game_round in self.completed:
                 self.games[game_round - 1] = self.load_game(game_round)
@@ -128,10 +134,17 @@ class ResultTracker(Saveable[[ConfigParser, ExperimentPathBuilder], Path, [Confi
             os.replace(temp_path, game_path)
             if game_round not in self.completed:
                 self.completed.add(game_round)
+                if self._session is not None:
+                    self._session["rounds"].append(game_round)
                 self.save(str(self.metadata_path))
         except Exception:
             temp_path.unlink(missing_ok=True)
             raise
+
+    def begin_session(self, provenance: dict[str, Any]) -> None:
+        # the rounds this run plays are filed under it; stored with the metadata when its first game is recorded
+        self._session = {**provenance, "rounds": []}
+        self.sessions.append(self._session)
 
     def check_seed(self) -> None:
         # a matchup is seeded throughout or not at all, so its metadata says what all its games were played under.
@@ -181,6 +194,7 @@ class ResultTracker(Saveable[[ConfigParser, ExperimentPathBuilder], Path, [Confi
             games=self.games,
             save_on_record=self.save_on_record,
             seed=self.seed,
+            sessions=self.sessions,
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -192,4 +206,6 @@ class ResultTracker(Saveable[[ConfigParser, ExperimentPathBuilder], Path, [Confi
             "n_games": self.n,
             "completed": list(self.completed),
             **({"seed": self.seed} if self.seed is not None else {}),
+            # a session that has recorded no game yet is not stored
+            **({"sessions": sessions} if (sessions := [session for session in self.sessions if session["rounds"]]) else {}),
         }

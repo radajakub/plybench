@@ -13,6 +13,7 @@ from plybench.callbacks.training_callbacks import TrainingCallbacks
 from plybench.common.enums import Mode
 from plybench.common.paths import TrainingHarnessPathBuilder
 from plybench.common.progress import track
+from plybench.common.provenance import package_of, provenance
 from plybench.configs.matchup import Matchup
 from plybench.configs.player_config import PlayerConfig
 from plybench.configs.player_params import CheckpointedParams
@@ -256,8 +257,12 @@ class TrainingHarness:
         # the paths carry identity only, so the counts behind a run live here
         manifest = self.path_builder.manifest(self.experiment, run)
         manifest.parent.mkdir(parents=True, exist_ok=True)
+        # every session that works on the run is added, as each may have run other code; the matchups keep their own
+        sessions = json.loads(manifest.read_text()).get("sessions", []) if manifest.exists() else []
+        players = [run.trainee, run.trainer, *self._testers()]
+        sessions.append(provenance(package_of(player.params) for player in players))
         with open(manifest, "w") as f:
-            json.dump({**run.to_dict(), "testers": self.tester_configs, "seed": self.seed}, f, indent=2)
+            json.dump({**run.to_dict(), "testers": self.tester_configs, "seed": self.seed, "sessions": sessions}, f, indent=2)
 
     def _load_phase(self, phase: EpochPhase) -> ResultTracker:
         tracker = ResultTracker.new(

@@ -27,6 +27,10 @@ All notable changes to this project are documented in this file. The format is b
   and of the working directory, with a `dirty` flag for uncommitted changes, the command, the Python version, the
   start time and the rounds it played. The training `run.json` gets a session each time the run is started
   (`plybench.common.provenance`).
+- Player plugins: `PlyBench()` registers the players of every installed package that names a `register(registry,
+  llm)` function in the `plybench.players` entry point group (e.g. plyagents), after the builtins. So the scripts can
+  run those players and read their results. A plugin that fails to load stops `PlyBench()` with its name; one that
+  takes a key already registered is refused.
 - `GameEnding.serialized_state`: the state the game ended in (terminal, or the one a failed move left), so the
   last position can be rebuilt in any format, like every step's. `None` in older records.
 - A directory named after configs (matchup, run, test phase) that is longer than 255 bytes is refused with a

@@ -231,6 +231,16 @@ op.registry.register_player(PlayerSpec("first", FirstMoveParams, lambda game, cf
 # usable anywhere as the config string "first:"
 ```
 
+A package that ships players can register them in every `PlyBench()` of the environment it is installed in, so the
+scripts can run them and read their results. It names a function `register(registry, llm)` in its `pyproject.toml`:
+
+```toml
+[project.entry-points."plybench.players"]
+first = "mypackage.players:register"
+```
+
+A plugin may not take a key that is already registered, and one that fails to load stops `PlyBench()` with its name.
+
 ### Adding a game
 
 Games are backed by [OpenSpiel](https://github.com/google-deepmind/open_spiel): the underlying game must

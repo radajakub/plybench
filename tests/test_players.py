@@ -17,6 +17,7 @@ from plybench.common.enums import GameResults, MoveFailure, ObservationType
 from plybench.player.llm_player import _BLOCK_RETRIES, LLMPlayer, LLMPlayerTracker
 from plybench.player.output_strategies import StructuredOutputStrategy
 from plybench.player.player import PlayerOutput
+from plybench.trackers.game_tracker import GameTracker
 from plybench.trackers.prompt_block import PromptBlock
 
 # a full registry (games + players); LLMConfig() has no providers so this is fully offline
@@ -89,7 +90,7 @@ def test_optimal_never_loses_to_random(tmp_path, monkeypatch):
 
 # --- LLM player with a stub LLM --------------------------------------------------------------
 class _StubLLM:
-    async def generate(self, model_config, system, messages, output_schema=None):
+    async def generate(self, model_config, system, messages, output_schema=None, seed=None):
         return LLMResponse(
             provider=model_config.provider,
             model_string=model_config.model_name,
@@ -137,7 +138,7 @@ class _FailingLLM:
     def __init__(self, error: Exception) -> None:
         self._error = error
 
-    async def generate(self, model_config, system, messages, output_schema=None):
+    async def generate(self, model_config, system, messages, output_schema=None, seed=None):
         raise self._error
 
 
@@ -180,7 +181,7 @@ class _ScriptedLLM:
         self._outcomes = list(outcomes)
         self.calls = 0
 
-    async def generate(self, model_config, system, messages, output_schema=None):
+    async def generate(self, model_config, system, messages, output_schema=None, seed=None):
         outcome = self._outcomes[self.calls]
         self.calls += 1
         if isinstance(outcome, Exception):
@@ -249,7 +250,7 @@ class _RecordingLLM(_StubLLM):
     def __init__(self) -> None:
         self.sent: list = []
 
-    async def generate(self, model_config, system, messages, output_schema=None):
+    async def generate(self, model_config, system, messages, output_schema=None, seed=None):
         self.sent.append((system, messages))
         return await super().generate(model_config, system, messages, output_schema)
 
@@ -285,6 +286,18 @@ def test_move_puts_the_context_between_the_state_and_the_legal_moves():
     legal = adapter.legal_moves_prompt(adapter.format_legal_actions(moves))
     assert prompt.index(state) < prompt.index("MEMORY: take the centre") < prompt.index(legal)
     assert out.action is not None and out.prompt_message == prompt
+
+
+def test_the_ending_keeps_the_state_the_game_ended_in(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    tracker = _play("random:distribution=uniform", "random:distribution=normal")
+    assert tracker.ending is not None and tracker.ending.serialized_state is not None
+
+    engine = _tic_tac_toe()
+    engine.game.deserialize_state(tracker.ending.serialized_state)
+    assert engine.game.is_terminal()
+    restored = GameTracker.from_dict(json.loads(json.dumps(tracker.to_dict())), registry)
+    assert restored.ending is not None and restored.ending.serialized_state == tracker.ending.serialized_state
 
 
 _BLOCK = PromptBlock("2026-10-15T12:00:00+00:00", "llm:actions:text:gemini:gemini-4-argon:", "prompt blocked (OTHER)", 2, 4, None, "rules", "your move")

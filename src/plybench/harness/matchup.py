@@ -64,7 +64,7 @@ async def play_round(
 
     player_pair = order_players_for_game(player_i, player_o, game_round, matchup.num_games, colour_rule)
     round_callbacks = matchup_callbacks.for_round(matchup.game, matchup.i, matchup.o, game_round, game_callbacks)
-    game_tracker = await engine.play(player_pair, game_callbacks=round_callbacks, game_round=game_round)
+    game_tracker = await engine.play(player_pair, game_callbacks=round_callbacks, game_round=game_round, seed=result_tracker.game_seed(game_round))
 
     result_tracker.record_game(game_round, game_tracker)
     matchup_callbacks.on_round_complete(matchup.game, matchup.i, matchup.o, game_round)
@@ -78,6 +78,7 @@ def _open_matchup(
     path_builder: ExperimentPathBuilder | None,
     experiment: str | None,
     save_on_record: bool,
+    seed: int | None,
 ) -> tuple[ResultTracker, MatchupCallbacks]:
     matchup_callbacks = matchup_callbacks if matchup_callbacks is not None else MatchupCallbacks()
     experiment = experiment if experiment is not None else f"run_{uuid.uuid4().hex}"
@@ -92,7 +93,9 @@ def _open_matchup(
         op.registry,
         path_builder=path_builder,
         save_on_record=save_on_record,
+        seed=seed,
     )
+    result_tracker.check_seed()
     result_tracker.load_if_exists()
     matchup_callbacks.on_matchup_start(result_tracker, matchup.game, matchup.i, matchup.o)
     return result_tracker, matchup_callbacks
@@ -109,8 +112,9 @@ async def run_matchup_concurrent(
     player_builder: PlayerBuilder | None = None,
     max_concurrent: int | None = None,
     colour_rule: ColourRule = first_starts,
+    seed: int | None = None,
 ) -> ResultTracker:
-    result_tracker, matchup_callbacks = _open_matchup(op, matchup, matchup_callbacks, path_builder, experiment, save_on_record)
+    result_tracker, matchup_callbacks = _open_matchup(op, matchup, matchup_callbacks, path_builder, experiment, save_on_record, seed)
 
     if result_tracker.is_complete():
         matchup_callbacks.on_matchup_end(result_tracker)
@@ -140,8 +144,9 @@ async def run_matchup_sequential(
     player_builder: PlayerBuilder | None = None,
     after_game: AfterGame | None = None,
     colour_rule: ColourRule = first_starts,
+    seed: int | None = None,
 ) -> ResultTracker:
-    result_tracker, matchup_callbacks = _open_matchup(op, matchup, matchup_callbacks, path_builder, experiment, save_on_record)
+    result_tracker, matchup_callbacks = _open_matchup(op, matchup, matchup_callbacks, path_builder, experiment, save_on_record, seed)
 
     for game_round in range(1, matchup.num_games + 1):
         game = await play_round(op, matchup, game_round, result_tracker, game_callbacks, matchup_callbacks, player_builder, colour_rule)

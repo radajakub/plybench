@@ -61,6 +61,7 @@ def add_source_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--players", nargs="+", metavar="CONFIG", help="player config strings")
     parser.add_argument("--opponents", nargs="+", metavar="CONFIG", help="opponent config strings")
     parser.add_argument("--num-games", type=int, default=2, help="rounds per matchup (inline only; default 2)")
+    parser.add_argument("--seed", type=int, help="base seed of every game's seed (inline only; an experiment file sets its own; default: unseeded)")
 
 
 def benchmark_from_args(op: PlyBench, args: argparse.Namespace) -> Benchmark:
@@ -69,7 +70,7 @@ def benchmark_from_args(op: PlyBench, args: argparse.Namespace) -> Benchmark:
         return Benchmark.load_experiment(op, args.experiment, game_override=args.games, player_override=args.players, opponent_override=args.opponents)
     if not (args.games and args.players and args.opponents):
         raise SystemExit("provide --experiment, or all of --games / --players / --opponents (+ optional --num-games)")
-    return Benchmark(args.name or "benchmark", op, args.games, args.players, args.opponents, args.num_games)
+    return Benchmark(args.name or "benchmark", op, args.games, args.players, args.opponents, args.num_games, seed=args.seed)
 
 
 def add_training_source_args(parser: argparse.ArgumentParser) -> None:
@@ -81,6 +82,7 @@ def add_training_source_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--testers", nargs="+", metavar="CONFIG", help="opponent config strings for the evaluation phases")
     parser.add_argument("--schedules", nargs="+", metavar="CONFIG", help="schedules, e.g. num_epochs=10,num_training_games=50,num_test_games=50")
     parser.add_argument("--replicates", type=int, default=1, help="independent repeats of each run (inline only; default 1)")
+    parser.add_argument("--seed", type=int, help="base seed of every game's seed (inline only; an experiment file sets its own; default: unseeded)")
 
 
 def training_from_args(op: PlyBench, args: argparse.Namespace) -> TrainingHarness:
@@ -98,7 +100,7 @@ def training_from_args(op: PlyBench, args: argparse.Namespace) -> TrainingHarnes
         )
     if not (args.games and args.trainees and args.trainers and args.testers and args.schedules):
         raise SystemExit("provide --experiment, or all of --games / --trainees / --trainers / --testers / --schedules (+ optional --replicates)")
-    return TrainingHarness(args.name or "training", op, args.games, args.trainees, args.trainers, args.testers, args.schedules, args.replicates)
+    return TrainingHarness(args.name or "training", op, args.games, args.trainees, args.trainers, args.testers, args.schedules, args.replicates, seed=args.seed)
 
 
 def discover_matchups(op: PlyBench, experiment: str, game_str: str, paths: BenchmarkPathBuilder) -> tuple[set[str], set[str], int]:

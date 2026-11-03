@@ -30,6 +30,9 @@ class StoryMagicSquareTransformer(InterfaceTransformer[TicTacToeAction, TicTacTo
     def reset(self) -> None:
         self.square = self.ms_gen.new()
 
+    def seed(self, seed: int) -> None:
+        self.ms_gen.seed(seed)
+
     def _inner_llm_action(self, action: TicTacToeAction) -> str:
         return f"jump:{self.square(action.row, action.col)}"
 

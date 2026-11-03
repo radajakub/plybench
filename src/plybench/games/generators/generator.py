@@ -13,6 +13,9 @@ class InstanceGenerator(Generic[GameInstanceT], ABC):
         self.should_sample = sample
         self.generator = np.random.default_rng()
 
+    def seed(self, seed: int) -> None:
+        self.generator = np.random.default_rng(seed)
+
     def new(self) -> GameInstanceT:
         return self.sample() if self.should_sample else self.get_normal()
 

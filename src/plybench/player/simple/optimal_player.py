@@ -4,8 +4,6 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import cast
 
-import numpy as np
-
 from plybench.common.paths import MinimaxPathBuilder
 from plybench.configs.player_config import PlayerConfig
 from plybench.configs.player_params import PlayerParams
@@ -77,10 +75,10 @@ class OptimalPlayer(Player, Judgeable):
     async def __call__(self, game: TurnBasedGame, observation: InterfaceObservation, legal_moves: list[InterfaceAction]) -> PlayerOutput:
         optimal_numbers = self._verdict(game.get_player(), observation.os_observation.state).A()
 
-        if np.random.rand() < self._params.eps:
-            return PlayerOutput(action=legal_moves[int(np.random.choice(len(legal_moves)))])
+        if self.rng.random() < self._params.eps:
+            return PlayerOutput(action=legal_moves[int(self.rng.choice(len(legal_moves)))])
 
-        number = int(np.random.choice(optimal_numbers)) if self._params.stochastic else optimal_numbers[0]
+        number = int(self.rng.choice(optimal_numbers)) if self._params.stochastic else optimal_numbers[0]
 
         action = next((move for move in legal_moves if move.number == number), None)
 

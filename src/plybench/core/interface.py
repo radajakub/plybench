@@ -67,6 +67,10 @@ class InterfaceTransformer(ABC, Generic[ActionT, ObservationT, StateArgs]):
     def reset(self) -> None:
         raise NotImplementedError
 
+    def seed(self, seed: int) -> None:
+        # a transformer that samples its instance on reset seeds its generator here; the others have nothing to seed
+        pass
+
     @abstractmethod
     def get_other_params(self) -> dict[str, Any] | None:
         raise NotImplementedError

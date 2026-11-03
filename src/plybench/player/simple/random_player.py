@@ -61,7 +61,7 @@ class RandomPlayer(Player):
         if len(legal_moves) == 0:
             return PlayerOutput(action=None)
 
-        index = int(np.random.choice(len(legal_moves), p=self._probs(legal_moves)))
+        index = int(self.rng.choice(len(legal_moves), p=self._probs(legal_moves)))
 
         return PlayerOutput(action=legal_moves[index])
 

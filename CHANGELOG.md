@@ -12,9 +12,27 @@ All notable changes to this project are documented in this file. The format is b
   recorded as the model's), usable by any player that holds an LLM, with optional `context` placed
   between the state and the legal moves. `LLMPlayer.__call__` makes its moves through it; its prompts
   and records are unchanged.
+- Seeding. An experiment may set a base `seed` (benchmark and training JSON, `--seed` inline); without one, as
+  before, it runs unseeded. Each game's seed is derived from it and the game's record path, so a replayed round gets
+  its seed back and every other game another (`ResultTracker.game_seed`). `TurnBasedEngine.play(..., seed=...)`
+  seeds the sampled instance (nim, magic squares) and each player, each from its own stream: `Player.rng`, set by
+  `Player.seed(...)`. The `random`, `optimal` and `mcts` players draw from it, and in a seeded game the `llm` player
+  draws one seed per move for its LLM call (`LLMPlayer.move(..., seed=...)`); an unseeded game sends none. Records:
+  `GameTracker.seed`, `GameStep.llm_seed` (the seed the provider took, `None` if it takes none), and the base seed
+  in `metadata.json` and the training `run.json`. Continuing a matchup under another base seed is refused; loading
+  results needs no seed. A matchup is seeded throughout or not at all: one recorded without a seed (before seeding)
+  plays its missing games unseeded, with a warning, and its metadata keeps no seed.
+- `GameEnding.serialized_state`: the state the game ended in (terminal, or the one a failed move left), so the
+  last position can be rebuilt in any format, like every step's. `None` in older records.
+- A directory named after configs (matchup, run, test phase) that is longer than 255 bytes is refused with a
+  `ValueError` naming it, instead of an `OSError` during the run.
 
 ### Changed
 
+- Requires `plyllm>=1.5.0` (the per-call seed).
+- The `random`, `optimal` (`eps`, `stochastic`) and `mcts` players and the sampled instances no longer draw from
+  numpy's global or unseeded streams, so their draws differ from earlier runs. Earlier results stay valid; they
+  were not reproducible before either.
 - **Breaking:** `LearnablePlayer.train()` / `.eval()` and the `training` attribute are replaced by
   `set_mode(Mode.TRAIN | Mode.EVAL)` with the properties `mode` and `is_training`; `Mode` is in
   `plybench.common.enums`. A learner is still built in `Mode.EVAL`.

@@ -11,6 +11,13 @@ DEFAULT_OPPONENT = "optimal:stochastic=True"
 DEFAULT_COLOUR_RULE = "first_starts"
 
 
+def parse_seed(data: dict[str, Any]) -> int | None:
+    # the base seed of an experiment, from which each game's seed is derived with the game's record path; an
+    # experiment without one (absent or null) is unseeded
+    seed = data.get("seed")
+    return None if seed is None else int(seed)
+
+
 @dataclass(frozen=True, eq=True)
 class BenchmarkConfig(Serializable):
     game_configs: list[ToggleItem]
@@ -18,6 +25,7 @@ class BenchmarkConfig(Serializable):
     opponent_configs: list[ToggleItem]
     num_games: int
     colour_rule: str = DEFAULT_COLOUR_RULE
+    seed: int | None = None
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> BenchmarkConfig:
@@ -27,6 +35,7 @@ class BenchmarkConfig(Serializable):
             cls._parse_opponents(data),
             int(data["num_games"]),
             str(data.get("colour_rule", DEFAULT_COLOUR_RULE)),
+            parse_seed(data),
         )
 
     @staticmethod
@@ -53,4 +62,5 @@ class BenchmarkConfig(Serializable):
             "opponents": [item.to_dict() for item in self.opponent_configs],
             "num_games": self.num_games,
             "colour_rule": self.colour_rule,
+            "seed": self.seed,
         }

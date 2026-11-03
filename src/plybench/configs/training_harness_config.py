@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from plybench.common.serializable import Serializable
+from plybench.configs.benchmark_config import parse_seed
 from plybench.configs.toggle_item import ToggleItem
 
 
@@ -15,6 +16,7 @@ class TrainingHarnessConfig(Serializable):
     tester_configs: list[ToggleItem]
     training_configs: list[ToggleItem]
     num_replicates: int
+    seed: int | None = None
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> TrainingHarnessConfig:
@@ -25,6 +27,7 @@ class TrainingHarnessConfig(Serializable):
             [ToggleItem.from_dict(tester_config) for tester_config in data["testers"]],
             [ToggleItem.from_dict(training_config) for training_config in data["training_configs"]],
             int(data["num_replicates"]),
+            parse_seed(data),
         )
 
     def get_game_configs(self) -> list[str]:
@@ -50,4 +53,5 @@ class TrainingHarnessConfig(Serializable):
             "testers": [item.to_dict() for item in self.tester_configs],
             "training_configs": [item.to_dict() for item in self.training_configs],
             "num_replicates": self.num_replicates,
+            "seed": self.seed,
         }

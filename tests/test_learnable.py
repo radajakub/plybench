@@ -198,3 +198,12 @@ def test_a_game_that_teaches_nothing_is_cached_and_not_committed(harness):
     state = _state(harness, EPOCHS)
     assert state["commits"] == EPOCHS * (GAMES - 1)
     assert state["total"] == pytest.approx(sum(_cached(harness)))
+
+
+def test_an_update_that_does_not_load_back_unchanged_is_refused_before_it_is_cached(harness, monkeypatch):
+    # stores the update rounded, so a resumed epoch would commit something else than this one did
+    monkeypatch.setattr(_Stub, "save_update", lambda self, update, directory: (directory / "update.json").write_text(json.dumps(round(update, 2))))
+
+    with pytest.raises(ValueError, match="load_update does not give back"):
+        _run(harness)
+    assert not (_learner_dir(harness, 1) / "game_1").exists()

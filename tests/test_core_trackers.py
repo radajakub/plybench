@@ -4,8 +4,9 @@ and GameTracker round-trip. Uses an instance-scoped Registry (no globals)."""
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Never
+from typing import Any, Never
 
+import numpy as np
 import pytest
 
 from plybench.common.enums import GameResults, MoveFailure
@@ -43,6 +44,12 @@ class _LLMTracker(PlayerTracker):
         return {"reasoning_trace": player_output.reasoning_trace} if player_output.reasoning_trace else {}
 
 
+class _PassThroughTracker(PlayerTracker):
+    # records whatever the player put in its data, as an agent's tracker may
+    def record(self, player_output: PlayerOutput) -> dict:
+        return dict(player_output.data or {})
+
+
 class _StubLLMAction(InterfaceAction):
     def __init__(self, string: str) -> None:
         self._string = string
@@ -78,6 +85,7 @@ registry = Registry()
 # build is unused in these tests (they drive GameTracker directly).
 registry.register_player(PlayerSpec("stub", _StubParams, _unused_builder))
 registry.register_player(PlayerSpec("ai", _StubParams, _unused_builder, tracker=_LLMTracker()))
+registry.register_player(PlayerSpec("agent", _StubParams, _unused_builder, tracker=_PassThroughTracker()))
 
 
 # --- tests -----------------------------------------------------------------------------------
@@ -183,3 +191,23 @@ def test_game_tracker_round_trip():
 def test_player_config_requires_registered_key():
     with pytest.raises(ValueError):
         registry.player_config("unregistered:foo")
+
+
+@pytest.mark.parametrize("data", [{"pair": (1, 2)}, {"counts": {3: 1}}, {"n": np.int64(3)}, {"empty": float("nan")}])
+def test_step_data_that_json_would_change_is_refused_when_the_move_is_recorded(data: dict[str, Any]):
+    agent = PlayerConfig("agent", _StubParams("i"))
+    tracker = GameTracker(1, agent, PlayerConfig("stub", _StubParams("o")), {})
+
+    with pytest.raises(ValueError, match="step data recorded for agent"):
+        tracker.add_move(agent, _StubObservation(), PlayerOutput(action=_StubLLMAction("<a>"), data=data), "STATE", registry)
+    assert tracker.steps == []
+
+
+def test_step_data_of_plain_json_types_is_recorded():
+    agent = PlayerConfig("agent", _StubParams("i"))
+    tracker = GameTracker(1, agent, PlayerConfig("stub", _StubParams("o")), {})
+    data = {"key": "x..", "context": None, "counts": {"a1": 2}, "random": False, "path": [1, 2.5]}
+
+    tracker.add_move(agent, _StubObservation(), PlayerOutput(action=_StubLLMAction("<a>"), data=data), "STATE", registry)
+
+    assert tracker.steps[-1].data == data

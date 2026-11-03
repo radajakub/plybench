@@ -106,6 +106,9 @@ class LearnablePlayer[U](Player, ABC):
             (staged / LearnablePlayer._NO_UPDATE).touch()
         else:
             self.save_update(update, staged)
+            # a resumed epoch commits what load_update reads, so it must be what was proposed; checked before it is cached
+            if self.load_update(staged) != update:
+                raise ValueError(f"{self}: load_update does not give back the update save_update stored; store all of it, as a type that compares by content (e.g. a dataclass)")
         os.replace(staged, directory)
         return update
 

@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from plybench.common.enums import GameResults, MoveFailure
-from plybench.common.serializable import Serializable
+from plybench.common.serializable import Serializable, require_json_round_trip
 from plybench.configs.parser import ConfigParser
 from plybench.configs.player_config import PlayerConfig
 from plybench.core.interface import InterfaceObservation
@@ -163,6 +163,8 @@ class GameTracker(Serializable[[ConfigParser]]):
         # tokens are benchmark-trackable and recorded generically from the player output;
         # the player's registered tracker (if any) contributes the player-specific `data` extras.
         data = trackers.player_tracker(player.key).record(player_output) if trackers is not None else {}
+        # a learner's propose reads this from the stored record on a resume, so it must be what the record will hold
+        require_json_round_trip(data, f"The step data recorded for {player.key}")
 
         self.steps.append(
             GameStep(

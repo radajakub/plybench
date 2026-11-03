@@ -6,6 +6,8 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+## [4.0.1] - 2026-11-03
+
 ### Added
 
 - `load_or_solve(game)` (`core/minimax.py`): the solved values of a game (`AVQCache`), read from the minimax cache, or

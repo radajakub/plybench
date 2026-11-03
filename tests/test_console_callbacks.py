@@ -9,7 +9,7 @@ import pytest
 from plyllm import LLMConfig
 
 from plybench.app import PlyBench
-from plybench.callbacks.console_callbacks import console_benchmark_callbacks
+from plybench.callbacks.console_callbacks import console_benchmark_callbacks, console_training_callbacks
 from plybench.configs.matchup import Matchup
 from plybench.harness.matchup import run_matchup_concurrent
 from plybench.utils.text import compress_ranges
@@ -52,3 +52,11 @@ def test_console_status_lines(tmp_path, monkeypatch, capsys):
     resumed = capsys.readouterr().out
     assert "start tic_tac_toe: random_uniform vs random_normal (3/3)" in resumed
     assert "done" in resumed and "queued" not in resumed
+
+
+def test_quiet_training_callbacks_report_phases_and_checkpoints_but_not_games():
+    quiet, full = console_training_callbacks(progress=False), console_training_callbacks()
+    for name in ("phase_start_callback", "round_start_callback", "round_complete_callback", "move_complete_callback"):
+        assert getattr(quiet, name) is None and getattr(full, name) is not None
+    for name in ("training_start_callback", "run_start_callback", "phase_end_callback", "checkpoint_callback", "run_end_callback", "training_end_callback"):
+        assert getattr(quiet, name) is not None

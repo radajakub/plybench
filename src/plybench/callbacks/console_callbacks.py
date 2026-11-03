@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 from plybench.callbacks.benchmark_callbacks import BenchmarkCallbacks
@@ -112,9 +112,10 @@ def _outcomes(result_tracker: ResultTracker) -> str:
     return ", ".join(f"{name}={count}" for name, count in sorted(counts.items()))
 
 
-def console_training_callbacks() -> TrainingCallbacks:
+def console_training_callbacks(progress: bool = True) -> TrainingCallbacks:
     # the same running done/total the benchmark prints, keyed by phase instead of matchup: a phase is
-    # one epoch's train or test-vs-one-tester, and its label carries the coordinates a matchup has no room for
+    # one epoch's train or test-vs-one-tester, and its label carries the coordinates a matchup has no room for.
+    # Without progress only the outcomes of each phase, the checkpoints and the run boundaries print, not every game
     phases: dict[PhaseKey, _MatchupProgress] = {}
 
     def key(phase: EpochPhase) -> PhaseKey:
@@ -171,14 +172,19 @@ def console_training_callbacks() -> TrainingCallbacks:
     def on_training_end(results: TrainingResults) -> None:
         print(f"[training] done: {len(results.epochs)} epoch(s) across {len(results.runs)} run(s)")
 
-    return TrainingCallbacks(
+    summary = TrainingCallbacks(
         training_start_callback=on_training_start,
         training_end_callback=on_training_end,
         run_start_callback=on_run_start,
         run_end_callback=on_run_end,
         checkpoint_callback=on_checkpoint,
-        phase_start_callback=on_phase_start,
         phase_end_callback=on_phase_end,
+    )
+    if not progress:
+        return summary
+    return replace(
+        summary,
+        phase_start_callback=on_phase_start,
         round_start_callback=on_round_start,
         round_complete_callback=on_round_complete,
         move_complete_callback=on_move_complete,

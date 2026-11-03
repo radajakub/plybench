@@ -6,6 +6,11 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+### Added
+
+- `scripts/train.py --quiet`: prints only each phase's outcomes, the checkpoints and the run boundaries, not the progress of
+  every game (`console_training_callbacks(progress=False)`).
+
 ## [4.0.1] - 2026-11-03
 
 ### Added

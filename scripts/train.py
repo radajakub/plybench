@@ -89,6 +89,7 @@ def main() -> None:
     parser.add_argument("--runs-concurrency", type=int, help="max runs in flight at once (default: all of them)")
     parser.add_argument("--metric", type=str, default=MetricName.WIN_RATE.value, choices=[name.value for name in MetricName], help="metric to print the learning curve on")
     parser.add_argument("--notify", action="store_true", help="push a notification on each epoch end, a final summary, and on failure (needs NTFY_URL and NTFY_TOPIC)")
+    parser.add_argument("--quiet", action="store_true", help="print only each phase's outcomes and the checkpoints, not the progress of every game")
     args = parser.parse_args()
 
     # None leaves each provider at its own default (Metacentrum takes fewer parallel calls than the rest)
@@ -98,7 +99,7 @@ def main() -> None:
     op = build_op(concurrency=concurrency)
     harness = training_from_args(op, args)
 
-    callbacks = console_training_callbacks()
+    callbacks = console_training_callbacks(progress=not args.quiet)
     notify: AbstractContextManager[object] = nullcontext()
     if args.notify:
         warn_if_unconfigured()

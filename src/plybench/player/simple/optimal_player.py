@@ -4,12 +4,11 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import cast
 
-from plybench.common.paths import MinimaxPathBuilder
 from plybench.configs.player_config import PlayerConfig
 from plybench.configs.player_params import PlayerParams
 from plybench.core.game import TurnBasedGame
 from plybench.core.interface import InterfaceAction, InterfaceObservation
-from plybench.core.minimax import AVQ, AVQCache, solve_game
+from plybench.core.minimax import AVQ, AVQCache, load_or_solve
 from plybench.core.prompt_adapter import PromptAdapter
 from plybench.player.player import Player, PlayerIdentifier, PlayerOutput
 from plybench.utils.text import extract_params, to_bool
@@ -51,16 +50,8 @@ class OptimalPlayer(Player, Judgeable):
 
         self._cache: AVQCache | None = None
 
-        self._path_builder = MinimaxPathBuilder()
-
     def initialize_policy(self, game: TurnBasedGame, prompt_adapter_template: PromptAdapter) -> None:
-        # load the solved value cache from disk, or solve the game and persist it
-        path = self._path_builder.cache(game.game_name, game.params)
-        if path.exists():
-            self._cache = AVQCache.load(str(path))
-        else:
-            self._cache = solve_game(game)
-            self._cache.save(str(path))
+        self._cache = load_or_solve(game)
 
     def _verdict(self, player: int, os_state: str) -> AVQ:
         assert self._cache is not None, "Optimal policy not initialized"

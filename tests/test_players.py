@@ -14,6 +14,8 @@ from plyllm.response import OutputText, ReasoningTrace
 
 from plybench.app import PlyBench
 from plybench.common.enums import GameResults, MoveFailure, ObservationType
+from plybench.common.paths import MinimaxPathBuilder
+from plybench.core.minimax import load_or_solve
 from plybench.player.llm_player import _BLOCK_RETRIES, LLMPlayer, LLMPlayerTracker
 from plybench.player.output_strategies import StructuredOutputStrategy
 from plybench.player.player import PlayerOutput
@@ -86,6 +88,17 @@ def test_optimal_never_loses_to_random(tmp_path, monkeypatch):
     tracker = _play(optimal.to_string(), "random:distribution=uniform")
     # optimal is the i-player; against a random opponent it must never lose on tic-tac-toe
     assert tracker.get_result(optimal) in {GameResults.WIN, GameResults.DRAW}
+
+
+def test_load_or_solve_solves_once_and_then_reads_the_cache(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    game = _tic_tac_toe().game
+    path = MinimaxPathBuilder().cache(game.game_name, game.params)
+    assert not path.exists()
+
+    solved = load_or_solve(game)
+    assert path.exists()
+    assert load_or_solve(game).to_dict() == solved.to_dict()
 
 
 # --- LLM player with a stub LLM --------------------------------------------------------------

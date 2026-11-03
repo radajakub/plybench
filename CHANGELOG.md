@@ -6,6 +6,12 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+### Added
+
+- `load_or_solve(game)` (`core/minimax.py`): the solved values of a game (`AVQCache`), read from the minimax cache, or
+  solved and saved there on first use. The `optimal` player loads its values through it (behaviour unchanged), and an
+  agent outside plybench can read V\* and Q\* the same way.
+
 ## [4.0.0] - 2026-11-03
 
 ### Added

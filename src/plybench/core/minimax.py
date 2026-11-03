@@ -7,6 +7,7 @@ from typing import Any
 import pyspiel as sp
 
 from plybench.common.enums import StateClass
+from plybench.common.paths import MinimaxPathBuilder
 from plybench.common.serializable import Saveable, Serializable
 from plybench.core.game import TurnBasedGame, TurnBasedState
 
@@ -81,6 +82,17 @@ def solve_game(game: TurnBasedGame) -> AVQCache:
     state = game.state.clone()
     cache = AVQCache()
     _minimax(state, cache)
+    return cache
+
+
+def load_or_solve(game: TurnBasedGame) -> AVQCache:
+    # the solved values of a game, read from the minimax cache, or solved and saved there on first use; shared by the optimal
+    # player and any agent that needs the solution (e.g. an oracle critic in plyagents)
+    path = MinimaxPathBuilder().cache(game.game_name, game.params)
+    if path.exists():
+        return AVQCache.load(str(path))
+    cache = solve_game(game)
+    cache.save(str(path))
     return cache
 
 

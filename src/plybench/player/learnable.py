@@ -12,42 +12,6 @@ from plybench.trackers.game_tracker import GameTracker
 
 
 class LearnablePlayer(Player, ABC):
-    """A player the training harness improves, with a PyTorch-style mode switch.
-
-    In TRAIN mode everything is open -- memory, prompts, weights -- and the harness hands the learner
-    each trajectory the moment its game ends, then the whole epoch's trajectories once the phase is
-    over, so a learner picks its own granularity. Training games are therefore played one at a time,
-    by this one instance, in round order. In EVAL mode nothing may change: `observe`/`update` refuse
-    to run, the checkpoint is fixed, and the harness plays the evaluation games in parallel.
-
-    A player is built in EVAL mode -- only a training phase turns learning on -- so every player the
-    benchmark or an evaluation phase builds is frozen by construction.
-
-    CHECKPOINTS travel in the params (hence `CheckpointedParams`), so a trained artifact is an
-    ordinary player config that the benchmark can play afterwards and that every result records.
-    `save_checkpoint` writes a directory and `load_checkpoint` reads one back; the config says which
-    directory and this class decides when. `restore` is idempotent and applied once per instance, not
-    once per game: a training phase plays all of its games on one player, which must keep what the
-    epoch has learned so far rather than reverting to the checkpoint it started from.
-
-    INVARIANT -- `_observe` and `_update` must be functions of (current state, the records they are
-    handed, in order) and of nothing else. The harness resumes an interrupted epoch by replaying its
-    already-recorded games through `_observe` before playing what is missing, so a resumed epoch must
-    land on the checkpoint an uninterrupted one would. Two things follow: never mutate learned state
-    from `__call__` (eval-mode play would drift, and the drift would not survive a replay), and never
-    reach for anything outside the records -- wall-clock, process state, a `GameCallbacks` hook.
-
-    A derivation that is itself sampled -- an LLM judging or summarising the trajectory, say -- breaks
-    that equality on its own, because replaying a record re-rolls the sample. Such a learner must cache
-    what it derived per game under `workdir`, keyed by the record's `game_round`, and reuse the cached
-    value on a replay. `workdir` is this epoch's own directory and survives the interruption, which the
-    epoch's checkpoint by definition does not; caching there also spares an interrupted epoch from
-    paying for the derivation twice. Both hooks are async, so the derivation may call out to a model.
-
-    `_initialize_policy` is called once per game, on this same instance; it must reset per-game
-    scratch without touching what the epoch has learned.
-    """
-
     def __init__(self, player_config: PlayerConfig, identifier: PlayerIdentifier) -> None:
         super().__init__(player_config, identifier)
         params = player_config.params

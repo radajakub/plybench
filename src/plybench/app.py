@@ -4,6 +4,7 @@ from plyllm import LLM, LLMConfig
 
 from plybench.games.builtins import register_builtin_games
 from plybench.player.builtins import register_builtin_players
+from plybench.player.plugins import register_plugin_players
 from plybench.registry import Registry
 
 # sent to the providers that route by a prompt cache key (OpenAI, Grok, Mistral); kept from before the LLM
@@ -24,6 +25,8 @@ class PlyBench:
 
         register_builtin_games(self._registry)
         register_builtin_players(self._registry, self._llm)
+        # players of installed packages (e.g. plyagents), after the builtins so they cannot take a builtin's key
+        register_plugin_players(self._registry, self._llm)
 
     @property
     def registry(self) -> Registry:

@@ -11,8 +11,10 @@ never written down -> lower bound on the count itself).
 
 from __future__ import annotations
 
+import json
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import TypeVar
 
 from plyllm import LLM, LLMTokens, ModelConfig
@@ -21,8 +23,10 @@ from plybench.common.progress import track
 from plybench.configs.game_config import GameConfig
 from plybench.configs.player_config import PlayerConfig
 from plybench.harness.benchmark.results import BenchmarkResults
+from plybench.player.learnable import LEARNER_CALLS
 from plybench.player.llm_player import LLMParams, options_to_string
 from plybench.trackers.game_tracker import GameTracker
+from plybench.trackers.llm_call import LLMCall
 from plybench.trackers.result_tracker import ResultTracker
 
 K = TypeVar("K")
@@ -117,3 +121,32 @@ def entry_cost(llm: LLM, usage: MatchupUsage) -> float | None:
 def total_cost(llm: LLM, usages: Iterable[MatchupUsage]) -> tuple[float, int]:
     costs = [entry_cost(llm, usage) for usage in usages]
     return sum(cost for cost in costs if cost is not None), sum(cost is None for cost in costs)
+
+
+# --- learning: the calls a learner made in its proposals, outside the games ------------------------------------------------
+def learning_calls(learner_dir: Path) -> list[LLMCall]:
+    # one epoch's calls, as its update cache stores them next to each update (LearnablePlayer.record_call); none for a learner
+    # that makes no calls, or an epoch that did not train
+    return [LLMCall.from_dict(call) for path in sorted(learner_dir.glob(f"*/{LEARNER_CALLS}")) for call in json.loads(path.read_text())]
+
+
+def calls_usage(calls: Iterable[LLMCall]) -> dict[str, TokenUsage]:
+    # per role, e.g. how much of learning went to the critic and how much to the feedback model
+    usage: dict[str, TokenUsage] = {}
+    for call in calls:
+        usage[call.role] = usage.get(call.role, TokenUsage()) + TokenUsage(call.tokens, 1)
+    return usage
+
+
+def calls_cost(llm: LLM, calls: Iterable[LLMCall]) -> tuple[float, int]:
+    # USD over the calls that can be priced, and how many could not (a provider not configured here, or a model without a price)
+    cost, unpriced = 0.0, 0
+    for call in calls:
+        model = call.model_config
+        try:
+            if model is None or model.provider not in llm.available_providers:
+                raise ValueError(f"{call.provider} is not configured")
+            cost += llm.calculate_cost(model, call.tokens)
+        except ValueError:
+            unpriced += 1
+    return cost, unpriced

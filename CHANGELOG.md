@@ -31,10 +31,15 @@ All notable changes to this project are documented in this file. The format is b
   llm)` function in the `plybench.players` entry point group (e.g. plyagents), after the builtins. So the scripts can
   run those players and read their results. A plugin that fails to load stops `PlyBench()` with its name; one that
   takes a key already registered is refused.
-- Moves of several LLM calls: `LLMCall` (`plybench.trackers.llm_call`) records one call (role, model, messages,
-  reasoning, output, tokens, seed, failure). A player adds each with `PlayerOutput.add_call(...)`, which keeps the
+- Moves of several LLM calls: `LLMCall` (`plybench.trackers.llm_call`) records one call (role, provider, model
+  alias and vendor id, messages, reasoning, output, tokens, seed, failure). A player adds each with `PlayerOutput.add_call(...)`, which keeps the
   token fields the move's totals; the step stores them as `GameStep.calls`, and the usage analysis counts them as
   calls. A move of one call (the `llm` player) records as before.
+- The cost of learning: a learner reports each LLM call of `propose` / `propose_epoch` with
+  `LearnablePlayer.record_call(...)` (legal only there), and the calls are stored next to the update in
+  `learner/<game_<round> | epoch>/llm_calls.json`, also for a proposal that taught nothing. `analysis.usage` reads them
+  (`learning_calls`) and sums them per role (`calls_usage`) and in USD (`calls_cost`); `scripts/train.py` prints them
+  per epoch after the learning curve.
 - `GameEnding.serialized_state`: the state the game ended in (terminal, or the one a failed move left), so the
   last position can be rebuilt in any format, like every step's. `None` in older records.
 - A directory named after configs (matchup, run, test phase) that is longer than 255 bytes is refused with a

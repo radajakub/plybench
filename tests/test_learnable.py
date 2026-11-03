@@ -12,8 +12,9 @@ from pathlib import Path
 from typing import ClassVar
 
 import pytest
-from plyllm import LLMConfig
+from plyllm import LLM, LLMConfig, OpenAIProviderConfig
 
+from plybench.analysis.usage import calls_cost, calls_usage, learning_calls
 from plybench.app import PlyBench
 from plybench.common.enums import Mode
 from plybench.configs.player_config import PlayerConfig
@@ -23,6 +24,7 @@ from plybench.player.learnable import LearnablePlayer
 from plybench.player.player import PlayerOutput
 from plybench.player.spec import PlayerSpec
 from plybench.trackers.game_tracker import GameTracker
+from plybench.trackers.llm_call import LLMCall
 
 EPOCHS, GAMES = 2, 4
 
@@ -85,6 +87,8 @@ class _Stub(LearnablePlayer[float]):
             raise _Interrupted
         assert self.workdir is not None
         _Stub.proposed.append((self.workdir.parent.name, game.game_round))
+        # one LLM call per proposal, as a learner that judges the game would make, a game that teaches nothing included
+        self.record_call(LLMCall("judge", "openai", "gpt-5.4", "gpt-5.4-2026", "system", f"game {game.game_round}", "", "lesson", 100, 20, 5))
         return None if game.game_round in _Stub.nothing_at else random.random()
 
     def commit(self, update: float) -> None:
@@ -207,3 +211,33 @@ def test_an_update_that_does_not_load_back_unchanged_is_refused_before_it_is_cac
     with pytest.raises(ValueError, match="load_update does not give back"):
         _run(harness)
     assert not (_learner_dir(harness, 1) / "game_1").exists()
+
+
+def test_the_calls_of_each_proposal_are_stored_with_it_and_kept_across_a_resume(harness):
+    _Stub.nothing_at, _Stub.fail_at = {2}, 3
+    with pytest.raises(_Interrupted):
+        _run(harness)
+    _run(harness)
+
+    # one call per training game, the one that taught nothing included, and none twice after the resume
+    for epoch in range(1, EPOCHS + 1):
+        calls = learning_calls(_learner_dir(harness, epoch))
+        assert sorted(call.prompt_message for call in calls) == sorted(f"game {r}" for r in range(1, GAMES + 1))
+        assert calls_usage(calls)["judge"].calls == GAMES
+        assert calls_usage(calls)["judge"].tokens.input_tokens == 100 * GAMES
+
+
+def test_learning_calls_are_priced_where_the_provider_is_configured(harness):
+    _run(harness)
+    calls = learning_calls(_learner_dir(harness, 1))
+
+    cost, unpriced = calls_cost(LLM(LLMConfig(openai=OpenAIProviderConfig(api_key="offline"))), calls)
+    assert cost > 0 and unpriced == 0
+    assert calls_cost(LLM(LLMConfig()), calls) == (0.0, GAMES)
+
+
+def test_a_call_cannot_be_recorded_outside_a_proposal():
+    learner = _Stub(PlayerConfig("stub", _StubParams()), "i")
+
+    with pytest.raises(RuntimeError, match="only legal inside propose"):
+        learner.record_call(LLMCall("judge", "openai", "gpt-5.4", "gpt-5.4", "", "", "", "", 0, 0, 0))

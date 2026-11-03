@@ -6,6 +6,8 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+## [4.0.0] - 2026-11-03
+
 ### Added
 
 - `LLMPlayer.move`, a static method: one move of the `llm` player (prompt, call, parse, failed moves

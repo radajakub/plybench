@@ -1764,7 +1764,7 @@ requires-dist = [
     { name = "matplotlib", marker = "extra == 'viz'", specifier = ">=3.10.0" },
     { name = "numpy", specifier = ">=2.5.1" },
     { name = "open-spiel", specifier = ">=2.0.1" },
-    { name = "plyllm", specifier = ">=1.4.1,<2" },
+    { name = "plyllm", specifier = ">=1.5.0,<2" },
     { name = "plyllm", extras = ["all"], marker = "extra == 'all'" },
     { name = "plyllm", extras = ["anthropic"], marker = "extra == 'anthropic'" },
     { name = "plyllm", extras = ["gemini"], marker = "extra == 'gemini'" },
@@ -1791,14 +1791,15 @@ dev = [
 
 [[package]]
 name = "plyllm"
-version = "1.4.1"
+version = "1.5.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "pydantic" },
     { name = "python-dotenv" },
 ]
+sdist = { url = "https://files.pythonhosted.org/packages/c9/80/1d6266f2c9fbf251e2352642546c47e59ef8bc356ac895ffae8283a0886e/plyllm-1.5.0.tar.gz", hash = "sha256:d11e2287404d33cfc1019764a16e6caf6b44396ce8ce132238040f0a122c658e", size = 246398, upload-time = "2026-11-03T08:24:02.728Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/76/0c/3147a5886eecaa616d35ba3e836298bbf16d008b6719597509f19c13f995/plyllm-1.4.1-py3-none-any.whl", hash = "sha256:a2884fb678605cad327178a2a93327ae3992963c33d74aea0ba74a1b25634d10", size = 87846, upload-time = "2026-10-27T17:27:09.144Z" },
+    { url = "https://files.pythonhosted.org/packages/f2/2a/cba858143ab132837882268309254a5659a15fd8823c1ae038d9a3831194/plyllm-1.5.0-py3-none-any.whl", hash = "sha256:88799f512555d5ea6f7fb12f3a80feb3b61bdf7dae0e16eeb7e1cd8266a5c035", size = 88676, upload-time = "2026-11-03T08:24:01.425Z" },
 ]
 
 [package.optional-dependencies]

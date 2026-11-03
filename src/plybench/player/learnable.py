@@ -119,7 +119,9 @@ class LearnablePlayer[U](Player, ABC):
         raise NotImplementedError
 
     # resume rule: a resumed epoch loads the cached updates and commits them again, so it lands on the same state only if everything sampled happens in propose,
-    # commit depends only on the current state and the update, and nothing reads outside the records (wall-clock, process state, callbacks)
+    # commit depends only on the current state and the update, and nothing reads outside the records (wall-clock, process state, callbacks).
+    # Randomness in propose (seeds of its LLM calls, sampling) derives from game.seed (derive_seed(game.seed, role, index)), not from self.rng,
+    # which is seeded per game only when a game is played, not when a resumed epoch replays it
     @abstractmethod
     async def propose(self, game: GameTracker) -> U | None:
         raise NotImplementedError

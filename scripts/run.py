@@ -48,6 +48,7 @@ def main() -> None:
     )
     parser.add_argument("--rounds-concurrency", type=int, help="max concurrent rounds per matchup (default: --concurrency); the provider limit still caps actual requests")
     parser.add_argument("--notify", action="store_true", help="push a notification on each matchup end, a final summary, and on failure (needs NTFY_URL and NTFY_TOPIC)")
+    parser.add_argument("--quiet", action="store_true", help="print only the start and the outcomes of each matchup, not the progress of every game")
     args = parser.parse_args()
 
     # None leaves each provider at its own default (Metacentrum takes fewer parallel calls than the rest)
@@ -57,7 +58,7 @@ def main() -> None:
     op = build_op(concurrency=concurrency)
     benchmark = benchmark_from_args(op, args)
 
-    callbacks = console_benchmark_callbacks()
+    callbacks = console_benchmark_callbacks(progress=not args.quiet)
     notify: AbstractContextManager[object] = nullcontext()
     if args.notify:
         warn_if_unconfigured()

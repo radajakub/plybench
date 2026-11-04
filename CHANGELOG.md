@@ -10,6 +10,8 @@ All notable changes to this project are documented in this file. The format is b
 
 - `scripts/train.py --quiet`: prints only each phase's outcomes, the checkpoints and the run boundaries, not the progress of
   every game (`console_training_callbacks(progress=False)`).
+- `scripts/run.py --quiet`: prints only the start and the outcomes of each matchup (`console_benchmark_callbacks(progress=False)`).
+  The end line of a matchup now carries its outcomes (`win=…, draw=…, loss=…`) in both modes, as a training phase's does.
 
 ### Changed
 

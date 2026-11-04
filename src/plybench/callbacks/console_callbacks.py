@@ -49,9 +49,10 @@ class _MatchupProgress:
         return " · ".join(parts)
 
 
-def console_benchmark_callbacks() -> BenchmarkCallbacks:
+def console_benchmark_callbacks(progress: bool = True) -> BenchmarkCallbacks:
     # per-matchup state so every line shows a running done/total, which rounds are in flight vs waiting,
-    # and how many moves this run has played; already-completed rounds are skipped on resume
+    # and how many moves this run has played; already-completed rounds are skipped on resume.
+    # Without progress only the start and the outcomes of each matchup print, not every game
     matchups: dict[MatchupKey, _MatchupProgress] = {}
 
     def key(game_config: GameConfig, i: PlayerConfig, o: PlayerConfig) -> MatchupKey:
@@ -90,16 +91,14 @@ def console_benchmark_callbacks() -> BenchmarkCallbacks:
 
     def on_matchup_end(result_tracker: ResultTracker) -> None:
         progress = matchups.get((result_tracker.game.path, result_tracker.i.path, result_tracker.o.path))
-        moves = f" ({progress.moves} moves played)" if progress is not None and progress.moves else ""
-        print(f"[benchmark] done {result_tracker.game.path}: {result_tracker.i.path} vs {result_tracker.o.path}{moves}")
+        moves = [f"{progress.moves} moves played"] if progress is not None and progress.moves else []
+        details = "; ".join([_outcomes(result_tracker), *moves])
+        print(f"[benchmark] done {result_tracker.game.path}: {result_tracker.i.path} vs {result_tracker.o.path} ({details})")
 
-    return BenchmarkCallbacks(
-        matchup_start_callback=on_matchup_start,
-        round_start_callback=on_round_start,
-        round_complete_callback=on_round_complete,
-        move_complete_callback=on_move_complete,
-        matchup_end_callback=on_matchup_end,
-    )
+    summary = BenchmarkCallbacks(matchup_start_callback=on_matchup_start, matchup_end_callback=on_matchup_end)
+    if not progress:
+        return summary
+    return replace(summary, round_start_callback=on_round_start, round_complete_callback=on_round_complete, move_complete_callback=on_move_complete)
 
 
 def _outcomes(result_tracker: ResultTracker) -> str:

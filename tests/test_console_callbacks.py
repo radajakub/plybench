@@ -45,6 +45,8 @@ def test_console_status_lines(tmp_path, monkeypatch, capsys):
     assert "0/3 done · playing 1 · queued 2-3 · 0 moves" in out
     assert "3/3 done · " in out
     assert "moves played)" in out
+    # the end line carries the outcomes of the matchup, as a training phase's does
+    assert any(f"{outcome}=" in out for outcome in ("win", "draw", "loss"))
 
     # a completed matchup replays no rounds, so no status line is emitted on resume
     capsys.readouterr()
@@ -60,3 +62,16 @@ def test_quiet_training_callbacks_report_phases_and_checkpoints_but_not_games():
         assert getattr(quiet, name) is None and getattr(full, name) is not None
     for name in ("training_start_callback", "run_start_callback", "phase_end_callback", "checkpoint_callback", "run_end_callback", "training_end_callback"):
         assert getattr(quiet, name) is not None
+
+
+def test_quiet_benchmark_callbacks_print_the_start_and_the_outcomes_only(tmp_path, monkeypatch, capsys):
+    monkeypatch.chdir(tmp_path)
+    game = registry.game_config("tic_tac_toe:")
+    i = registry.player_config("random:distribution=uniform")
+    o = registry.player_config("random:distribution=normal")
+    asyncio.run(run_matchup_concurrent(op, Matchup(game, i, o, 3), matchup_callbacks=console_benchmark_callbacks(progress=False), experiment="exp", max_concurrent=1))
+    lines = capsys.readouterr().out.splitlines()
+
+    assert lines[0] == "[benchmark] start tic_tac_toe: random_uniform vs random_normal (0/3)"
+    assert lines[1].startswith("[benchmark] done tic_tac_toe: random_uniform vs random_normal (") and "moves" not in lines[1]
+    assert len(lines) == 2

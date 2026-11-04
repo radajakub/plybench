@@ -21,6 +21,7 @@ from plybench.player.output_strategies import StructuredOutputStrategy
 from plybench.player.player import PlayerOutput
 from plybench.trackers.game_tracker import GameTracker
 from plybench.trackers.prompt_block import PromptBlock
+from plybench.utils.text import extract_params
 
 # a full registry (games + players); LLMConfig() has no providers so this is fully offline
 op = PlyBench(LLMConfig())
@@ -54,6 +55,13 @@ def _play(i_config: str, o_config: str):
 )
 def test_player_config_round_trips(config_string: str):
     assert registry.player_config(config_string).to_string() == config_string
+
+
+def test_params_split_at_the_first_equals_sign_and_name_a_malformed_one():
+    assert extract_params("checkpoint=results/a=b/c,eps=0.3") == {"checkpoint": "results/a=b/c", "eps": "0.3"}
+    assert extract_params("") == {}
+    with pytest.raises(ValueError, match="expected name=value"):
+        extract_params("stochastic=True,eps")
 
 
 def test_player_paths():

@@ -12,7 +12,16 @@ def to_bool(value: str | bool) -> bool:
 
 
 def extract_params(param_string: str) -> dict[str, str]:
-    return {k: v for k, v in (param.split("=") for param in param_string.split(",") if param)}
+    # name=value pairs separated by commas; a value may itself contain "=" (a path, a model option), so only the first one splits
+    params: dict[str, str] = {}
+    for param in param_string.split(","):
+        if not param:
+            continue
+        name, separator, value = param.partition("=")
+        if not separator:
+            raise ValueError(f"Invalid parameter {param!r} in {param_string!r}; expected name=value")
+        params[name] = value
+    return params
 
 
 def inline_multiline_string(prompt: str) -> str:

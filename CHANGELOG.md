@@ -11,6 +11,11 @@ All notable changes to this project are documented in this file. The format is b
 - `scripts/train.py --quiet`: prints only each phase's outcomes, the checkpoints and the run boundaries, not the progress of
   every game (`console_training_callbacks(progress=False)`).
 
+### Fixed
+
+- `extract_params` splits each parameter at its first `=`, so a value may contain `=` (a path, a model option); a
+  parameter without `=` raises a `ValueError` that names it, instead of an unpacking error.
+
 ## [4.0.1] - 2026-11-03
 
 ### Added

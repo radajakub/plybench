@@ -6,6 +6,8 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+## [4.1.0] - 2026-11-04
+
 ### Added
 
 - `scripts/train.py --quiet`: prints only each phase's outcomes, the checkpoints and the run boundaries, not the progress of

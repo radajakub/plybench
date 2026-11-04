@@ -86,8 +86,10 @@ class TrainingHarness:
     def _testers(self) -> list[PlayerConfig]:
         return [self.op.registry.player_config(tester) for tester in self.tester_configs]
 
-    def _matrix(self) -> list[TrainingRun]:
-        # instead of a tensor of options, just build a flat list of jobs, it's the job's job to write the results correctly
+    @property
+    def runs(self) -> list[TrainingRun]:
+        # every run of the experiment (trainee x trainer x game x schedule x replicate) as a flat list of jobs; each run writes
+        # its own results. Public so scripts and tests can find a run's directories (learner_dir, checkpoint, manifest)
         return [
             TrainingRun(
                 self.op.registry.game_config(game),
@@ -104,12 +106,12 @@ class TrainingHarness:
         ]
 
     async def _run_sync(self, concurrency: int | None, game_callbacks: GameCallbacks | None, training_callbacks: TrainingCallbacks) -> None:
-        for run in self._matrix():
+        for run in self.runs:
             await self.single_run(run, True, concurrency, game_callbacks, training_callbacks)
 
     async def _run_async(self, concurrency: int | None, runs_concurrency: int | None, game_callbacks: GameCallbacks | None, training_callbacks: TrainingCallbacks) -> None:
         # get all the jobs to execute
-        runs = self._matrix()
+        runs = self.runs
         # throttle the number of concurrent runs that can run at a single time
         semaphore = asyncio.Semaphore(runs_concurrency if runs_concurrency is not None else len(runs))
 
@@ -283,7 +285,7 @@ class TrainingHarness:
         return EpochResults(epoch, train, [self._load_phase(epoch.test(tester)) for tester in self._testers()])
 
     def get_results(self, progress: bool | None = None) -> TrainingResults:
-        runs = self._matrix()
+        runs = self.runs
         epochs: list[EpochResults] = []
         for run in track(runs, "Loading results", len(runs), progress):
             epochs.extend(self._load_epoch(Epoch(run, index)) for index in range(run.training_config.num_epochs + 1))

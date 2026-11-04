@@ -11,6 +11,11 @@ All notable changes to this project are documented in this file. The format is b
 - `scripts/train.py --quiet`: prints only each phase's outcomes, the checkpoints and the run boundaries, not the progress of
   every game (`console_training_callbacks(progress=False)`).
 
+### Changed
+
+- `TrainingHarness.runs`: the runs of an experiment as a public property, replacing the private `_matrix()` that scripts
+  and tests called to find a run's directories.
+
 ### Fixed
 
 - `extract_params` splits each parameter at its first `=`, so a value may contain `=` (a path, a model option); a

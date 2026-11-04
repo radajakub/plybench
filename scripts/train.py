@@ -65,7 +65,7 @@ def report_curves(results: TrainingResults, registry: Registry, tester_configs: 
 
 def report_learning_cost(harness: TrainingHarness, llm: LLM) -> None:
     # the calls a learner made in its proposals, per epoch; the moves' tokens are in the game records, as for any player
-    for run in harness._matrix():
+    for run in harness.runs:
         epochs = [(index, learning_calls(harness.path_builder.learner_dir(harness.experiment, run, index))) for index in range(1, run.training_config.num_epochs + 1)]
         if not any(calls for _, calls in epochs):
             continue

@@ -58,7 +58,7 @@ def test_a_training_run_adds_a_session_to_its_manifest_each_time_it_runs(tmp_pat
     monkeypatch.chdir(tmp_path)
     uniform = "random:distribution=uniform"
     harness = TrainingHarness("prov", op, ["tic_tac_toe:"], [uniform], [uniform], [uniform], ["num_epochs=1,num_training_games=2,num_test_games=2"], 1)
-    run = harness._matrix()[0]
+    run = harness.runs[0]
 
     harness._write_manifest(run)
     harness._write_manifest(run)

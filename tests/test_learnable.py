@@ -120,11 +120,11 @@ def harness(tmp_path, monkeypatch):
 
 
 def _learner_dir(harness: TrainingHarness, epoch: int) -> Path:
-    return harness.path_builder.learner_dir(harness.experiment, harness._matrix()[0], epoch)
+    return harness.path_builder.learner_dir(harness.experiment, harness.runs[0], epoch)
 
 
 def _state(harness: TrainingHarness, epoch: int) -> dict:
-    return json.loads((harness.path_builder.checkpoint(harness.experiment, harness._matrix()[0], epoch) / "state.json").read_text())
+    return json.loads((harness.path_builder.checkpoint(harness.experiment, harness.runs[0], epoch) / "state.json").read_text())
 
 
 def _cached(harness: TrainingHarness) -> list[float]:

@@ -135,8 +135,9 @@ NTFY_TOKEN=...
 
 Pass `PlyBench(llm_config=LLMConfig(...))` to configure plyllm yourself instead; the three settings
 above then come from that config. Per-model quotas are account-specific, so none ship with the package.
-Set them with `op.llm.set_model_limits(...)`; the repo-local scripts keep theirs in `LIMITS` in
-`scripts/_shared.py`, keyed by provider and model name.
+Set them with `op.llm.set_model_limits(...)`; the command-line tools read them from a JSON file of your
+own, keyed by provider and model name: `--limits PATH`, else `$PLYBENCH_LIMITS`, else `./limits.json`
+(gitignored; `limits.example.json` shows the format). Without one, only the provider-wide concurrency applies.
 
 ### Notifications
 
@@ -295,20 +296,21 @@ git clone https://github.com/radajakub/plybench.git
 cd plybench
 uv sync
 
-# create an experiment from the template and run it (reads experiments/benchmarks/my_experiment.json)
+# create an experiment from the template and run it (reads experiments/benchmarks/my_experiment.json);
+# plybench-run and plybench-train are installed with the package, so they also work in a project that depends on it
 mkdir -p experiments/benchmarks
 cp templates/benchmark.json experiments/benchmarks/my_experiment.json
-uv run python scripts/run.py --experiment my_experiment
+uv run plybench-run --experiment my_experiment
 
 # or an ad-hoc smoke run
-uv run python scripts/run.py --name smoke \
+uv run plybench-run --name smoke \
     --games tic_tac_toe: \
     --players random:distribution=uniform \
     --opponents optimal:stochastic=True \
     --num-games 10
 
 # push progress notifications for a long run (needs NTFY_URL and NTFY_TOPIC, see Notifications)
-uv run python scripts/run.py --experiment my_experiment --notify
+uv run plybench-run --experiment my_experiment --notify
 ```
 
 `run.py` logs matchup and round progress to the console as the run proceeds; rounds already

@@ -12,6 +12,12 @@ All notable changes to this project are documented in this file. The format is b
   every game (`console_training_callbacks(progress=False)`).
 - `scripts/run.py --quiet`: prints only the start and the outcomes of each matchup (`console_benchmark_callbacks(progress=False)`).
   The end line of a matchup now carries its outcomes (`win=…, draw=…, loss=…`) in both modes, as a training phase's does.
+- `plybench-run` and `plybench-train`: the benchmark and training tools are installed with the package (`plybench.cli`), so a
+  project that depends on plybench (e.g. plyagents) runs them at its locked version (`uv run plybench-train ...`). The
+  repo-local `scripts/run.py` and `scripts/train.py` remain as thin wrappers, and the other scripts import their helpers
+  from `plybench.cli.shared`.
+- Per-model limits from a JSON file of the account: `--limits PATH`, else `$PLYBENCH_LIMITS`, else `./limits.json`
+  (gitignored; `limits.example.json` shows the format). They used to be hard-coded in `scripts/_shared.py`.
 
 ### Changed
 

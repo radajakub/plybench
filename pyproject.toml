@@ -52,6 +52,10 @@ huggingface = ["plyllm[huggingface]"]
 viz = ["matplotlib>=3.10.0"]
 all = ["plyllm[all]", "matplotlib>=3.10.0"]
 
+[project.scripts]
+plybench-run = "plybench.cli.run:main"
+plybench-train = "plybench.cli.train:main"
+
 [project.urls]
 Homepage = "https://plybench.jakubrada.com"
 Repository = "https://github.com/radajakub/plybench"

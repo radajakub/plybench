@@ -226,3 +226,6 @@ __marimo__/
 /analysis
 /cache
 /plots
+
+# the account's per-model quotas (plybench.cli.limits); limits.example.json shows the format
+/limits.json

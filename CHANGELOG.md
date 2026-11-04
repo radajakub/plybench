@@ -15,6 +15,9 @@ All notable changes to this project are documented in this file. The format is b
 
 - `TrainingHarness.runs`: the runs of an experiment as a public property, replacing the private `_matrix()` that scripts
   and tests called to find a run's directories.
+- `load_or_solve` keeps each solved game in memory for the rest of the process, keyed by the absolute path of its cache
+  file. The `optimal` player is built for every game and read the file each time; it now reads it once. Callers share the
+  returned `AVQCache` and must not change it.
 
 ### Fixed
 

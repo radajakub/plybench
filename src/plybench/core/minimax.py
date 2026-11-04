@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import functools
 import json
 import math
+from pathlib import Path
 from typing import Any
 
 import pyspiel as sp
@@ -88,12 +90,17 @@ def solve_game(game: TurnBasedGame) -> AVQCache:
 def load_or_solve(game: TurnBasedGame) -> AVQCache:
     # the solved values of a game, read from the minimax cache, or solved and saved there on first use; shared by the optimal
     # player and any agent that needs the solution (e.g. an oracle critic in plyagents)
-    path = MinimaxPathBuilder().cache(game.game_name, game.params)
-    if path.exists():
-        return AVQCache.load(str(path))
-    cache = solve_game(game)
-    cache.save(str(path))
-    return cache
+    path = MinimaxPathBuilder().cache(game.game_name, game.params).resolve()
+    if not path.exists():
+        solve_game(game).save(str(path))
+    return _read_solved(path)
+
+
+# once per process: a player is built for every game, and the file does not change under a run; callers share the result and
+# only read it. Keyed by the absolute path, so another working directory reads its own file
+@functools.cache
+def _read_solved(path: Path) -> AVQCache:
+    return AVQCache.load(str(path))
 
 
 def _minimax(state: sp.State, cache: AVQCache) -> float:

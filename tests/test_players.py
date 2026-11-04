@@ -15,7 +15,8 @@ from plyllm.response import OutputText, ReasoningTrace
 from plybench.app import PlyBench
 from plybench.common.enums import GameResults, MoveFailure, ObservationType
 from plybench.common.paths import MinimaxPathBuilder
-from plybench.core.minimax import load_or_solve
+from plybench.core import minimax
+from plybench.core.minimax import AVQCache, load_or_solve
 from plybench.player.llm_player import _BLOCK_RETRIES, LLMPlayer, LLMPlayerTracker
 from plybench.player.output_strategies import StructuredOutputStrategy
 from plybench.player.player import PlayerOutput
@@ -107,6 +108,30 @@ def test_load_or_solve_solves_once_and_then_reads_the_cache(tmp_path, monkeypatc
     solved = load_or_solve(game)
     assert path.exists()
     assert load_or_solve(game).to_dict() == solved.to_dict()
+
+
+def test_load_or_solve_reads_the_file_once_per_process_and_directory(tmp_path, monkeypatch):
+    minimax._read_solved.cache_clear()
+    loads = []
+    load = AVQCache.load
+    monkeypatch.setattr(AVQCache, "load", classmethod(lambda cls, filepath: loads.append(filepath) or load(filepath)))
+    game = _tic_tac_toe().game
+
+    # solved and saved in the first directory, read once, then served from memory
+    (tmp_path / "a").mkdir()
+    monkeypatch.chdir(tmp_path / "a")
+    first = load_or_solve(game)
+    assert load_or_solve(game) is first
+    assert loads == [str(MinimaxPathBuilder().cache(game.game_name, game.params).resolve())]
+
+    # another directory with its own cache file reads that file, once
+    (tmp_path / "b").mkdir()
+    monkeypatch.chdir(tmp_path / "b")
+    path = MinimaxPathBuilder().cache(game.game_name, game.params)
+    first.save(str(path))
+    second = load_or_solve(game)
+    assert load_or_solve(game) is second and second is not first
+    assert loads[1:] == [str(path.resolve())]
 
 
 # --- LLM player with a stub LLM --------------------------------------------------------------

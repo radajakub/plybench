@@ -6,6 +6,12 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+### Added
+
+- `plybench-play` and `plybench-analyze`: the interactive game and the benchmark statistics are installed with the package
+  (`plybench.cli.play`, `plybench.cli.analyze`), as `plybench-run` and `plybench-train` are. `scripts/play.py` and
+  `scripts/analyze.py` remain as thin wrappers.
+
 ## [4.1.0] - 2026-11-04
 
 ### Added

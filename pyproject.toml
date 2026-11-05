@@ -55,6 +55,8 @@ all = ["plyllm[all]", "matplotlib>=3.10.0"]
 [project.scripts]
 plybench-run = "plybench.cli.run:main"
 plybench-train = "plybench.cli.train:main"
+plybench-play = "plybench.cli.play:main"
+plybench-analyze = "plybench.cli.analyze:main"
 
 [project.urls]
 Homepage = "https://plybench.jakubrada.com"

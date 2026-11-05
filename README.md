@@ -297,7 +297,8 @@ cd plybench
 uv sync
 
 # create an experiment from the template and run it (reads experiments/benchmarks/my_experiment.json);
-# plybench-run and plybench-train are installed with the package, so they also work in a project that depends on it
+# plybench-run, plybench-train, plybench-play and plybench-analyze are installed with the package, so they also work in a
+# project that depends on it
 mkdir -p experiments/benchmarks
 cp templates/benchmark.json experiments/benchmarks/my_experiment.json
 uv run plybench-run --experiment my_experiment
@@ -323,9 +324,9 @@ incur API cost; bot-vs-bot matchups run offline. Results are written under
 Then analyze or export the transcripts:
 
 ```bash
-uv run python scripts/analyze.py --experiment my_experiment   # compute per-matchup statistics + confidence intervals
+uv run plybench-analyze --experiment my_experiment   # compute per-matchup statistics + confidence intervals
 uv run python scripts/export.py --experiment my_experiment --out my_experiment.tar.gz   # export results for the PlyBench website
-uv run python scripts/play.py --game tic_tac_toe: --i human: --o optimal:stochastic=True  # play interactively
+uv run plybench-play --game tic_tac_toe: --i human: --o optimal:stochastic=True  # play interactively
 ```
 
 The full result set is large (tens of thousands of game transcripts) and is not stored in this

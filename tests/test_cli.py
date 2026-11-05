@@ -15,7 +15,7 @@ import pytest
 from plyllm import ModelLimits, Provider
 
 from plybench.app import PlyBench
-from plybench.cli import run, train
+from plybench.cli import analyze, play, run, train
 from plybench.cli.limits import LIMITS_ENV, limits_path, load_limits
 from plybench.cli.shared import apply_model_limits
 
@@ -26,6 +26,17 @@ def test_the_tools_are_installed_as_console_scripts():
     scripts = {entry_point.name: entry_point.value for entry_point in importlib.metadata.entry_points(group="console_scripts")}
     assert scripts["plybench-run"] == "plybench.cli.run:main"
     assert scripts["plybench-train"] == "plybench.cli.train:main"
+    assert scripts["plybench-play"] == "plybench.cli.play:main"
+    assert scripts["plybench-analyze"] == "plybench.cli.analyze:main"
+
+
+@pytest.mark.parametrize("tool", [play, analyze])
+def test_play_and_analyze_print_their_help(tool, monkeypatch, capsys):
+    monkeypatch.setattr(sys, "argv", ["tool", "--help"])
+    with pytest.raises(SystemExit) as exit_info:
+        tool.main()
+    assert exit_info.value.code == 0
+    assert "usage:" in capsys.readouterr().out
 
 
 @pytest.mark.parametrize("tool", [run, train])
@@ -38,7 +49,7 @@ def test_each_tool_takes_the_limits_and_the_quiet_flag(tool, monkeypatch, capsys
     assert "--limits" in out and "--quiet" in out
 
 
-@pytest.mark.parametrize("script", ["run.py", "train.py", "analyze.py"])
+@pytest.mark.parametrize("script", ["run.py", "train.py", "analyze.py", "play.py"])
 def test_the_repo_local_scripts_still_run(script):
     result = subprocess.run([sys.executable, str(REPO / "scripts" / script), "--help"], capture_output=True, text=True, cwd=REPO, timeout=120)
     assert result.returncode == 0, result.stderr

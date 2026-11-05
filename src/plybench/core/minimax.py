@@ -80,8 +80,9 @@ class AVQCache(Saveable[[], str, []]):
 
 
 def solve_game(game: TurnBasedGame) -> AVQCache:
-    # clone the state (reset would also reset the random seed)
-    state = game.state.clone()
+    # from a new initial state, whatever state the game is in: a game in progress (with chance, its outcomes so far) would give
+    # the values of that subgame only, and load_or_solve keeps them for good. Not game.reset(), which would also reset the random seed
+    state = game.game.new_initial_state()
     cache = AVQCache()
 
     if game.multiplayer():

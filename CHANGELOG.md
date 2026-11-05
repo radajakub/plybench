@@ -6,6 +6,13 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+### Fixed
+
+- `solve_game` solves from a new initial state, not from the game's current state. Solving a game in progress gave the
+  values of that subgame only (in a game with chance, with its outcomes so far known), and `load_or_solve` kept them in
+  the cache file. The engine initializes its players before the first move, so its runs were not affected; the solved
+  values of every built-in game are unchanged.
+
 ## [4.2.0] - 2026-11-05
 
 ### Added

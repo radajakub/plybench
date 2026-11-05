@@ -11,6 +11,7 @@ from toy_games import LOOK, SKIP, ToyGame
 
 from plybench.core.game import TurnBasedState
 from plybench.core.minimax import AVQCache, solve_game
+from plybench.games.monty_hall.monty_hall import MontyHallGame, MontyHallGameParams
 
 
 def _expectiminimax(state: sp.State, entries: dict[tuple[int, str], float]) -> float:
@@ -98,3 +99,14 @@ def test_histories_hide_chance_and_other_players_private_actions() -> None:
         kuhn.apply_action(action)
     assert [action.string for action in TurnBasedState.get_observation(kuhn, 1).o_actions] == []
     assert [action.string for action in TurnBasedState.get_observation(kuhn, 0).i_actions] == ["Bet"]
+
+
+def test_a_game_in_progress_is_solved_from_its_start() -> None:
+    # Monty Hall with the car placed and a door picked: solving from the current state would know the car; the values must be those of the whole game
+    fresh = solve_game(MontyHallGame(MontyHallGameParams(num_doors=3, final="pick", host="hell")))
+    game = MontyHallGame(MontyHallGameParams(num_doors=3, final="pick", host="hell"))
+    game.step_chance(1)
+    game.step(game.get_legal_moves(0)[0])
+    assert solve_game(game).to_dict() == fresh.to_dict()
+    no_door = fresh[0, "picked=1 opened=none behind=- final=- car=-"]
+    assert no_door is not None and no_door.V() == pytest.approx(0.0)

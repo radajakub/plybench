@@ -3,6 +3,8 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import Generic, TypeVar
 
+import numpy as np
+
 from plybench.callbacks.game_callbacks import GameCallbacks
 from plybench.common.enums import GameResults
 from plybench.configs.game_config import GameConfig
@@ -51,7 +53,17 @@ class TurnBasedEngine(ABC, Generic[TransformerT, AdapterT]):
         # terminal observation from `player`'s POV, recorded in the tracker's ending
         return self.observation_class.from_openspiel(self.game.get_observation(player), self.interface_transformer)
 
+    def _ending_player(self, pid: int) -> int:
+        # the player not to move last; a single-player game has only its own
+        return 0 if self.game.single_player() else 1 - pid
+
     def _get_game_result(self) -> tuple[GameResults, GameResults]:
+        if self.game.single_player():
+            # one player: the sign of its return; the second result belongs to the empty seat
+            (reward,) = self.game.get_returns()
+            result = GameResults.WIN if reward > 0 else GameResults.LOSS if reward < 0 else GameResults.DRAW
+            return result, result.invert()
+
         reward1, reward2 = self.game.get_rewards()
         if reward1 > reward2:
             return GameResults.WIN, GameResults.LOSS
@@ -69,6 +81,9 @@ class TurnBasedEngine(ABC, Generic[TransformerT, AdapterT]):
             self.interface_transformer.seed(derive_seed(seed, "game"))
             for player in players:
                 player.seed(derive_seed(seed, player.identifier))
+
+        # chance draws from its own stream, so its outcomes do not shift the players' draws
+        chance_rng = np.random.default_rng(derive_seed(seed, "chance") if seed is not None else None)
 
         self.reset()
         for player in players:
@@ -91,6 +106,12 @@ class TurnBasedEngine(ABC, Generic[TransformerT, AdapterT]):
 
         pid = 0
         while not self.game.is_terminal():
+            # (0) a chance node: sample its outcome, no player is asked and no step is recorded (the outcome is in the next step's serialized state)
+            if self.game.is_chance_node():
+                outcomes, probabilities = zip(*self.game.chance_outcomes())
+                self.game.step_chance(int(chance_rng.choice(outcomes, p=probabilities)))
+                continue
+
             # (1) openspiel observation and legal moves
             pid = self.game.get_player()
             os_observation: OpenSpielObservation = self.game.get_observation(pid)
@@ -120,7 +141,7 @@ class TurnBasedEngine(ABC, Generic[TransformerT, AdapterT]):
 
             # (5) handle a failed move (illegal / malformed) and exit early
             if player_output.action is None:
-                tracker.add_fail(player.player_config, self._get_ending(1 - pid), self.game.serialize_state())
+                tracker.add_fail(player.player_config, self._get_ending(self._ending_player(pid)), self.game.serialize_state())
                 results = (GameResults.MY_FAIL, GameResults.OPPONENT_FAIL) if pid == 0 else (GameResults.OPPONENT_FAIL, GameResults.MY_FAIL)
                 game_callbacks.on_game_end(tracker, results)
                 return tracker
@@ -129,7 +150,7 @@ class TurnBasedEngine(ABC, Generic[TransformerT, AdapterT]):
             self.game.step(player_output.action.to_openspiel())
 
         result1, result2 = self._get_game_result()
-        tracker.end_game(result1, self._get_ending(1 - pid), self.game.serialize_state())
+        tracker.end_game(result1, self._get_ending(self._ending_player(pid)), self.game.serialize_state())
         game_callbacks.on_game_end(tracker, (result1, result2))
 
         return tracker

@@ -146,6 +146,11 @@ class TurnBasedState:
         return rewards[0], rewards[1]
 
     @staticmethod
+    def get_returns(state: sp.State) -> list[float]:
+        # the sum of the rewards over the game, one per player (a single-player game has one)
+        return state.returns()
+
+    @staticmethod
     def is_terminal(state: sp.State) -> bool:
         return state.is_terminal()
 
@@ -196,11 +201,17 @@ class TurnBasedGame(OpenSpielGame):
     def get_rewards(self) -> tuple[float, float]:
         return TurnBasedState.get_rewards(self.state)
 
+    def get_returns(self) -> list[float]:
+        return TurnBasedState.get_returns(self.state)
+
     def get_reward_range(self) -> tuple[float, float]:
         return self.game.min_utility(), self.game.max_utility()
 
     def step(self, action: OpenSpielAction) -> None:
         self.state.apply_action(action.number)
+
+    def step_chance(self, outcome: int) -> None:
+        self.state.apply_action(outcome)
 
     def serialize_state(self) -> str:
         return sp.serialize_game_and_state(self.game, self.state)

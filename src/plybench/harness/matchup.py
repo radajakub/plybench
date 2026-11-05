@@ -12,7 +12,9 @@ from plybench.common.provenance import package_of, provenance
 from plybench.configs.game_config import GameConfig
 from plybench.configs.matchup import Matchup
 from plybench.configs.player_config import PlayerConfig
+from plybench.core.game import TurnBasedGame
 from plybench.player.player import Player
+from plybench.player.simple.none_player import NONE_PLAYER
 from plybench.player.spec import PlayerBuilder
 from plybench.trackers.game_tracker import GameTracker
 from plybench.trackers.result_tracker import ResultTracker
@@ -40,6 +42,15 @@ def order_players_for_game(i: Player, o: Player, game_round: int, num_games: int
     return (i, o) if colour_rule(game_round, num_games) else (o, i)
 
 
+def check_seats(game: TurnBasedGame, matchup: Matchup) -> None:
+    # a single-player game has one seat: the i-player plays it and the o-player is `none`; `none` fills no seat of any other game
+    if game.single_player():
+        if matchup.o.key != NONE_PLAYER or matchup.i.key == NONE_PLAYER:
+            raise ValueError(f"{matchup.game} is a single-player game: it needs a player against `{NONE_PLAYER}`, not {matchup.i} against {matchup.o}")
+    elif NONE_PLAYER in (matchup.i.key, matchup.o.key):
+        raise ValueError(f"`{NONE_PLAYER}` fills only the empty seat of a single-player game, not a seat of {matchup.game}")
+
+
 async def play_round(
     op: PlyBench,
     matchup: Matchup,
@@ -63,7 +74,8 @@ async def play_round(
     player_i = build_player(engine.game, matchup.i, "i")
     player_o = build_player(engine.game, matchup.o, "o")
 
-    player_pair = order_players_for_game(player_i, player_o, game_round, matchup.num_games, colour_rule)
+    # a single-player game keeps its player in the first seat, whatever the colour rule
+    player_pair = (player_i, player_o) if engine.game.single_player() else order_players_for_game(player_i, player_o, game_round, matchup.num_games, colour_rule)
     round_callbacks = matchup_callbacks.for_round(matchup.game, matchup.i, matchup.o, game_round, game_callbacks)
     game_tracker = await engine.play(player_pair, game_callbacks=round_callbacks, game_round=game_round, seed=result_tracker.game_seed(game_round))
 
@@ -81,6 +93,7 @@ def _open_matchup(
     save_on_record: bool,
     seed: int | None,
 ) -> tuple[ResultTracker, MatchupCallbacks]:
+    check_seats(op.registry.build_engine(matchup.game).game, matchup)
     matchup_callbacks = matchup_callbacks if matchup_callbacks is not None else MatchupCallbacks()
     experiment = experiment if experiment is not None else f"run_{uuid.uuid4().hex}"
     path_builder = path_builder if path_builder is not None else BenchmarkPathBuilder()

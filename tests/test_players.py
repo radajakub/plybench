@@ -72,8 +72,8 @@ def test_player_paths():
     assert registry.player_config("llm:actions:structured:openai:gpt-5.4:").path == "llm_actions_structured_openai_gpt-5.4"
 
 
-def test_all_five_players_registered():
-    assert set(registry.player_keys()) == {"human", "random", "mcts", "optimal", "llm"}
+def test_all_six_players_registered():
+    assert set(registry.player_keys()) == {"human", "random", "mcts", "optimal", "llm", "none"}
 
 
 # --- end-to-end games with bots --------------------------------------------------------------

@@ -12,6 +12,7 @@ from plybench.player.output_strategies import build_output_strategy
 from plybench.player.player import Player, PlayerIdentifier
 from plybench.player.simple.human_player import HumanParams, HumanPlayer
 from plybench.player.simple.mcts_player import MctsParams, MCTSPlayer
+from plybench.player.simple.none_player import NONE_PLAYER, NoneParams, NonePlayer
 from plybench.player.simple.optimal_player import OptimalParams, OptimalPlayer
 from plybench.player.simple.random_player import RandomParams, RandomPlayer
 from plybench.player.spec import PlayerSpec
@@ -33,3 +34,4 @@ def register_builtin_players(registry: Registry, llm: LLM) -> None:
     registry.register_player(PlayerSpec("mcts", MctsParams, lambda game, cfg, pid: MCTSPlayer(game, cfg, pid)))
     registry.register_player(PlayerSpec("optimal", OptimalParams, lambda game, cfg, pid: OptimalPlayer(game, cfg, pid)))
     registry.register_player(PlayerSpec("llm", LLMParams, _llm_builder(llm), tracker=LLMPlayerTracker()))
+    registry.register_player(PlayerSpec(NONE_PLAYER, NoneParams, lambda game, cfg, pid: NonePlayer(cfg, pid)))

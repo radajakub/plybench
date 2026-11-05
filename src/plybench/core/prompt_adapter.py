@@ -18,6 +18,13 @@ You are a helpful assistant that strictly follows the user's instructions.
 You must answer your questions by choosing one of the legal moves given by the user!
 """
 
+# a single-player game has no one to beat
+_SINGLE_PLAYER_SYSTEM_PROMPT = """
+You are a powerful agent who can make proper decisions to reach the best outcome in decision tasks.
+You are a helpful assistant that strictly follows the user's instructions.
+You must answer your questions by choosing one of the legal moves given by the user!
+"""
+
 
 PromptArgs = ParamSpec("PromptArgs")
 
@@ -143,3 +150,16 @@ class PromptAdapter(ABC, Generic[PromptArgs]):
         user_message = LLMMessage.user(content)
 
         return system_message, [user_message]
+
+
+class SinglePlayerPromptAdapter(PromptAdapter[PromptArgs]):
+    # a single-player game: no one to beat, and no opponent or move order in the observation
+    def __init__(self, head_prompt_template: str, use_partial_state: bool, position_name: str = "positions", order_actions: bool = False) -> None:
+        super().__init__(head_prompt_template, use_partial_state, position_name, order_actions)
+        self.system_prompt = inline_multiline_string(_SINGLE_PLAYER_SYSTEM_PROMPT)
+
+    def _observation_prompt_actions(self, observation: LLMObservation) -> str:
+        return self._i_actions_prompt(observation)
+
+    def _observation_prompt_state(self, observation: LLMObservation) -> str:
+        return self._partial_states_prompt(observation) if self.use_partial_state else self._i_positions_prompt(observation)

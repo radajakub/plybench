@@ -12,7 +12,7 @@ from plybench.configs.game_params import NoGameParams
 from plybench.core.engine import TurnBasedEngine
 from plybench.core.game import OpenSpielAction, OpenSpielObservation, TurnBasedGame
 from plybench.core.interface import InterfaceAction, InterfaceObservation, InterfaceTransformer
-from plybench.core.prompt_adapter import PromptAdapter
+from plybench.core.prompt_adapter import PromptAdapter, SinglePlayerPromptAdapter
 
 # a hidden coin (0 with probability 0.7); the player may pay 0.1 to see a signal that equals the coin with probability 0.8, then guesses it: +1 right,
 # -1 wrong. Hand-computed: no look 0.4; look 0.5 (signal 0: P = 0.62, guess 0; signal 1: P = 0.38, guess 1)
@@ -253,7 +253,7 @@ class ToyTransformer(InterfaceTransformer[ToyAction, ToyObservation, []]):
 
 class ToyPromptAdapter(PromptAdapter[[]]):
     def __init__(self) -> None:
-        super().__init__(head_prompt_template="A toy game.", use_partial_state=False, position_name="", order_actions=False)
+        super().__init__(head_prompt_template="A toy game.", use_partial_state=False)
         self.head_prompt = self.head_prompt_template
 
     def action_format(self) -> str:
@@ -263,9 +263,24 @@ class ToyPromptAdapter(PromptAdapter[[]]):
         pass
 
 
-class ToyEngine(TurnBasedEngine[ToyTransformer, ToyPromptAdapter]):
+class ToySinglePlayerPromptAdapter(SinglePlayerPromptAdapter[[]]):
+    def __init__(self) -> None:
+        super().__init__(head_prompt_template="A toy game.", use_partial_state=False)
+        self.head_prompt = self.head_prompt_template
+
+    def action_format(self) -> str:
+        return "<action>"
+
+    def restart_prompt(self) -> None:
+        pass
+
+
+class ToyEngine(TurnBasedEngine[ToyTransformer, PromptAdapter]):
     def __init__(self, name: str, params: dict[str, Any] | None = None) -> None:
-        super().__init__(GameConfig(name, NoGameParams()), ToyGame(name, params), ToyTransformer(), ToyPromptAdapter(), ToyAction, ToyObservation)
+        game = ToyGame(name, params)
+        super().__init__(
+            GameConfig(name, NoGameParams()), game, ToyTransformer(), ToySinglePlayerPromptAdapter() if game.single_player() else ToyPromptAdapter(), ToyAction, ToyObservation
+        )
 
     def reset(self) -> None:
         self.game.reset()

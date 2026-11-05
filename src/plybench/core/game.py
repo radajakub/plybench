@@ -70,16 +70,69 @@ class TurnBasedState:
         return (TurnBasedState.child(state, action) for action in state.legal_actions())
 
     @staticmethod
+    def num_players(state: sp.State) -> int:
+        return state.num_players()
+
+    @staticmethod
+    def is_chance_node(state: sp.State) -> bool:
+        return state.is_chance_node()
+
+    @staticmethod
+    def chance_outcomes(state: sp.State) -> list[tuple[int, float]]:
+        return state.chance_outcomes()
+
+    @staticmethod
+    def has_perfect_information(state: sp.State) -> bool:
+        return state.get_game().get_type().information == sp.GameType.Information.PERFECT_INFORMATION
+
+    @staticmethod
+    def is_not_chance_player(player: int) -> bool:
+        return player >= 0
+
+    @staticmethod
+    def is_single_player(state: sp.State) -> bool:
+        return TurnBasedState.num_players(state) == 1
+
+    @staticmethod
+    def is_two_player(state: sp.State) -> bool:
+        return TurnBasedState.num_players(state) == 2
+
+    @staticmethod
+    def is_multiplayer(state: sp.State) -> bool:
+        return TurnBasedState.num_players(state) > 2
+
+    @staticmethod
+    def is_zero_sum(state: sp.State) -> bool:
+        return state.get_game().get_type().utility == sp.GameType.Utility.ZERO_SUM
+
+    @staticmethod
     def action_histories(state: sp.State, player: int) -> tuple[list[OpenSpielAction], list[OpenSpielAction]]:
-        i, o = player, 1 - player
-        histories = state.history()
-        i_history = [TurnBasedState._to_openspiel_action(state, i, h) for index, h in enumerate(histories) if index % 2 == i]
-        o_history = [TurnBasedState._to_openspiel_action(state, o, h) for index, h in enumerate(histories) if index % 2 == o]
+        perfect_information = TurnBasedState.has_perfect_information(state)
+        i_history: list[OpenSpielAction] = []
+        o_history: list[OpenSpielAction] = []
+        for step in state.full_history():
+            if step.player == player:
+                i_history.append(TurnBasedState._to_openspiel_action(state, step.player, step.action))
+            # add opponent moves only if it's perfect information and the player is not chance
+            elif perfect_information and TurnBasedState.is_not_chance_player(step.player):
+                o_history.append(TurnBasedState._to_openspiel_action(state, step.player, step.action))
         return i_history, o_history
 
     @staticmethod
+    def _observation_string(state: sp.State, player: int) -> str:
+        if TurnBasedState.has_perfect_information(state):
+            return state.observation_string(player)
+
+        # the information state (perfect recall), so one key never holds two situations the player can tell apart; a game without it (e.g. deep_sea,
+        # whose hidden part is fixed by the game, not drawn in the state) gives its observation
+        if state.get_game().get_type().provides_information_state_string:
+            return state.information_state_string(player)
+
+        return state.observation_string(player)
+
+    @staticmethod
     def get_observation(state: sp.State, player: int) -> OpenSpielObservation:
-        string = state.observation_string(player)
+        string = TurnBasedState._observation_string(state, player)
         i_history, o_history = TurnBasedState.action_histories(state, player)
         return OpenSpielObservation(string, i_history, o_history, player)
 
@@ -100,6 +153,33 @@ class TurnBasedState:
 class TurnBasedGame(OpenSpielGame):
     def get_player(self) -> int:
         return TurnBasedState.get_player(self.state)
+
+    def num_players(self) -> int:
+        return TurnBasedState.num_players(self.state)
+
+    def is_chance_node(self) -> bool:
+        return TurnBasedState.is_chance_node(self.state)
+
+    def chance_outcomes(self) -> list[tuple[int, float]]:
+        return TurnBasedState.chance_outcomes(self.state)
+
+    def has_perfect_information(self) -> bool:
+        return TurnBasedState.has_perfect_information(self.state)
+
+    def single_player(self) -> bool:
+        return TurnBasedState.is_single_player(self.state)
+
+    def two_player(self) -> bool:
+        return TurnBasedState.is_two_player(self.state)
+
+    def multiplayer(self) -> bool:
+        return TurnBasedState.is_multiplayer(self.state)
+
+    def is_zero_sum(self) -> bool:
+        return TurnBasedState.is_zero_sum(self.state)
+
+    def is_perfect_information(self) -> bool:
+        return TurnBasedState.has_perfect_information(self.state)
 
     def get_legal_moves(self, player: int) -> list[OpenSpielAction]:
         return TurnBasedState.get_legal_moves(self.state, player)

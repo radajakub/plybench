@@ -83,7 +83,22 @@ def solve_game(game: TurnBasedGame) -> AVQCache:
     # clone the state (reset would also reset the random seed)
     state = game.state.clone()
     cache = AVQCache()
-    _minimax(state, cache)
+
+    if game.multiplayer():
+        raise ValueError(f"No solver for {game.game_name}: only single and two player games are supported")
+
+    # OpenSpiel marks single-player games general-sum, so only a two-player game must be zero-sum
+    if game.two_player() and not game.is_zero_sum():
+        raise ValueError(f"No solver for {game.game_name}: only zero sum two player games are supported")
+
+    if game.is_perfect_information():
+        _minimax(state, cache)
+    elif game.single_player():
+        _solve_single_player(state, cache)
+    else:
+        # an equilibrium of a game with hidden information is a mixed policy, so its optimal actions need their own definition
+        raise ValueError(f"No solver for {game.game_name}: imperfect information with two players")
+
     return cache
 
 
@@ -103,14 +118,30 @@ def _read_solved(path: Path) -> AVQCache:
     return AVQCache.load(str(path))
 
 
+def _best(q: dict[int, float]) -> AVQ:
+    # the optimal actions are those within 1e-12 of the best value, in the order of q
+    v_star = -math.inf
+    a_star: list[int] = []
+    for a, v in q.items():
+        if v > v_star:
+            v_star = v
+            a_star = [a]
+        elif abs(v - v_star) < 1e-12:
+            a_star.append(a)
+    return AVQ(A=a_star, V=v_star, Q=q)
+
+
 def _minimax(state: sp.State, cache: AVQCache) -> float:
+    # negamax with player 0's value as the return; a chance node takes the expectation over its outcomes and has no entry
     if state.is_terminal():
-        v0, _ = TurnBasedState.get_rewards(state)
-        os0 = TurnBasedState.get_observation(state, 0).state
-        os1 = TurnBasedState.get_observation(state, 1).state
-        cache[0, os0] = AVQ(A=[], V=v0, Q={})
-        cache[1, os1] = AVQ(A=[], V=-v0, Q={})
+        # the returns, the sum of the rewards over the game: the terminal reward in a game that has only that one
+        v0 = state.returns()[0]
+        for player in range(TurnBasedState.num_players(state)):
+            cache[player, TurnBasedState.get_observation(state, player).state] = AVQ(A=[], V=v0 if player == 0 else -v0, Q={})
         return v0
+
+    if TurnBasedState.is_chance_node(state):
+        return sum(p * _minimax(TurnBasedState.child(state, a), cache) for a, p in TurnBasedState.chance_outcomes(state))
 
     player = TurnBasedState.get_player(state)
     observation = TurnBasedState.get_observation(state, player)
@@ -120,22 +151,66 @@ def _minimax(state: sp.State, cache: AVQCache) -> float:
         v_cached = entry.V()
         return v_cached if player == 0 else -v_cached
 
-    legal_actions = TurnBasedState.get_legal_moves(state, player)
-
-    v_star = -math.inf
-    a_star: list[int] = []
     q_star: dict[int, float] = {}
-
-    for a in legal_actions:
+    for a in TurnBasedState.get_legal_moves(state, player):
         v0 = _minimax(TurnBasedState.child(state, a.number), cache)
-        v = v0 if player == 0 else -v0
-        q_star[a.number] = v
+        q_star[a.number] = v0 if player == 0 else -v0
 
-        if v > v_star:
-            v_star = v
-            a_star = [a.number]
-        elif abs(v - v_star) < 1e-12:
-            a_star.append(a.number)
+    avq = _best(q_star)
+    cache[player, observation.state] = avq
+    return avq.V() if player == 0 else -avq.V()
 
-    cache[player, observation.state] = AVQ(A=a_star, V=v_star, Q=q_star)
-    return v_star if player == 0 else -v_star
+
+def _solve_single_player(state: sp.State, cache: AVQCache) -> None:
+    # one player with hidden information: a decision is taken per information state, so its values are expectations over the histories in it, weighted by
+    # their chance probability. An information state only holds histories that passed the earlier ones (perfect recall), so they are decided from the
+    # deepest up, and a history's value follows the decisions already taken below it
+    decisions: dict[str, list[tuple[float, sp.State]]] = {}
+    terminals: dict[str, list[tuple[float, float]]] = {}
+    depths: dict[str, int] = {}
+    _collect(state, 1.0, decisions, terminals, depths)
+
+    chosen: dict[str, int] = {}
+    values: dict[str, float] = {}
+
+    def value(history: sp.State) -> float:
+        key = history.history_str()
+        if key not in values:
+            if history.is_terminal():
+                values[key] = history.returns()[0]
+            elif TurnBasedState.is_chance_node(history):
+                values[key] = sum(p * value(TurnBasedState.child(history, a)) for a, p in TurnBasedState.chance_outcomes(history))
+            else:
+                values[key] = value(TurnBasedState.child(history, chosen[TurnBasedState.get_observation(history, 0).state]))
+        return values[key]
+
+    for info_state in sorted(decisions, key=lambda info_state: depths[info_state], reverse=True):
+        histories = decisions[info_state]
+        reach = sum(p for p, _ in histories)
+        q = {a.number: sum(p * value(TurnBasedState.child(h, a.number)) for p, h in histories) / reach for a in TurnBasedState.get_legal_moves(histories[0][1], 0)}
+        avq = _best(q)
+        chosen[info_state] = avq.A()[0]
+        cache[0, info_state] = avq
+
+    for info_state, outcomes in terminals.items():
+        cache[0, info_state] = AVQ(A=[], V=sum(p * v for p, v in outcomes) / sum(p for p, _ in outcomes), Q={})
+
+
+def _collect(state: sp.State, reach: float, decisions: dict[str, list[tuple[float, sp.State]]], terminals: dict[str, list[tuple[float, float]]], depths: dict[str, int]) -> None:
+    # every history of a single-player game with its chance probability, grouped by the player's information state; the depth is the number of its own
+    # actions, the same for every history of an information state under perfect recall
+    if state.is_terminal():
+        terminals.setdefault(TurnBasedState.get_observation(state, 0).state, []).append((reach, state.returns()[0]))
+        return
+    if TurnBasedState.is_chance_node(state):
+        for a, p in TurnBasedState.chance_outcomes(state):
+            _collect(TurnBasedState.child(state, a), reach * p, decisions, terminals, depths)
+        return
+
+    info_state = TurnBasedState.get_observation(state, 0).state
+    depth = sum(1 for step in state.full_history() if step.player == 0)
+    if depths.setdefault(info_state, depth) != depth:
+        raise ValueError(f"Information state {info_state!r} is reached after different numbers of the player's actions: the game has no perfect recall")
+    decisions.setdefault(info_state, []).append((reach, state))
+    for a in state.legal_actions():
+        _collect(TurnBasedState.child(state, a), reach, decisions, terminals, depths)

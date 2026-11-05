@@ -6,6 +6,8 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+## [4.2.1] - 2026-11-05
+
 ### Fixed
 
 - `solve_game` solves from a new initial state, not from the game's current state. Solving a game in progress gave the

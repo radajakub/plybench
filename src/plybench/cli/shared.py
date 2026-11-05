@@ -5,6 +5,7 @@ from __future__ import annotations
 # relative to the working directory (experiments/, results/), the package's path convention
 import argparse
 import json
+import warnings
 from pathlib import Path
 
 import clankers
@@ -40,7 +41,14 @@ def apply_model_limits(op: PlyBench, limits: Limits, scale: float = 1.0) -> None
             op.llm.set_model_limits(provider, model_name, model_limits.scaled(scale) if scale != 1.0 else model_limits)
 
 
+def _one_line_warning(message: Warning | str, category: type[Warning], filename: str, lineno: int, line: str | None = None) -> str:
+    # the CLI's own notices are one "warning: ..." line; Python's default adds the file, line number, category and source line
+    return f"warning: {message}\n"
+
+
 def build_op(concurrency: int | None = None, limit_scale: float = 1.0, limits: Path | None = None) -> PlyBench:
+    # every CLI and script starts here, so this is where it decides how warnings look (the libraries only raise them)
+    warnings.formatwarning = _one_line_warning
     # PlyBench's env config self-disables providers whose keys are absent, so bot-only scripts work offline too
     # concurrency caps in-flight requests per provider -- the only limit that maps to an API rate quota
     op = PlyBench(concurrency=concurrency)

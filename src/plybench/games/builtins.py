@@ -1,6 +1,7 @@
 from plybench.configs.game_params import NoGameParams
 from plybench.games.breakthrough.breakthrough import BreakthroughEngine
 from plybench.games.connect_four.connect_four import ConnectFourEngine
+from plybench.games.monty_hall.monty_hall import MontyHallEngine, MontyHallGameParams
 from plybench.games.nim.inverse_nim import InverseNimEngine
 from plybench.games.nim.modified_nim import ModifiedNimEngine
 from plybench.games.nim.nim import NimEngine, NimGameParams
@@ -28,6 +29,8 @@ _BUILTIN_GAMES: list[GameSpec] = [
     GameSpec("connect_four", NoGameParams, ConnectFourEngine, solvable=False),
     # breakthrough
     GameSpec("breakthrough", NoGameParams, BreakthroughEngine, solvable=False),
+    # single-player games
+    GameSpec("monty_hall", MontyHallGameParams, MontyHallEngine, solvable=True),
 ]
 
 

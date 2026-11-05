@@ -19,7 +19,9 @@ from _shared import build_op  # noqa: E402
 
 from plybench.callbacks.game_callbacks import GameCallbacks  # noqa: E402
 from plybench.common.enums import GameResults  # noqa: E402
+from plybench.configs.matchup import Matchup  # noqa: E402
 from plybench.core.interface import InterfaceAction, InterfaceObservation  # noqa: E402
+from plybench.harness.matchup import check_seats  # noqa: E402
 from plybench.player.player import Player, PlayerOutput  # noqa: E402
 from plybench.player.simple.human_player import HumanPlayer  # noqa: E402
 from plybench.trackers.game_tracker import GameStep, GameTracker  # noqa: E402
@@ -55,10 +57,16 @@ def main() -> None:
     args = parser.parse_args()
 
     op = build_op()
-    engine = op.registry.build_engine(op.registry.game_config(args.game))
+    game_config, i_config, o_config = op.registry.game_config(args.game), op.registry.player_config(args.i), op.registry.player_config(args.o)
+    engine = op.registry.build_engine(game_config)
+    # the seats the harness checks: a single-player game needs `--o none:`
+    try:
+        check_seats(engine.game, Matchup(game_config, i_config, o_config, 1))
+    except ValueError as error:
+        parser.error(str(error))
     players = (
-        op.registry.build_player(engine.game, op.registry.player_config(args.i), "i"),
-        op.registry.build_player(engine.game, op.registry.player_config(args.o), "o"),
+        op.registry.build_player(engine.game, i_config, "i"),
+        op.registry.build_player(engine.game, o_config, "o"),
     )
 
     asyncio.run(engine.play(players, game_callbacks=_console_callbacks()))

@@ -79,8 +79,8 @@ def test_game_plays_to_terminal(game_key: str):
     assert all(step.input_tokens is None for step in tracker.steps)
 
 
-def test_all_ten_games_registered():
-    assert len(registry.game_keys()) == 10
+def test_all_eleven_games_registered():
+    assert len(registry.game_keys()) == 11
     for key in registry.game_keys():
         assert registry.resolve_game(key).engine_factory is not None
 

@@ -6,6 +6,8 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+## [4.2.0] - 2026-11-05
+
 ### Added
 
 - `plybench-play` and `plybench-analyze`: the interactive game and the benchmark statistics are installed with the package

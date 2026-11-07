@@ -1726,6 +1726,9 @@ all = [
 anthropic = [
     { name = "plyllm", extra = ["anthropic"] },
 ]
+api = [
+    { name = "plyllm", extra = ["anthropic", "gemini", "grok", "metacentrum", "mistral", "ollama", "openai", "vllm"] },
+]
 gemini = [
     { name = "plyllm", extra = ["gemini"] },
 ]
@@ -1773,12 +1776,13 @@ requires-dist = [
     { name = "plyllm", extras = ["metacentrum"], marker = "extra == 'metacentrum'" },
     { name = "plyllm", extras = ["mistral"], marker = "extra == 'mistral'" },
     { name = "plyllm", extras = ["openai"], marker = "extra == 'openai'" },
+    { name = "plyllm", extras = ["openai", "gemini", "grok", "anthropic", "mistral", "metacentrum", "vllm", "ollama"], marker = "extra == 'api'" },
     { name = "pydantic", specifier = ">=2.13.4" },
     { name = "python-dotenv", specifier = ">=1.2.2" },
     { name = "scipy", specifier = ">=1.18.0" },
     { name = "tqdm", specifier = ">=4.69.1" },
 ]
-provides-extras = ["openai", "gemini", "grok", "anthropic", "mistral", "metacentrum", "huggingface", "viz", "all"]
+provides-extras = ["openai", "gemini", "grok", "anthropic", "mistral", "metacentrum", "huggingface", "api", "viz", "all"]
 
 [package.metadata.requires-dev]
 dev = [
@@ -1830,7 +1834,13 @@ metacentrum = [
 mistral = [
     { name = "mistralai" },
 ]
+ollama = [
+    { name = "openai" },
+]
 openai = [
+    { name = "openai" },
+]
+vllm = [
     { name = "openai" },
 ]
 

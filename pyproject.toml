@@ -49,6 +49,8 @@ anthropic = ["plyllm[anthropic]"]
 mistral = ["plyllm[mistral]"]
 metacentrum = ["plyllm[metacentrum]"]
 huggingface = ["plyllm[huggingface]"]
+# every remote provider, without the local HuggingFace models (torch, transformers): for machines that only call APIs or served models
+api = ["plyllm[openai,gemini,grok,anthropic,mistral,metacentrum,vllm,ollama]"]
 viz = ["matplotlib>=3.10.0"]
 all = ["plyllm[all]", "matplotlib>=3.10.0"]
 

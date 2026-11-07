@@ -6,6 +6,12 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+### Added
+
+- The extra `api`: every remote provider (`plyllm[openai,gemini,grok,anthropic,mistral,metacentrum,vllm,ollama]`),
+  without the local HuggingFace models, so a machine that only calls APIs or served models installs no torch,
+  transformers or CUDA libraries (about 4 GB per environment). `plybench[api,viz]` is `all` without them.
+
 ## [4.5.0] - 2026-11-07
 
 ### Added

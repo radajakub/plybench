@@ -6,6 +6,8 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+## [4.6.0] - 2026-11-07
+
 ### Added
 
 - The extra `api`: every remote provider (`plyllm[openai,gemini,grok,anthropic,mistral,metacentrum,vllm,ollama]`),

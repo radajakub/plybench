@@ -19,6 +19,10 @@ class PlayerParams(ABC):
     def path_suffix(self) -> str:
         raise NotImplementedError
 
+    # a short name for plots and tables (e.g. a plugin player naming its parts); None: plybench builds one from the config
+    def display_name(self) -> str | None:
+        return None
+
 
 class CheckpointedParams(PlayerParams):
     @property

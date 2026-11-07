@@ -3,6 +3,7 @@
 Examples:
     uv run python scripts/plot_training.py --experiment memory --metric win_rate
     uv run python scripts/plot_training.py --experiment memory --baseline-experiment ttt --baseline-player 'random:distribution=uniform'
+    uv run python scripts/plot_training.py --experiment monty --optimal
 """
 
 from __future__ import annotations
@@ -16,10 +17,12 @@ from _shared import add_training_source_args, build_op, training_from_args  # no
 
 from plybench.analysis.pooling import MetricOptions  # noqa: E402
 from plybench.analysis.training import TrainingAnalysis  # noqa: E402
-from plybench.analysis.visual import Figure, Layout, LegendSpec, LineOptions, Style, benchmark_reference, player_label, render, training_panel  # noqa: E402
+from plybench.analysis.visual import Figure, Layout, LegendSpec, LineOptions, Style, benchmark_reference, game_title, optimal_value, player_label, render, training_panel  # noqa: E402
 from plybench.common.enums import MetricName  # noqa: E402
 from plybench.common.paths import TrainingHarnessPathBuilder  # noqa: E402
+from plybench.core.minimax import optimal_outcomes  # noqa: E402
 from plybench.harness.benchmark.benchmark import Benchmark  # noqa: E402
+from plybench.player.simple.none_player import NONE_PLAYER  # noqa: E402
 
 
 def main() -> None:
@@ -28,6 +31,7 @@ def main() -> None:
     parser.add_argument("--metric", default=MetricName.WIN_RATE.value, choices=MetricName.values(), help="metric on the y axis (default win_rate)")
     parser.add_argument("--baseline-experiment", help="recorded benchmark experiment used as the horizontal reference")
     parser.add_argument("--baseline-player", help="benchmark player to use; required when the benchmark has several players")
+    parser.add_argument("--optimal", action="store_true", help="draw the exact value of the optimal policy (single-player games: where a learner converges)")
     parser.add_argument("--confidence", type=float, default=0.95, help="confidence level for training intervals (default 0.95)")
     parser.add_argument("--include-fails", action="store_true", help="count invalid-move failures as losses")
     parser.add_argument("--out", help="output PNG path (default plots/training/<experiment>_<metric>.png)")
@@ -82,6 +86,14 @@ def main() -> None:
     panels = []
     games = {run.game.to_string(): run.game for run in results.runs}
     for game in games.values():
+        optimal = None
+        if args.optimal:
+            engine_game = op.registry.build_engine(game).game
+            if not engine_game.single_player():
+                parser.error(f"--optimal needs a single-player game; {game.to_string()} has an opponent, whose policy decides the outcome")
+            optimal = optimal_value(optimal_outcomes(engine_game), metric)
+            if optimal is None:
+                parser.error(f"--optimal has no exact value for {metric.value}")
         for tester in testers:
             curves = [analysis.curve(run, tester) for run in results.runs if run.game.to_string() == game.to_string()]
             reference = None
@@ -90,7 +102,9 @@ def main() -> None:
                     baseline_results, game, baseline_player, tester, metric, op.registry, MetricOptions(confidence=args.confidence, include_fails=args.include_fails)
                 )
             reference_label = f"Benchmark: {player_label(baseline_player)}" if baseline_player is not None else "Benchmark reference"
-            panels.append(training_panel(curves, metric, reference, line_options, f"{game.to_string()} vs {tester.to_string()}", reference_label))
+            # a single-player game is played against the empty seat, which needs no mention
+            title = game_title(game) if tester.key == NONE_PLAYER else f"{game_title(game)} vs {player_label(tester)}"
+            panels.append(training_panel(curves, metric, reference, line_options, title, reference_label, optimal))
 
     figure = Figure(
         panels=panels,

@@ -14,7 +14,7 @@ from plybench.analysis.visual.core.layers.line import LineLayer
 from plybench.analysis.visual.core.panel import Panel
 from plybench.analysis.visual.core.style import StyleOverride
 from plybench.analysis.visual.core.ticks import CategoryTicks, StepTicks
-from plybench.common.enums import MetricName
+from plybench.common.enums import GameResults, MetricName
 from plybench.configs.game_config import GameConfig
 from plybench.configs.player_config import PlayerConfig
 from plybench.harness.benchmark.results import BenchmarkResults
@@ -38,6 +38,39 @@ def benchmark_reference(
     return bundle
 
 
+# the metrics the optimal policy's outcomes give; optimality and regret need no computation
+def optimal_value(outcomes: dict[GameResults, float], metric: MetricName) -> float | None:
+    win, draw, loss = outcomes[GameResults.WIN], outcomes[GameResults.DRAW], outcomes[GameResults.LOSS]
+    values = {
+        MetricName.WIN_RATE: win,
+        MetricName.DRAW_RATE: draw,
+        MetricName.LOSS_RATE: loss,
+        MetricName.SCORE: win + 0.5 * draw,
+        MetricName.FAIL_RATE: 0.0,
+        MetricName.OPTIMALITY_RATE: 1.0,
+        MetricName.OPTIMALITY_RATE_NON_TRIVIAL: 1.0,
+        MetricName.REGRET: 0.0,
+    }
+    return values.get(metric)
+
+
+def curve_labels(curves: list[LearningCurve]) -> list[str]:
+    # each curve by its player; the trainer, the training config and the replicate only where the curves differ in them. Two players
+    # with the same label are told apart by their full config
+    players = [player_label(curve.run.trainee) for curve in curves]
+    players = [
+        curve.run.trainee.to_string() if any(other == label and peer.run.trainee.hash != curve.run.trainee.hash for other, peer in zip(players, curves)) else label
+        for curve, label in zip(curves, players)
+    ]
+    parts = [[label] for label in players]
+    for describe in (lambda run: f"vs {player_label(run.trainer)}", lambda run: run.training_config.to_string(), lambda run: f"rep {run.replicate}"):
+        values = [describe(curve.run) for curve in curves]
+        if len(set(values)) > 1:
+            for part, value in zip(parts, values):
+                part.append(value)
+    return [" · ".join(part) for part in parts]
+
+
 def training_panel(
     curves: list[LearningCurve],
     metric: MetricName,
@@ -45,6 +78,7 @@ def training_panel(
     options: LineOptions | None = None,
     title: str = "",
     reference_label: str = "Benchmark reference",
+    optimal: float | None = None,
 ) -> Panel:
     if not curves:
         raise ValueError("a training panel needs at least one curve")
@@ -55,7 +89,7 @@ def training_panel(
     options = options or LineOptions()
     layers: list[Layer] = []
     has_data = False
-    for curve in curves:
+    for curve, label in zip(curves, curve_labels(curves)):
         bundles = [point.metrics.combined.metrics.get(metric) for point in curve.points]
         has_data |= any(bundle is not None and bundle.n > 0 for bundle in bundles)
         layers.append(
@@ -63,7 +97,7 @@ def training_panel(
                 x=tuple(float(point.epoch) for point in curve.points),
                 y=tuple(bundle.value if bundle is not None and bundle.n else None for bundle in bundles),
                 band=tuple(interval_of(bundle) if bundle is not None and bundle.n else None for bundle in bundles) if options.show_ci else None,
-                label=f"{player_label(curve.run.trainee)} vs {player_label(curve.run.trainer)} · {curve.run.training_config.to_string()} · rep {curve.run.replicate}",
+                label=label,
                 show_markers=options.show_markers,
                 style=StyleOverride(linewidth=options.linewidth, markersize=options.marker_size, fill_alpha=options.ci_alpha),
             )
@@ -72,6 +106,9 @@ def training_panel(
         raise ValueError(f"No recorded training data for {metric.value} in {game} vs {curves[0].tester.to_string()}")
     if reference is not None:
         layers.append(BaselineLayer(reference.value, label=reference_label, annotate=False, in_legend=True, style=StyleOverride(color="#000000", linestyle="--")))
+    if optimal is not None:
+        # exact, so no band: where a learner that plays optimally converges
+        layers.append(BaselineLayer(optimal, label="Optimal policy (exact)", annotate=False, in_legend=True, style=StyleOverride(color="#555555", linestyle=":")))
 
     is_rate = any(bundle.wilson is not None for curve in curves for point in curve.points if (bundle := point.metrics.combined.metrics.get(metric)) is not None)
     if reference is not None and reference.wilson is not None:

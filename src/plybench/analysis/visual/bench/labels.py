@@ -30,6 +30,8 @@ def player_label(config: PlayerConfig, overrides: Overrides | None = None, show:
     if overrides and (override := overrides.get(config.to_string())):
         return override
     params = config.params
+    if (own := params.display_name()) is not None:
+        return own
     if not isinstance(params, LLMParams):
         return _simple_player_label(config)
     variants = _variant_params(config)
@@ -147,6 +149,13 @@ def game_labels(configs: list[GameConfig], overrides: Overrides | None = None) -
         show = [key for key in params if any(game_params(other).get(key) != params[key] for other in siblings)]
         labels.append(game_label(config, overrides, show))
     return labels
+
+
+def game_title(config: GameConfig) -> str:
+    # one line: the game's name and every param, e.g. "Monty Hall (num_doors=3, final=pick)"
+    params = config.params.to_string().replace(",", ", ")
+    name = config.key.replace("_", " ").title()
+    return f"{name} ({params})" if params else name
 
 
 def metric_label(metric: str) -> str:

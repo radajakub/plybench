@@ -23,6 +23,7 @@ from plybench.analysis.visual.bench import (
     game_label,
     game_labels,
     game_params,
+    game_title,
     indistinguishable,
     interval_of,
     is_ratio,
@@ -69,7 +70,7 @@ from plybench.analysis.visual.core import (
     render,
     resolve_limits,
 )
-from plybench.analysis.visual.train import benchmark_reference, training_panel
+from plybench.analysis.visual.train import benchmark_reference, curve_labels, optimal_value, training_panel
 
 __all__ = [
     "CATEGORICAL",
@@ -109,11 +110,13 @@ __all__ = [
     "build_series",
     "build_series_batch",
     "benchmark_reference",
+    "curve_labels",
     "dodges",
     "effort_key",
     "encoder_keys",
     "game_label",
     "game_labels",
+    "game_title",
     "game_params",
     "indistinguishable",
     "interval_of",
@@ -122,6 +125,7 @@ __all__ = [
     "metric_axis",
     "metric_label",
     "metric_panel",
+    "optimal_value",
     "model_key",
     "model_name",
     "model_strength",

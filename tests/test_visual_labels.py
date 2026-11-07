@@ -3,9 +3,12 @@ it is the layer that decides what a tick, a legend entry and a line look like.""
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 import pytest
 from plyllm import LLMConfig
 
+from plybench.analysis.training import LearningCurve
 from plybench.analysis.visual import (
     CATEGORICAL,
     LINESTYLES,
@@ -13,12 +16,15 @@ from plybench.analysis.visual import (
     Series,
     StyleEncoder,
     StyleKey,
+    curve_labels,
     encoder_keys,
     game_labels,
+    game_title,
     indistinguishable,
     marker_for,
     model_name,
     model_strength,
+    optimal_value,
     player_label,
     player_labels,
     provider_key,
@@ -26,6 +32,11 @@ from plybench.analysis.visual import (
     tier_rank,
 )
 from plybench.app import PlyBench
+from plybench.common.enums import GameResults, MetricName
+from plybench.configs.player_config import PlayerConfig
+from plybench.configs.player_params import PlayerParams
+from plybench.configs.training_config import TrainingConfig
+from plybench.configs.training_run import TrainingRun
 
 op = PlyBench(LLMConfig())
 
@@ -229,3 +240,60 @@ def test_line_styles_are_ranked_within_a_colour_group_not_across_the_whole_palet
     encoder = StyleEncoder(keys)
     assert encoder.style(keys[0]).linestyle == encoder.style(keys[2]).linestyle == LINESTYLES[0]
     assert encoder.style(keys[0]).color != encoder.style(keys[2]).color
+
+
+# --- training curves ---------------------------------------------------------------------------
+@dataclass(frozen=True, eq=True)
+class _NamedParams(PlayerParams):
+    # a plugin player's params that name themselves
+    name: str = "agent"
+
+    @classmethod
+    def from_string(cls, params_string: str) -> _NamedParams:
+        return cls(params_string)
+
+    def to_string(self) -> str:
+        return self.name
+
+    @property
+    def path_suffix(self) -> str:
+        return self.name
+
+    def display_name(self) -> str | None:
+        return f"Agent {self.name}"
+
+
+def _curve(name: str, trainer: str = "none:", config: TrainingConfig = TrainingConfig(), replicate: int = 0) -> LearningCurve:
+    run = TrainingRun(_game("monty_hall:"), PlayerConfig("agent", _NamedParams(name)), _player(trainer), config, replicate)
+    return LearningCurve(run, _player("none:"), [])
+
+
+def test_a_player_that_names_itself_is_labelled_by_its_name():
+    assert player_label(PlayerConfig("agent", _NamedParams("one"))) == "Agent one"
+
+
+def test_training_curves_show_only_what_tells_them_apart():
+    # one trainer, one training config, one replicate: the player alone
+    assert curve_labels([_curve("one"), _curve("two")]) == ["Agent one", "Agent two"]
+    # what differs is shown, the rest is not
+    short, long = TrainingConfig(num_epochs=5), TrainingConfig(num_epochs=10)
+    assert curve_labels([_curve("one", config=short, replicate=1), _curve("one", config=long, replicate=1)]) == [
+        f"Agent one · {short.to_string()}",
+        f"Agent one · {long.to_string()}",
+    ]
+    assert curve_labels([_curve("one", replicate=0), _curve("one", trainer="random:distribution=uniform", replicate=1)]) == [
+        "Agent one · vs none · rep 0",
+        "Agent one · vs random (distribution=uniform) · rep 1",
+    ]
+
+
+def test_a_game_title_is_its_name_and_params_on_one_line():
+    assert game_title(_game("monty_hall:num_doors=4,final=pick")) == "Monty Hall (num_doors=4, final=pick, host=standard)"
+
+
+def test_the_optimal_value_of_a_metric_follows_from_the_outcomes():
+    outcomes = {GameResults.WIN: 0.5, GameResults.DRAW: 0.25, GameResults.LOSS: 0.25}
+    assert optimal_value(outcomes, MetricName.WIN_RATE) == 0.5 and optimal_value(outcomes, MetricName.SCORE) == 0.625
+    assert optimal_value(outcomes, MetricName.OPTIMALITY_RATE_NON_TRIVIAL) == 1.0 and optimal_value(outcomes, MetricName.REGRET) == 0.0
+    # nothing exact for what the policy does not decide
+    assert optimal_value(outcomes, MetricName.INPUT_TOKENS_PER_GAME) is None

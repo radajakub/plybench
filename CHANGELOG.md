@@ -6,6 +6,8 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+## [4.4.0] - 2026-11-07
+
 ### Added
 
 - `TrainingHarness.check_runs()`, called by `run()` before any game: a run's folder names its game, players and

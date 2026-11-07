@@ -10,7 +10,7 @@ import pytest
 from toy_games import LOOK, SKIP, ToyGame
 
 from plybench.core.game import TurnBasedState
-from plybench.core.minimax import AVQCache, solve_game
+from plybench.core.minimax import AVQCache, optimal_outcomes, solve_game
 from plybench.games.monty_hall.monty_hall import MontyHallGame, MontyHallGameParams
 
 
@@ -110,3 +110,8 @@ def test_a_game_in_progress_is_solved_from_its_start() -> None:
     assert solve_game(game).to_dict() == fresh.to_dict()
     no_door = fresh[0, "picked=1 opened=none behind=- final=- car=-"]
     assert no_door is not None and no_door.V() == pytest.approx(0.0)
+
+
+def test_the_optimal_outcomes_need_a_single_player_game() -> None:
+    with pytest.raises(ValueError, match="single-player"):
+        optimal_outcomes(ToyGame("tic_tac_toe"))

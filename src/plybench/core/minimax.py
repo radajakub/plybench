@@ -8,7 +8,7 @@ from typing import Any
 
 import pyspiel as sp
 
-from plybench.common.enums import StateClass
+from plybench.common.enums import GameResults, StateClass
 from plybench.common.paths import MinimaxPathBuilder
 from plybench.common.serializable import Saveable, Serializable
 from plybench.core.game import TurnBasedGame, TurnBasedState
@@ -117,6 +117,35 @@ def load_or_solve(game: TurnBasedGame) -> AVQCache:
 @functools.cache
 def _read_solved(path: Path) -> AVQCache:
     return AVQCache.load(str(path))
+
+
+def optimal_outcomes(game: TurnBasedGame) -> dict[GameResults, float]:
+    # the exact probabilities of a win, a draw and a loss of a single-player game under the solved policy, which picks uniformly among the optimal
+    # actions (as optimal:stochastic=True does): every chance outcome followed with its probability, no sampling. A result is the sign of the return,
+    # as the engine decides it. With an opponent, the outcome depends on the opponent's policy, so it is not defined here
+    if not game.single_player():
+        raise ValueError(f"The outcomes of the optimal policy are defined for single-player games only, not {game.game_name}")
+
+    cache = load_or_solve(game)
+    outcomes: dict[GameResults, float] = {GameResults.WIN: 0.0, GameResults.DRAW: 0.0, GameResults.LOSS: 0.0}
+
+    def follow(state: sp.State, probability: float) -> None:
+        if state.is_terminal():
+            reward = state.returns()[0]
+            outcomes[GameResults.WIN if reward > 0 else GameResults.LOSS if reward < 0 else GameResults.DRAW] += probability
+        elif TurnBasedState.is_chance_node(state):
+            for action, p in TurnBasedState.chance_outcomes(state):
+                follow(TurnBasedState.child(state, action), probability * p)
+        else:
+            entry = cache[0, TurnBasedState.get_observation(state, 0).state]
+            if entry is None:
+                raise ValueError(f"No solved entry for {TurnBasedState.get_observation(state, 0).state!r}")
+            for action in entry.A():
+                follow(TurnBasedState.child(state, action), probability / len(entry.A()))
+
+    follow(game.game.new_initial_state(), 1.0)
+
+    return outcomes
 
 
 def _best(q: dict[int, float]) -> AVQ:

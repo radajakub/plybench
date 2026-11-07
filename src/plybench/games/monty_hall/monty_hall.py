@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from fractions import Fraction
 from typing import Any, cast
 
 from plybench.configs.game_config import GameConfig
@@ -11,7 +12,7 @@ from plybench.core.game import OpenSpielAction, OpenSpielObservation, TurnBasedG
 from plybench.core.interface import InterfaceAction, InterfaceObservation, InterfaceTransformer
 from plybench.core.llm_interface import LLMObservation
 from plybench.core.prompt_adapter import SinglePlayerPromptAdapter
-from plybench.games.monty_hall.spiel import GAME_NAME, check_params
+from plybench.games.monty_hall.spiel import GAME_NAME, check_params, parse_car, parse_offer
 from plybench.utils.text import extract_params
 from plybench.visualization.doors import DoorPrinter
 
@@ -21,33 +22,56 @@ class MontyHallGameParams(GameParams):
     num_doors: int = 3
     final: str = "switch"
     host: str = "standard"
-    rules: str = "stated"  # `hidden`: the prompt does not tell how the host decides; only the prompt changes, not the game
+    offer: Fraction | None = None  # with the host `tempting` only: how often it opens a goat door when the first pick does not hide the car
+    car: tuple[int, ...] | None = None  # the car's weights per door; None is uniform
+    prize: str = "car"  # what the final door must hide to win
+    rules: str = "stated"  # which rules the prompt hides (`hidden`: the host's and the car's, or one of them); only the prompt changes, not the game
 
     @classmethod
     def from_string(cls, params_string: str) -> MontyHallGameParams:
         params = extract_params(params_string)
         num_doors, final, host = int(params.get("num_doors", 3)), params.get("final", "switch"), params.get("host", "standard")
-        rules = params.get("rules", "stated")
+        prize, rules = params.get("prize", "car"), params.get("rules", "stated")
 
-        check_params(num_doors, final, host)
+        check_params(num_doors, final, host, prize)
+        offer = parse_offer(params.get("offer", ""), host)
+        car = parse_car(params.get("car", ""), num_doors)
 
         if rules not in _RULES:
-            raise ValueError(f"Invalid rules: {rules}")
+            raise ValueError(f"Invalid rules: {rules}; expected one of {', '.join(_RULES)}")
 
-        return cls(num_doors=num_doors, final=final, host=host, rules=rules)
+        return cls(num_doors=num_doors, final=final, host=host, offer=offer, car=car, prize=prize, rules=rules)
 
-    # `rules` only when hidden, so the strings and result paths of the variants with stated rules stay as they were
+    def _later_params(self) -> dict[str, str]:
+        # the params added after the first records, only where they differ from their defaults, so the strings and result paths of the earlier
+        # variants stay as they were; a `tempting` host always names its offer
+        params = {}
+        if self.offer is not None:
+            params["offer"] = str(self.offer)
+        if self.car is not None:
+            params["car"] = ";".join(str(weight) for weight in self.car)
+        if self.prize != "car":
+            params["prize"] = self.prize
+        if self.rules != "stated":
+            params["rules"] = self.rules
+        return params
+
     def to_string(self) -> str:
-        return f"num_doors={self.num_doors},final={self.final},host={self.host}" + (f",rules={self.rules}" if self.rules != "stated" else "")
+        later = "".join(f",{name}={value}" for name, value in self._later_params().items())
+        return f"num_doors={self.num_doors},final={self.final},host={self.host}" + later
 
     @property
     def path_suffix(self) -> str:
-        return f"{self.num_doors}_doors_{self.final}_{self.host}" + (f"_{self.rules}" if self.rules != "stated" else "")
+        # values only, as before, except for the names that tell `offer` and `car` apart; `/` and `;` become `-`
+        later = "".join(f"_{name}_{value}" if name in ("offer", "car") else f"_{value}" for name, value in self._later_params().items())
+        return f"{self.num_doors}_doors_{self.final}_{self.host}" + later.replace("/", "-").replace(";", "-")
 
 
 class MontyHallGame(TurnBasedGame):
     def __init__(self, params: MontyHallGameParams) -> None:
-        super().__init__(game_type="monty_hall", game_name=GAME_NAME, params={"num_doors": params.num_doors, "final": params.final, "host": params.host})
+        # the later params only where set: the game params name the minimax cache, so an earlier variant keeps its file and a new one gets its own
+        later = {name: value for name, value in params._later_params().items() if name != "rules"}
+        super().__init__(game_type="monty_hall", game_name=GAME_NAME, params={"num_doors": params.num_doors, "final": params.final, "host": params.host, **later})
 
 
 class MontyHallAction(InterfaceAction):
@@ -163,21 +187,37 @@ class MontyHallTransformer(InterfaceTransformer[MontyHallAction, MontyHallObserv
 
 MONTY_HALL_HEAD_PROMPT = """
 You are a contestant on a game show. In front of you are {num_doors} closed doors, numbered 1 to {num_doors}.
-A car is behind one door, placed uniformly at random, and a goat is behind each of the others.
+{car_rule}
 First, you pick a door. {host_rule}
-Finally, {final_rule} You win the car if your final door hides it.
+Finally, {final_rule} {prize_rule}
 """
 
 _HOST_RULES = {
     "standard": "Then the host opens one of the doors you did not pick. The host knows where the car is and always opens a door that hides a goat, choosing uniformly at random when there are several such doors.",
     "ignorant": "Then the host opens one of the doors you did not pick. The host does not know where the car is and opens one of the doors you did not pick uniformly at random, so it may reveal the car.",
     "hell": "Then the host may open one of the doors you did not pick. The host knows where the car is and opens a door only when your first pick hides the car, choosing uniformly at random among the other doors, which all hide goats; otherwise the host opens no door.",
+    "tempting": "Then the host may open one of the doors you did not pick. The host knows where the car is. When your first pick hides the car, the host always opens one of the other doors, choosing uniformly at random; they all hide goats. Otherwise, with probability {offer}, the host opens a door you did not pick that hides a goat, choosing uniformly at random among such doors, and with probability {no_offer} the host opens no door.",
 }
+
+_PRIZE_RULES = {"car": "You win the car if your final door hides it.", "goat": "You win if your final door hides a goat."}
 
 # the rule of every host, hidden: it names what the host may do, but not when
 _HIDDEN_HOST_RULE = "Then the host may open one of the doors you did not pick. You are not told how the host decides whether to open a door or which door to open."
 
-_RULES = ("stated", "hidden")
+_UNIFORM_CAR_RULE = "A car is behind one door, placed uniformly at random, and a goat is behind each of the others."
+_HIDDEN_CAR_RULE = "A car is behind one door, and a goat is behind each of the others. You are not told how the car is placed."
+
+# which rules the prompt hides: none, both, the host's only or the car's only
+_RULES = ("stated", "hidden", "hidden_host", "hidden_car")
+
+
+def _car_rule(car: tuple[int, ...] | None) -> str:
+    # the car's placement, stated; weights as exact fractions
+    if car is None:
+        return _UNIFORM_CAR_RULE
+    chances = ", ".join(f"behind door {door} with probability {Fraction(weight, sum(car))}" for door, weight in enumerate(car, start=1))
+    return f"A car is behind one door, and a goat is behind each of the others. The car is placed at random: {chances}."
+
 
 _FINAL_RULES = {
     "switch": "you either stay with the door you picked or switch to the other closed door.",
@@ -185,7 +225,7 @@ _FINAL_RULES = {
 }
 
 
-class MontyHallPromptAdapter(SinglePlayerPromptAdapter[[int, str, str, str]]):
+class MontyHallPromptAdapter(SinglePlayerPromptAdapter[[MontyHallGameParams]]):
     def __init__(self) -> None:
         super().__init__(head_prompt_template=MONTY_HALL_HEAD_PROMPT, use_partial_state=True, position_name="")
         self.final = "switch"
@@ -196,10 +236,17 @@ class MontyHallPromptAdapter(SinglePlayerPromptAdapter[[int, str, str, str]]):
             return "<door:x> when you pick a door, or <stay> or <switch> when you make the final choice; one action only, e.g., <door:2>"
         return "<door:x>, e.g., <door:1>, <door:3>"
 
-    def restart_prompt(self, num_doors: int, final: str, host: str, rules: str) -> None:
-        self.final = final
-        host_rule = _HOST_RULES[host] if rules == "stated" else _HIDDEN_HOST_RULE
-        self.head_prompt = self.head_prompt_template.format(num_doors=num_doors, host_rule=host_rule, final_rule=_FINAL_RULES[final])
+    def restart_prompt(self, params: MontyHallGameParams) -> None:
+        self.final = params.final
+        if params.rules in ("hidden", "hidden_host"):
+            host_rule = _HIDDEN_HOST_RULE
+        else:
+            offer = params.offer or Fraction(0)
+            host_rule = _HOST_RULES[params.host].format(offer=offer, no_offer=1 - offer)
+        car_rule = _HIDDEN_CAR_RULE if params.rules in ("hidden", "hidden_car") else _car_rule(params.car)
+        self.head_prompt = self.head_prompt_template.format(
+            num_doors=params.num_doors, car_rule=car_rule, host_rule=host_rule, final_rule=_FINAL_RULES[params.final], prize_rule=_PRIZE_RULES[params.prize]
+        )
 
     def observation_prompt(self, observation: LLMObservation) -> str:
         # the host is chance, not a player, so a list of actions would hide the door it opened: both observation types tell the information state
@@ -210,7 +257,7 @@ class MontyHallEngine(TurnBasedEngine[MontyHallTransformer, MontyHallPromptAdapt
     def __init__(self, game_config: GameConfig) -> None:
         params = cast(MontyHallGameParams, game_config.params)
         prompt_adapter = MontyHallPromptAdapter()
-        prompt_adapter.restart_prompt(params.num_doors, params.final, params.host, params.rules)
+        prompt_adapter.restart_prompt(params)
         super().__init__(game_config, MontyHallGame(params), MontyHallTransformer(params.num_doors), prompt_adapter, MontyHallAction, MontyHallObservation)
 
     def reset(self) -> None:

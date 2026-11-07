@@ -6,6 +6,36 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+### Added
+
+- `PlayerParams.display_name()`: a short name for plots and tables, `None` by default; `player_label` uses it when a
+  player gives one (e.g. a plugin player naming its parts). Every built-in player's label is unchanged.
+- `game_title`: a game's name and params on one line, e.g. "Monty Hall (num_doors=3, final=pick, host=standard)".
+- `optimal_outcomes(game)` (`core/minimax.py`): the exact probabilities of a win, a draw and a loss of a single-player game
+  under the solved policy, uniform among the optimal actions as `optimal:stochastic=True`, over every chance outcome.
+  `optimal_value` turns them into a metric's value, and `plot_training.py --optimal` draws it as a dotted line, where a
+  learner that plays optimally converges.
+- `monty_hall` param `car`: integer weights of the doors, e.g. `car=3;1;1` (the car behind door 1 with 3/5). The first
+  pick then matters: with `3;1;1` and the standard host, the optimal policy picks door 2 or 3 and switches (wins 4/5);
+  picking door 1 and switching wins 2/5. Equal weights are the uniform game. Uniform games keep their strings, paths,
+  minimax caches and recorded states.
+- `monty_hall` rules `hidden_host` and `hidden_car`: the prompt hides one rule only.
+- `monty_hall` variants where staying is the better choice: `prize=goat` (win if the final door hides a goat; 3 doors and
+  the standard host: stay 2/3, switch 1/3), and the host `tempting` with `offer` (default 1/4; needs `final=pick`),
+  which always opens a door when the first pick hides the car and otherwise opens a goat door with probability `offer`.
+  After an opened door, staying wins 1 / (1 + (n - 1) · offer): 2/3 with 3 doors and 1/4. The rules of every variant are
+  documented in `games/monty_hall/spiel.py`.
+
+### Changed
+
+- `monty_hall` `rules=hidden` hides the car's placement too ("You are not told how the car is placed."), so a hidden
+  biased car and a hidden uniform car give the same prompt. The prompt of existing `rules=hidden` configs changes; their
+  strings, paths and games do not.
+
+- Training plots: a curve is labelled by its player, with the trainer, the training config and the replicate only where
+  the curves of a panel differ in them (`curve_labels`); two players with the same label show their full configs. Panel
+  titles are `game_title` and the tester, which is left out for a single-player game.
+
 ## [4.2.1] - 2026-11-05
 
 ### Fixed

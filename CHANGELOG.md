@@ -6,6 +6,8 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+## [4.5.0] - 2026-11-07
+
 ### Added
 
 - `--check` for `plybench-run` and `plybench-train` (`--check --json` for tools): what the experiment would play, without

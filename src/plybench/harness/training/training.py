@@ -129,6 +129,7 @@ class TrainingHarness:
         game_callbacks: GameCallbacks | None = None,
         training_callbacks: TrainingCallbacks | None = None,
     ) -> TrainingResults:
+        self.check_runs()
         training_callbacks = training_callbacks if training_callbacks is not None else TrainingCallbacks()
         training_callbacks.on_training_start(self.game_configs, self.player_configs, self.trainer_configs, self.tester_configs)
 
@@ -254,6 +255,30 @@ class TrainingHarness:
         # nothing calls initialize_policy on a replayed round, so the checkpoint is restored here
         player.restore()
         return player
+
+    def check_runs(self) -> None:
+        # a run's folder names its game, players and replicate, not its schedule or seed, so two runs could write into one folder and mix their games
+        # without an error: refused before any game is played, for two runs of this experiment and for a run whose folder holds another one
+        folders: dict[Path, TrainingRun] = {}
+        for run in self.runs:
+            folder = self.path_builder.run_dir(self.experiment, run)
+            if folder in folders:
+                raise ValueError(
+                    f"Two runs of {self.experiment} would share {folder}: {folders[folder].to_dict()} and {run.to_dict()}; turn all but one of them off, or "
+                    "run the other one under another experiment name"
+                )
+            folders[folder] = run
+
+            manifest = self.path_builder.manifest(self.experiment, run)
+            if not manifest.exists():
+                continue
+            stored = json.loads(manifest.read_text())
+            expected = {**run.to_dict(), "seed": self.seed}
+            # a field an older manifest does not have is not compared
+            differing = {name: (stored[name], value) for name, value in expected.items() if name in stored and stored[name] != value}
+            if differing:
+                changes = "; ".join(f"{name}: {old!r} there, {new!r} now" for name, (old, new) in differing.items())
+                raise ValueError(f"{folder} holds another run ({changes}); resuming it would mix the games of the two, so use another experiment name")
 
     def _write_manifest(self, run: TrainingRun) -> None:
         # the paths carry identity only, so the counts behind a run live here

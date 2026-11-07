@@ -6,6 +6,15 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+### Added
+
+- `TrainingHarness.check_runs()`, called by `run()` before any game: a run's folder names its game, players and
+  replicate, not its schedule or seed, so two runs of one experiment that would share a folder (e.g. one player with two
+  schedules) are refused, and so is a resume into a folder whose `run.json` names another schedule, seed or config.
+  Fields an older `run.json` does not have are not compared.
+- Commands `plybench-plot` and `plybench-plot-training` (`plybench.cli.plot`, `plybench.cli.plot_training`), so the
+  plots work from any checkout, e.g. plyagents; `scripts/plot.py` and `scripts/plot_training.py` still work.
+
 ## [4.3.0] - 2026-11-07
 
 ### Added

@@ -6,6 +6,8 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+## [4.3.0] - 2026-11-07
+
 ### Added
 
 - `PlayerParams.display_name()`: a short name for plots and tables, `None` by default; `player_label` uses it when a

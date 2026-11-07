@@ -88,3 +88,21 @@ def test_limits_apply_to_available_providers_only_and_scale():
     limits = {Provider.MISTRAL: {"m": ModelLimits(max_concurrent=4, rps=2.0)}, Provider.OPENAI: {"g": ModelLimits(rps=1.0)}}
     apply_model_limits(cast(PlyBench, SimpleNamespace(llm=llm)), limits, scale=0.5)
     assert calls == [(Provider.MISTRAL, "m", ModelLimits(max_concurrent=4, rps=1.0))]
+
+
+def test_the_whole_provider_limit_sets_its_concurrency(tmp_path):
+    path = tmp_path / "limits.json"
+    path.write_text(json.dumps({"mistral": {"*": {"max_concurrent": 4}, "m": {"rps": 2.0}}}))
+    limits = load_limits(path)
+    calls = []
+    llm = SimpleNamespace(
+        available_providers=[Provider.MISTRAL],
+        set_concurrency=lambda *call: calls.append(("concurrency", *call)),
+        set_model_limits=lambda *call: calls.append(("model", *call)),
+    )
+    apply_model_limits(cast(PlyBench, SimpleNamespace(llm=llm)), limits, scale=0.5)
+    assert calls == [("concurrency", Provider.MISTRAL, 4), ("model", Provider.MISTRAL, "m", ModelLimits(rps=1.0))]
+    for fields in ({"rps": 1.0}, {"max_concurrent": 4, "tpm": 1000}):
+        path.write_text(json.dumps({"mistral": {"*": fields}}))
+        with pytest.raises(ValueError, match="takes max_concurrent only"):
+            load_limits(path)

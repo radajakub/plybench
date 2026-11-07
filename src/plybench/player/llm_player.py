@@ -56,6 +56,9 @@ class LLMParams(PlayerParams):
         model = ModelConfig(provider, parts[3], options)
         return cls(observation_type, output_strategy, model)
 
+    def models(self) -> list[ModelConfig]:
+        return [self.model]
+
     def to_string(self) -> str:
         head = f"{self.observation_type.value}:{self.output_strategy.value}:{self.model.provider.value}:{self.model.model_name}"
         return f"{head}:{options_to_string(self.model.options)}"

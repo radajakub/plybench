@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import json
 from contextlib import AbstractContextManager, nullcontext
 
 import clankers
@@ -31,6 +32,7 @@ from plybench.callbacks.notification_callbacks import notification_training_call
 from plybench.callbacks.training_callbacks import TrainingCallbacks
 from plybench.cli.shared import add_limits_args, add_training_source_args, build_op, training_from_args, warn_if_unconfigured
 from plybench.common.enums import MetricName
+from plybench.harness.plan import training_plan
 from plybench.harness.training.results import TrainingResults
 from plybench.harness.training.training import TrainingHarness
 from plybench.registry import Registry
@@ -77,6 +79,10 @@ def main() -> None:
     parser.add_argument("--metric", type=str, default=MetricName.WIN_RATE.value, choices=[name.value for name in MetricName], help="metric to print the learning curve on")
     parser.add_argument("--notify", action="store_true", help="push a notification on each epoch end, a final summary, and on failure (needs NTFY_URL and NTFY_TOPIC)")
     parser.add_argument("--quiet", action="store_true", help="print only each phase's outcomes and the checkpoints, not the progress of every game")
+    parser.add_argument(
+        "--check", action="store_true", help="check the experiment and print what it would play, then exit: nothing is played and no model is called (exit 1 on a problem)"
+    )
+    parser.add_argument("--json", action="store_true", help="with --check: print the plan as JSON")
     add_limits_args(parser)
     args = parser.parse_args()
 
@@ -86,6 +92,11 @@ def main() -> None:
 
     op = build_op(concurrency=concurrency, limits=args.limits)
     harness = training_from_args(op, args)
+
+    if args.check:
+        plan = training_plan(harness)
+        print(json.dumps(plan.to_dict(), indent=2) if args.json else plan.summary())
+        raise SystemExit(1 if plan.problems else 0)
 
     callbacks = console_training_callbacks(progress=not args.quiet)
     notify: AbstractContextManager[object] = nullcontext()

@@ -11,7 +11,7 @@ from pathlib import Path
 import clankers
 
 from plybench.app import PlyBench
-from plybench.cli.limits import LIMITS_ENV, Limits, limits_path, load_limits
+from plybench.cli.limits import LIMITS_ENV, PROVIDER_WIDE, Limits, limits_path, load_limits
 from plybench.common.paths import BenchmarkPathBuilder
 from plybench.harness.benchmark.benchmark import Benchmark
 from plybench.harness.benchmark.results import BenchmarkResults
@@ -38,7 +38,11 @@ def apply_model_limits(op: PlyBench, limits: Limits, scale: float = 1.0) -> None
         if provider not in available:
             continue
         for model_name, model_limits in models.items():
-            op.llm.set_model_limits(provider, model_name, model_limits.scaled(scale) if scale != 1.0 else model_limits)
+            # the whole provider's concurrency is not scaled, as a model's concurrency is not (ModelLimits.scaled)
+            if model_name == PROVIDER_WIDE:
+                op.llm.set_concurrency(provider, model_limits.max_concurrent)
+            else:
+                op.llm.set_model_limits(provider, model_name, model_limits.scaled(scale) if scale != 1.0 else model_limits)
 
 
 def _one_line_warning(message: Warning | str, category: type[Warning], filename: str, lineno: int, line: str | None = None) -> str:

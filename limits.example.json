@@ -1,4 +1,5 @@
 {
+  "metacentrum": { "*": { "max_concurrent": 4 } },
   "mistral": {
     "mistral-medium-3.5": { "max_concurrent": 16, "rps": 16.67, "tpm": 500000 },
     "mistral-small-4": { "max_concurrent": 8, "rps": 1.67, "tpm": 100000 }

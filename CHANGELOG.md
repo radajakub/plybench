@@ -6,6 +6,18 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+### Added
+
+- `--check` for `plybench-run` and `plybench-train` (`--check --json` for tools): what the experiment would play, without
+  playing a game or calling a model. Per matchup or training run the games planned and already saved, the models the
+  players call, and every problem found: a player that cannot be built for a game, a trainee that is not a
+  `LearnablePlayer`, a provider without credentials, a model the provider does not know, two training runs in one folder.
+  Exit code 1 on a problem. In `plybench.harness.plan` (`benchmark_plan`, `training_plan`).
+- `PlayerParams.models()`: the models a player calls, none by default; `LLMParams` returns its model. A plugin player
+  with LLM parts names them here, so `--check` and total limits see them.
+- The limit of a whole provider in the limits file, `{"metacentrum": {"*": {"max_concurrent": 4}}}`: every call to the
+  provider, over all its models; it replaces `--concurrency` for that provider. `max_concurrent` only.
+
 ## [4.4.1] - 2026-11-07
 
 ### Changed

@@ -33,6 +33,7 @@ from plybench.callbacks.training_callbacks import TrainingCallbacks
 from plybench.cli.shared import add_limits_args, add_training_source_args, build_op, training_from_args, warn_if_unconfigured
 from plybench.common.enums import MetricName
 from plybench.harness.plan import training_plan
+from plybench.harness.status import training_status
 from plybench.harness.training.results import TrainingResults
 from plybench.harness.training.training import TrainingHarness
 from plybench.registry import Registry
@@ -83,6 +84,7 @@ def main() -> None:
         "--check", action="store_true", help="check the experiment and print what it would play, then exit: nothing is played and no model is called (exit 1 on a problem)"
     )
     parser.add_argument("--json", action="store_true", help="with --check: print the plan as JSON")
+    parser.add_argument("--status", action="store_true", help="print the saved games and their metrics as JSON, then exit: nothing is played (for tools that poll a run)")
     add_limits_args(parser)
     args = parser.parse_args()
 
@@ -92,6 +94,10 @@ def main() -> None:
 
     op = build_op(concurrency=concurrency, limits=args.limits)
     harness = training_from_args(op, args)
+
+    if args.status:
+        print(json.dumps(training_status(harness)))
+        return
 
     if args.check:
         plan = training_plan(harness)

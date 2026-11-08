@@ -26,6 +26,7 @@ from plybench.callbacks.console_callbacks import console_benchmark_callbacks
 from plybench.callbacks.notification_callbacks import notification_benchmark_callbacks
 from plybench.cli.shared import add_limits_args, add_source_args, benchmark_from_args, build_op, warn_if_unconfigured
 from plybench.harness.plan import benchmark_plan
+from plybench.harness.status import benchmark_status
 
 
 def main() -> None:
@@ -42,6 +43,7 @@ def main() -> None:
         "--check", action="store_true", help="check the experiment and print what it would play, then exit: nothing is played and no model is called (exit 1 on a problem)"
     )
     parser.add_argument("--json", action="store_true", help="with --check: print the plan as JSON")
+    parser.add_argument("--status", action="store_true", help="print the saved games and their metrics as JSON, then exit: nothing is played (for tools that poll a run)")
     add_limits_args(parser)
     args = parser.parse_args()
 
@@ -51,6 +53,10 @@ def main() -> None:
 
     op = build_op(concurrency=concurrency, limits=args.limits)
     benchmark = benchmark_from_args(op, args)
+
+    if args.status:
+        print(json.dumps(benchmark_status(benchmark)))
+        return
 
     if args.check:
         plan = benchmark_plan(benchmark)

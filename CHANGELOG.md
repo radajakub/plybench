@@ -6,6 +6,15 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+### Added
+
+- `--status` for `plybench-run` and `plybench-train`: the saved games and their metrics so far, as JSON, for tools that
+  poll a running experiment. Per matchup, or per training run, epoch and phase (training, and a test per tester), the
+  games saved of those planned and the default metrics (outcomes, score, moves, tokens) with a Wilson interval for rates
+  and a t interval for means. Nothing is played and no model is called; no optimality replay, no recognition and no
+  bootstrap, so it stays cheap (25,500 saved games in about 6 s). In `plybench.harness.status` (`benchmark_status`,
+  `training_status`).
+
 ## [4.6.0] - 2026-11-07
 
 ### Added

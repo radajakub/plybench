@@ -6,6 +6,8 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+## [4.6.1] - 2026-11-08
+
 ### Added
 
 - `--status` for `plybench-run` and `plybench-train`: the saved games and their metrics so far, as JSON, for tools that

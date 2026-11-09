@@ -6,6 +6,8 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+## [4.8.0] - 2026-11-09
+
 ### Added
 
 - A training phase's place in its `metadata.json`, key `place`: the experiment, the run (game, trainee, trainer,

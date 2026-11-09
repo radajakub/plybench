@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import time
+from collections import Counter
 from dataclasses import dataclass, field
 
 import clankers
@@ -12,7 +13,7 @@ from plybench.callbacks.console_callbacks import PhaseKey
 from plybench.callbacks.training_callbacks import TrainingCallbacks
 from plybench.configs.game_config import GameConfig
 from plybench.configs.player_config import PlayerConfig
-from plybench.configs.training_run import Epoch, EpochPhase, TrainingRun
+from plybench.configs.training_run import Epoch, EpochPhase, TrainingRun, TrainingRunKey
 from plybench.trackers.result_tracker import ResultTracker
 
 
@@ -25,6 +26,8 @@ class _NotificationProgress:
     fresh_rounds_done: int = 0
     start: float = 0.0
     preexisting: dict[tuple[str, str, str], set[int]] = field(default_factory=dict)
+    # rounds played this run per matchup: a matchup whose rounds were all on disk ends without a notification
+    fresh: Counter[tuple[str, str, str]] = field(default_factory=Counter)
 
     def eta(self, elapsed: float) -> float | None:
         rounds_left = self.fresh_rounds_total - self.fresh_rounds_done
@@ -56,6 +59,7 @@ def notification_benchmark_callbacks(experiment: str) -> tuple[BenchmarkCallback
         state.fresh_rounds_done = 0
         state.start = time.monotonic()
         state.preexisting.clear()
+        state.fresh.clear()
 
     def on_matchup_start(result_tracker: ResultTracker, game_config: GameConfig, i: PlayerConfig, o: PlayerConfig) -> None:
         preexisting = set(result_tracker.get_completed_games())
@@ -66,9 +70,12 @@ def notification_benchmark_callbacks(experiment: str) -> tuple[BenchmarkCallback
         if game_round in state.preexisting.get(key(game_config, i, o), set()):
             return  # resumed round — completes instantly, must not inflate the throughput estimate
         state.fresh_rounds_done += 1
+        state.fresh[key(game_config, i, o)] += 1
 
     def on_matchup_end(result_tracker: ResultTracker) -> None:
         state.done_matchups += 1
+        if not state.fresh[key(result_tracker.game, result_tracker.i, result_tracker.o)]:
+            return  # every round was on disk: nothing new to report
         elapsed = time.monotonic() - state.start
         label = f"{result_tracker.game.path}: {result_tracker.i.path} vs {result_tracker.o.path}"
         parts = [f"[{experiment}] matchup done ({state.describe()}): {label}"]
@@ -98,6 +105,8 @@ class _TrainingProgress:
     fresh_rounds_done: int = 0
     start: float = 0.0
     preexisting: dict[PhaseKey, set[int]] = field(default_factory=dict)
+    # rounds played this run per (run, epoch): an epoch whose rounds were all on disk ends without a notification
+    fresh: Counter[tuple[TrainingRunKey, int]] = field(default_factory=Counter)
 
     @property
     def playable(self) -> int:
@@ -131,6 +140,7 @@ def notification_training_callbacks(experiment: str) -> tuple[TrainingCallbacks,
         state.fresh_rounds_done = 0
         state.start = time.monotonic()
         state.preexisting.clear()
+        state.fresh.clear()
 
     def on_run_start(run: TrainingRun) -> None:
         schedule = run.training_config
@@ -148,9 +158,12 @@ def notification_training_callbacks(experiment: str) -> tuple[TrainingCallbacks,
         if game_round in state.preexisting.get(key(phase), set()):
             return  # resumed round — completes instantly, must not inflate the throughput estimate
         state.fresh_rounds_done += 1
+        state.fresh[phase.run.key, phase.epoch.index] += 1
 
     def on_epoch_end(epoch: Epoch) -> None:
         state.epochs_done += 1
+        if not state.fresh[epoch.run.key, epoch.index]:
+            return  # every round was on disk (a resumed run): nothing new to report
         elapsed = time.monotonic() - state.start
         run = epoch.run
         label = f"{run.game.path}: {run.trainee.path} vs {run.trainer.path} rep{run.replicate} epoch {epoch.index}/{run.training_config.num_epochs}"

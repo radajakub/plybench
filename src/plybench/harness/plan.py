@@ -141,7 +141,8 @@ def benchmark_plan(benchmark: Benchmark) -> ExperimentPlan:
     for game, player, opponent in matrix:
         game_config, player_config, opponent_config = op.registry.game_config(game), op.registry.player_config(player), op.registry.player_config(opponent)
         folder = benchmark.path_builder.game_base(benchmark.experiment, game_config, player_config, opponent_config, benchmark.num_games)
-        plan.items.append(PlannedItem(game, player, opponent, benchmark.num_games, _saved(folder)))
+        # the configs as the results write them (to_string), as a training run's, so a tool can match an item with its results
+        plan.items.append(PlannedItem(game_config.to_string(), player_config.to_string(), opponent_config.to_string(), benchmark.num_games, _saved(folder)))
     models = _check_players(op, benchmark.game_configs, list(dict.fromkeys(benchmark.player_configs + benchmark.opponent_configs)), plan.problems)
     plan.models = _check_models(op, models, plan.problems)
     plan.optimal = _optimal(op, benchmark.game_configs, plan.problems)

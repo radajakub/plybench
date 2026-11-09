@@ -6,6 +6,16 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+### Fixed
+
+- `--notify`: an epoch (training) or a matchup (benchmark) whose rounds were all on disk ends without a notification, so a
+  resumed experiment no longer sends one per finished epoch or matchup; it still counts towards the progress.
+
+### Changed
+
+- `--check --json`: a benchmark plan's items name the game, player and opponent as the results do (`to_string()`), as a
+  training plan's already did, so a tool matches an item with its matchup's results.
+
 ## [4.9.0] - 2026-11-09
 
 ### Added

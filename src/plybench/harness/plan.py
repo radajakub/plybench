@@ -7,13 +7,15 @@ from plyllm import ModelConfig
 
 from plybench.app import PlyBench
 from plybench.configs.player_config import PlayerConfig
+from plybench.core.minimax import optimal_outcomes
 from plybench.harness.benchmark.benchmark import Benchmark
 from plybench.harness.training.training import TrainingHarness
 from plybench.player.learnable import LearnablePlayer
 
 # What an experiment would do, checked without playing a game or calling a model: per matchup or training run the games planned and the games already
 # saved, the models its players call, and every problem found (a player that cannot be built for a game, a provider without credentials, a model the
-# provider does not know, two training runs in one folder). For `--check` of plybench-run and plybench-train, and for tools that start runs for us.
+# provider does not know, two training runs in one folder); also the exact outcomes of the optimal policy of every solvable single-player game, for
+# tools that show them as a reference. For `--check` of plybench-run and plybench-train, and for tools that start runs for us.
 
 
 @dataclass(frozen=True)
@@ -35,6 +37,9 @@ class ExperimentPlan:
     items: list[PlannedItem] = field(default_factory=list)
     models: list[str] = field(default_factory=list)  # "<provider>:<model>", sorted, without options
     problems: list[str] = field(default_factory=list)
+    # per game config, the probabilities of a win, a draw and a loss under the optimal policy; solvable single-player games only (with an opponent
+    # the outcome depends on the opponent's policy)
+    optimal: dict[str, dict[str, float]] = field(default_factory=dict)
 
     @property
     def planned_games(self) -> int:
@@ -53,6 +58,7 @@ class ExperimentPlan:
             "items": [item.__dict__ for item in self.items],
             "models": self.models,
             "problems": self.problems,
+            "optimal": self.optimal,
         }
 
     def summary(self) -> str:
@@ -63,6 +69,8 @@ class ExperimentPlan:
             schedule = f" [{item.schedule}, replicate {item.replicate}]" if item.schedule is not None else ""
             lines.append(f"  {item.game} | {item.player} vs {item.opponent}{schedule}: {item.saved_games}/{item.planned_games} saved")
         lines.append(f"models: {', '.join(self.models) if self.models else 'none'}")
+        for game, outcomes in self.optimal.items():
+            lines.append(f"optimal policy of {game}: {', '.join(f'{result} {probability:.3f}' for result, probability in outcomes.items())}")
         lines.extend(f"PROBLEM: {problem}" for problem in self.problems)
         if not self.problems:
             lines.append("no problems found")
@@ -103,6 +111,28 @@ def _check_models(op: PlyBench, models: list[ModelConfig], problems: list[str]) 
     return names
 
 
+def _optimal(op: PlyBench, games: list[str], problems: list[str]) -> dict[str, dict[str, float]]:
+    # the outcomes of the optimal policy of every solvable single-player game; the solution is read from the minimax cache, or solved and saved there
+    # on first use, as a run with an optimal player or an oracle component would
+    optimal: dict[str, dict[str, float]] = {}
+    for game_string in games:
+        config = op.registry.game_config(game_string)
+        if not op.registry.solvable(config.key):
+            continue
+        engine = op.registry.build_engine(config)
+        engine.reset()
+        if not engine.game.single_player():
+            continue
+        try:
+            outcomes = optimal_outcomes(engine.game)
+        except Exception as error:
+            # any error, as for the players: the check reports every problem at once
+            problems.append(f"the optimal policy of {game_string} cannot be evaluated: {type(error).__name__}: {error}")
+            continue
+        optimal[game_string] = {result.name.lower(): probability for result, probability in outcomes.items()}
+    return optimal
+
+
 def benchmark_plan(benchmark: Benchmark) -> ExperimentPlan:
     op = benchmark.op
     plan = ExperimentPlan(benchmark.experiment, "benchmark")
@@ -114,6 +144,7 @@ def benchmark_plan(benchmark: Benchmark) -> ExperimentPlan:
         plan.items.append(PlannedItem(game, player, opponent, benchmark.num_games, _saved(folder)))
     models = _check_players(op, benchmark.game_configs, list(dict.fromkeys(benchmark.player_configs + benchmark.opponent_configs)), plan.problems)
     plan.models = _check_models(op, models, plan.problems)
+    plan.optimal = _optimal(op, benchmark.game_configs, plan.problems)
     return plan
 
 
@@ -133,4 +164,5 @@ def training_plan(harness: TrainingHarness) -> ExperimentPlan:
     players = list(dict.fromkeys(harness.player_configs + harness.trainer_configs + harness.tester_configs))
     models = _check_players(op, harness.game_configs, players, plan.problems, frozenset(harness.player_configs))
     plan.models = _check_models(op, models, plan.problems)
+    plan.optimal = _optimal(op, harness.game_configs, plan.problems)
     return plan

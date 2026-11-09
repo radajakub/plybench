@@ -6,6 +6,12 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+### Added
+
+- `--check --json` (`ExperimentPlan.optimal`, key `optimal`): per game config, the probabilities of a win, a draw and a
+  loss under the optimal policy (`optimal_outcomes`), for every solvable single-player game; `--check` prints them. A
+  game not yet solved is solved and saved in the minimax cache, as a run would.
+
 ## [4.8.0] - 2026-11-09
 
 ### Added

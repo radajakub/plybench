@@ -50,6 +50,22 @@ def test_a_training_plan_counts_every_phase(tmp_path, monkeypatch):
     assert plan.items[0].saved_games == plan.planned_games and plan.remaining_games == 0
 
 
+def test_a_plan_gives_the_optimal_outcomes_of_solvable_single_player_games_only(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    games = ["monty_hall:", "monty_hall:prize=goat,rules=hidden", "tic_tac_toe:", "connect_four:"]
+    plan = benchmark_plan(Benchmark("plan", _op(), games, [UNIFORM], [UNIFORM], 2, seed=0))
+    # standard host: switching wins 2/3; goat prize: staying wins 2/3. tic_tac_toe has an opponent, connect_four is not solvable
+    assert list(plan.optimal) == ["monty_hall:", "monty_hall:prize=goat,rules=hidden"] and plan.problems == []
+    for outcomes in plan.optimal.values():
+        assert outcomes.keys() == {"win", "draw", "loss"}
+        assert abs(outcomes["win"] - 2 / 3) < 1e-12 and outcomes["draw"] == 0.0 and abs(outcomes["loss"] - 1 / 3) < 1e-12
+    assert plan.to_dict()["optimal"] == plan.optimal
+
+    _Stub.proposed, _Stub.fail_at, _Stub.nothing_at = [], None, set()
+    harness = TrainingHarness("plan", _op(), ["monty_hall:"], ["stub:"], [UNIFORM], [UNIFORM], ["num_epochs=1,num_training_games=1,num_test_games=1"], 1, seed=0)
+    assert training_plan(harness).optimal == {"monty_hall:": plan.optimal["monty_hall:"]}
+
+
 def test_a_model_without_credentials_is_a_problem(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     plan = benchmark_plan(Benchmark("plan", _op(), ["tic_tac_toe:"], [LLM_PLAYER], [UNIFORM], 2, seed=0))

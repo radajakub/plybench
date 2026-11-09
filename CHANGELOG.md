@@ -6,6 +6,8 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+## [4.7.0] - 2026-11-09
+
 ### Added
 
 - A running summary in each matchup's (and training phase's) `metadata.json`, key `summary`: per default metric the

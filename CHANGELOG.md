@@ -6,6 +6,8 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+## [4.9.1] - 2026-11-09
+
 ### Fixed
 
 - `--notify`: an epoch (training) or a matchup (benchmark) whose rounds were all on disk ends without a notification, so a

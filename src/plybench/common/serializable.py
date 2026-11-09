@@ -39,8 +39,12 @@ class Saveable(Serializable[DeserializeArgs], Generic[DeserializeArgs, LoadPath,
         path = Path(filepath)
         if not path.parent.exists():
             path.parent.mkdir(parents=True, exist_ok=True)
-        with open(filepath, "w") as f:
+        # a temporary file, then renamed over the old one: a reader (a tool polling a run's metadata.json) never sees half a file; its name carries
+        # the process, so two processes saving one file (a shared minimax cache) never write into each other's
+        temporary = path.with_name(f"{path.name}.{os.getpid()}.tmp")
+        with open(temporary, "w") as f:
             json.dump(self.to_dict(), f, indent=None)
+        os.replace(temporary, path)
 
     @classmethod
     @abstractmethod

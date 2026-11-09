@@ -212,6 +212,7 @@ class TrainingHarness:
                 after_game=learner.observe,
                 colour_rule=first_starts_by_parity,
                 seed=self.seed,
+                place=phase.place(self.experiment),
             )
             await learner.update([game for game in tracker.games if game is not None])
         finally:
@@ -239,6 +240,7 @@ class TrainingHarness:
             max_concurrent=max_concurrent,
             colour_rule=first_starts_by_parity,
             seed=self.seed,
+            place=phase.place(self.experiment),
         )
 
     def _policy_config(self, run: TrainingRun, epoch: int) -> PlayerConfig:

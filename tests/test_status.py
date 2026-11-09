@@ -16,7 +16,7 @@ from plybench.app import PlyBench
 from plybench.cli import run
 from plybench.common.enums import MetricName
 from plybench.harness.benchmark.benchmark import Benchmark
-from plybench.harness.status import benchmark_status, check_folder, check_summaries, training_status
+from plybench.harness.status import benchmark_status, check_summaries, training_status
 from plybench.harness.training.training import TrainingHarness
 from plybench.player.spec import PlayerSpec
 from plybench.trackers.result_tracker import ResultTracker
@@ -152,22 +152,17 @@ def test_training_phases_keep_summaries_too(tmp_path, monkeypatch):
     harness = TrainingHarness("summary", _op(), ["tic_tac_toe:"], ["stub:"], [UNIFORM], [UNIFORM], ["num_epochs=2,num_training_games=3,num_test_games=4"], 1, seed=0)
     asyncio.run(harness.run(sync=True))
     # epoch 0 tests only; epochs 1 and 2 train and test
-    assert len(_metadata(tmp_path / "results")) == 5 and check_summaries(harness) == []
-
-
-def test_the_folder_backfill_writes_only_summaries_and_never_a_file_it_cannot_read(tmp_path, monkeypatch):
-    monkeypatch.chdir(tmp_path)
-    op = _op()
-    asyncio.run(Benchmark("summary", op, ["tic_tac_toe:", "nim:"], [UNIFORM], [OPTIMAL], 3, seed=0).run(sync=True))
     files = _metadata(tmp_path / "results")
-    originals = [json.loads(file.read_text()) for file in files]
-    for file, original in zip(files, originals, strict=True):
-        file.write_text(json.dumps({key: value for key, value in original.items() if key != "summary"}))
-    # a game that does not parse: its matchup is reported, not written
-    broken = next(files[1].parent.glob("game_1.json"))
-    broken.write_text("{")
+    assert len(files) == 5 and check_summaries(harness) == []
+    # each phase says where it belongs, so a tool needs no folder layout
+    places = sorted((place["epoch"], place["phase"]) for place in (json.loads(file.read_text())["place"] for file in files))
+    assert places == [(0, "test"), (1, "test"), (1, "train"), (2, "test"), (2, "train")]
+    place = json.loads(files[0].read_text())["place"]
+    assert place["experiment"] == "summary" and place["epochs"] == 2 and place["run"]["replicate"] == 0 and place["run"]["trainee_config"] == "stub:"
 
-    checked, problems = check_folder(tmp_path / "results", op.registry, write=True)
-    assert checked == 2 and problems[0] == f"{files[0]}: no summary" and problems[1].startswith(f"{files[1]}: cannot read")
-    assert json.loads(files[0].read_text()) == originals[0] and "summary" not in json.loads(files[1].read_text())
-    assert check_folder(tmp_path / "results", op.registry)[1] == problems[1:]
+    # metadata from before places: check names it, write gives it back, and the summary is left as it was
+    recorded = json.loads(files[0].read_text())
+    files[0].write_text(json.dumps({key: value for key, value in recorded.items() if key != "place"}))
+    assert check_summaries(harness) == [f"{files[0].relative_to(tmp_path)}: no place"]
+    check_summaries(harness, write=True)
+    assert json.loads(files[0].read_text()) == recorded and check_summaries(harness) == []

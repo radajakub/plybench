@@ -74,6 +74,16 @@ class EpochPhase(ABC):
     def num_games(self) -> int:
         raise NotImplementedError
 
+    @property
+    @abstractmethod
+    def kind(self) -> str:
+        raise NotImplementedError
+
+    def place(self, experiment: str) -> dict[str, Any]:
+        # where this phase's matchup belongs (experiment, run, epoch of how many, train or test), kept in its metadata.json so a tool reads it
+        # without knowing the folder layout; the tester of a test is the matchup's opponent
+        return {"experiment": experiment, "run": self.run.to_dict(), "epoch": self.epoch.index, "epochs": self.run.training_config.num_epochs, "phase": self.kind}
+
 
 @dataclass(frozen=True, eq=True)
 class TrainPhase(EpochPhase):
@@ -93,6 +103,10 @@ class TrainPhase(EpochPhase):
     @property
     def num_games(self) -> int:
         return self.run.training_config.num_training_games
+
+    @property
+    def kind(self) -> str:
+        return "train"
 
 
 @dataclass(frozen=True, eq=True)
@@ -115,3 +129,7 @@ class TestPhase(EpochPhase):
     @property
     def num_games(self) -> int:
         return self.run.training_config.num_test_games
+
+    @property
+    def kind(self) -> str:
+        return "test"

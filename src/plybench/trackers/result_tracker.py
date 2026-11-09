@@ -52,6 +52,7 @@ class ResultTracker(Saveable[[ConfigParser, ExperimentPathBuilder], Path, [Confi
             seed=data.get("seed"),
             sessions=data.get("sessions", []),
             summary=data.get("summary"),
+            place=data.get("place"),
         )
 
     @classmethod
@@ -81,6 +82,7 @@ class ResultTracker(Saveable[[ConfigParser, ExperimentPathBuilder], Path, [Confi
         seed: int | None = None,
         sessions: list[dict[str, Any]] | None = None,
         summary: dict[str, dict[str, Any]] | None = None,
+        place: dict[str, Any] | None = None,
     ) -> None:
         self.experiment = experiment
         self.i = i
@@ -99,6 +101,8 @@ class ResultTracker(Saveable[[ConfigParser, ExperimentPathBuilder], Path, [Confi
         # the running summary of the recorded games, from player i's view (plybench.analysis.summary); the harness updates it before it records a
         # game, so it is saved with `completed`. None in metadata from before it was kept, until `--summaries write`
         self.summary = summary
+        # where a training phase's matchup belongs (EpochPhase.place); None for a benchmark's, whose metadata names its game and players already
+        self.place = place
 
         self.base_path = self.path_builder.game_base(self.experiment, self.game, self.i, self.o, self.n)
         self.metadata_path = self.path_builder.metadata(self.base_path)
@@ -111,6 +115,7 @@ class ResultTracker(Saveable[[ConfigParser, ExperimentPathBuilder], Path, [Confi
             self.completed = reference.completed
             self.sessions = reference.sessions
             self.summary = reference.summary
+            self.place = reference.place
             self.games = [None for _ in range(self.n)]
             for game_round in self.completed if games else ():
                 self.games[game_round - 1] = self.load_game(game_round)
@@ -216,4 +221,5 @@ class ResultTracker(Saveable[[ConfigParser, ExperimentPathBuilder], Path, [Confi
             # a session that has recorded no game yet is not stored
             **({"sessions": sessions} if (sessions := [session for session in self.sessions if session["rounds"]]) else {}),
             **({"summary": self.summary} if self.summary is not None else {}),
+            **({"place": self.place} if self.place is not None else {}),
         }

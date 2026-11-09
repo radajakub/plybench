@@ -47,8 +47,8 @@ def main() -> None:
     parser.add_argument(
         "--summaries",
         choices=["check", "write"],
-        help="compare each matchup's stored summary (in its metadata.json) with its saved games, then exit (exit 1 on a difference); write: store the "
-        "games' summary where it differs, changing nothing else",
+        help="compare each matchup's stored summary (and a training phase's place) in its metadata.json with its saved games, then exit (exit 1 on a "
+        "difference); write: store them where they differ, changing nothing else",
     )
     add_limits_args(parser)
     args = parser.parse_args()

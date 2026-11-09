@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import uuid
 from collections.abc import Awaitable, Callable
+from typing import Any
 
 from plybench.analysis.summary import add_game, summarize
 from plybench.app import PlyBench
@@ -97,6 +98,7 @@ def _open_matchup(
     experiment: str | None,
     save_on_record: bool,
     seed: int | None,
+    place: dict[str, Any] | None = None,
 ) -> tuple[ResultTracker, MatchupCallbacks]:
     check_seats(op.registry.build_engine(matchup.game).game, matchup)
     matchup_callbacks = matchup_callbacks if matchup_callbacks is not None else MatchupCallbacks()
@@ -116,6 +118,9 @@ def _open_matchup(
     )
     result_tracker.check_seed()
     result_tracker.load_if_exists()
+    # the place goes with the next metadata write, so a matchup saved before places were kept gets its own too
+    if place is not None:
+        result_tracker.place = place
     if save_on_record and not result_tracker.is_complete():
         result_tracker.begin_session(provenance([package_of(matchup.i.params), package_of(matchup.o.params)]))
     matchup_callbacks.on_matchup_start(result_tracker, matchup.game, matchup.i, matchup.o)
@@ -134,8 +139,9 @@ async def run_matchup_concurrent(
     max_concurrent: int | None = None,
     colour_rule: ColourRule = first_starts,
     seed: int | None = None,
+    place: dict[str, Any] | None = None,
 ) -> ResultTracker:
-    result_tracker, matchup_callbacks = _open_matchup(op, matchup, matchup_callbacks, path_builder, experiment, save_on_record, seed)
+    result_tracker, matchup_callbacks = _open_matchup(op, matchup, matchup_callbacks, path_builder, experiment, save_on_record, seed, place)
 
     if result_tracker.is_complete():
         matchup_callbacks.on_matchup_end(result_tracker)
@@ -166,8 +172,9 @@ async def run_matchup_sequential(
     after_game: AfterGame | None = None,
     colour_rule: ColourRule = first_starts,
     seed: int | None = None,
+    place: dict[str, Any] | None = None,
 ) -> ResultTracker:
-    result_tracker, matchup_callbacks = _open_matchup(op, matchup, matchup_callbacks, path_builder, experiment, save_on_record, seed)
+    result_tracker, matchup_callbacks = _open_matchup(op, matchup, matchup_callbacks, path_builder, experiment, save_on_record, seed, place)
 
     for game_round in range(1, matchup.num_games + 1):
         game = await play_round(op, matchup, game_round, result_tracker, game_callbacks, matchup_callbacks, player_builder, colour_rule)

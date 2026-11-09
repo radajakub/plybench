@@ -6,6 +6,24 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+### Added
+
+- A training phase's place in its `metadata.json`, key `place`: the experiment, the run (game, trainee, trainer,
+  schedule, replicate), the epoch, the number of epochs and the phase (`train` or `test`; a test's tester is the
+  matchup's opponent). Written by the harness, so a tool reads a training's results without plybench's folder layout.
+  `EpochPhase.place(experiment)`; `run_matchup_concurrent`/`run_matchup_sequential` take `place`.
+- `--summaries check|write` also checks a training phase's place, and writes it where it is missing or wrong (changing
+  only `summary` and `place`).
+
+### Changed
+
+- `Saveable.save` (a matchup's `metadata.json`, the minimax cache) writes a temporary file and renames it over the old
+  one, so a tool reading the file while a run saves it never sees half of it.
+
+### Removed
+
+- `plybench.harness.status.check_folder`, the folder-wide check of the one-off backfill of 4.7.0.
+
 ## [4.7.0] - 2026-11-09
 
 ### Added

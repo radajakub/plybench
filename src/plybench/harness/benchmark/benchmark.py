@@ -119,7 +119,7 @@ class Benchmark:
         )
         return str(tracker.base_path)
 
-    def get_results(self, progress: bool | None = None) -> BenchmarkResults:
+    def get_results(self, progress: bool | None = None, games: bool = True) -> BenchmarkResults:
         game_configs = [self.op.registry.game_config(game) for game in self.game_configs]
         player_configs = [self.op.registry.player_config(player) for player in self.player_configs]
         opponent_configs = [self.op.registry.player_config(opponent) for opponent in self.opponent_configs]
@@ -137,7 +137,7 @@ class Benchmark:
                 path_builder=self.path_builder,
                 seed=self.seed,
             )
-            tracker.load_if_exists()
+            tracker.load_if_exists(games)
             trackers.append(tracker)
 
         return BenchmarkResults(game_configs, player_configs, opponent_configs, trackers)

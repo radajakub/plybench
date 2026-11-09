@@ -16,9 +16,10 @@ from plybench.app import PlyBench
 from plybench.cli import run
 from plybench.common.enums import MetricName
 from plybench.harness.benchmark.benchmark import Benchmark
-from plybench.harness.status import benchmark_status, training_status
+from plybench.harness.status import benchmark_status, check_folder, check_summaries, training_status
 from plybench.harness.training.training import TrainingHarness
 from plybench.player.spec import PlayerSpec
+from plybench.trackers.result_tracker import ResultTracker
 
 UNIFORM = "random:distribution=uniform"
 OPTIMAL = "optimal:stochastic=True"
@@ -83,3 +84,90 @@ def test_run_prints_the_status_as_json_without_playing(tmp_path, monkeypatch, ca
     assert status["kind"] == "benchmark" and status["matchups"][0]["saved_games"] == 0
     # the path builder makes the empty folders, as for --check; no game and no metadata is written
     assert not list((tmp_path / "results").rglob("*.json"))
+
+
+def _metadata(root) -> list:
+    return sorted(root.rglob("metadata.json"))
+
+
+def test_every_recorded_game_updates_the_summary_and_the_status_reads_only_it(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    benchmark = Benchmark("summary", _op(), ["tic_tac_toe:", "nim:"], [UNIFORM], [OPTIMAL], 5, seed=0)
+    asyncio.run(benchmark.run(sync=True))
+    files = _metadata(tmp_path / "results")
+    assert len(files) == 2 and all(json.loads(file.read_text())["summary"]["win_rate"]["n"] == 5 for file in files)
+    assert check_summaries(benchmark) == []
+    with_games = benchmark_status(benchmark)
+
+    # the status from the summaries alone: not one game is loaded
+    def refuse(self, game_round):
+        raise AssertionError("a game was loaded")
+
+    monkeypatch.setattr(ResultTracker, "load_game", refuse)
+    assert benchmark_status(benchmark) == with_games
+
+
+def test_old_metadata_is_summarised_from_its_games_checked_and_mended_in_place(tmp_path, monkeypatch, capsys):
+    monkeypatch.chdir(tmp_path)
+    benchmark = Benchmark("summary", _op(), ["tic_tac_toe:"], [UNIFORM], [OPTIMAL], 6, seed=0)
+    asyncio.run(benchmark.run(sync=True))
+    status = benchmark_status(benchmark)
+    (file,) = _metadata(tmp_path / "results")
+    named = f"{file.relative_to(tmp_path)}: no summary"
+    recorded = json.loads(file.read_text())
+    old = {key: value for key, value in recorded.items() if key != "summary"}
+    file.write_text(json.dumps(old))
+
+    # the status computes it from the games; check names the file, and changes nothing
+    assert benchmark_status(benchmark) == status
+    assert check_summaries(benchmark) == [named] and json.loads(file.read_text()) == old
+
+    # write: the same file, its keys in their order, with the summary the games give
+    assert check_summaries(benchmark, write=True) == [named]
+    mended = json.loads(file.read_text())
+    assert list(mended) == [*old, "summary"] and {key: value for key, value in mended.items() if key != "summary"} == old
+    assert mended["summary"]["win_rate"] == recorded["summary"]["win_rate"] and check_summaries(benchmark) == []
+
+
+def test_a_run_resumed_on_old_metadata_starts_its_summary_from_the_saved_games(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    benchmark = Benchmark("summary", _op(), ["tic_tac_toe:"], [UNIFORM], [OPTIMAL], 6, seed=0)
+    asyncio.run(benchmark.run(sync=True))
+    (file,) = _metadata(tmp_path / "results")
+    # as a run stopped after four games, before summaries were kept
+    data = json.loads(file.read_text())
+    data.pop("summary")
+    data["completed"] = [1, 2, 3, 4]
+    file.write_text(json.dumps(data))
+    for game_round in (5, 6):
+        next(file.parent.glob(f"**/game_{game_round}.json")).unlink()
+
+    asyncio.run(benchmark.run(sync=True))
+    assert json.loads(file.read_text())["summary"]["win_rate"]["n"] == 6 and check_summaries(benchmark) == []
+
+
+def test_training_phases_keep_summaries_too(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    _Stub.proposed, _Stub.fail_at, _Stub.nothing_at = [], None, set()
+    harness = TrainingHarness("summary", _op(), ["tic_tac_toe:"], ["stub:"], [UNIFORM], [UNIFORM], ["num_epochs=2,num_training_games=3,num_test_games=4"], 1, seed=0)
+    asyncio.run(harness.run(sync=True))
+    # epoch 0 tests only; epochs 1 and 2 train and test
+    assert len(_metadata(tmp_path / "results")) == 5 and check_summaries(harness) == []
+
+
+def test_the_folder_backfill_writes_only_summaries_and_never_a_file_it_cannot_read(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    op = _op()
+    asyncio.run(Benchmark("summary", op, ["tic_tac_toe:", "nim:"], [UNIFORM], [OPTIMAL], 3, seed=0).run(sync=True))
+    files = _metadata(tmp_path / "results")
+    originals = [json.loads(file.read_text()) for file in files]
+    for file, original in zip(files, originals, strict=True):
+        file.write_text(json.dumps({key: value for key, value in original.items() if key != "summary"}))
+    # a game that does not parse: its matchup is reported, not written
+    broken = next(files[1].parent.glob("game_1.json"))
+    broken.write_text("{")
+
+    checked, problems = check_folder(tmp_path / "results", op.registry, write=True)
+    assert checked == 2 and problems[0] == f"{files[0]}: no summary" and problems[1].startswith(f"{files[1]}: cannot read")
+    assert json.loads(files[0].read_text()) == originals[0] and "summary" not in json.loads(files[1].read_text())
+    assert check_folder(tmp_path / "results", op.registry)[1] == problems[1:]

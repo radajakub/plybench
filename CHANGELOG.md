@@ -6,6 +6,21 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+### Added
+
+- A running summary in each matchup's (and training phase's) `metadata.json`, key `summary`: per default metric the
+  moments of its values (`n`, `sum`, `sumsq`, which add up over games and trackers) and the value with its interval
+  (Wilson for rates, t for means). The harness updates it before it records a game, so it is written with `completed`;
+  a run resumed on metadata without one starts it from the saved games. In `plybench.analysis.summary`.
+- `--summaries check|write` for `plybench-run` and `plybench-train`: compare each stored summary with its games (exit 1
+  on a difference), or store the games' summary where it is missing or differs, changing nothing else in the file.
+
+### Changed
+
+- `--status` reads the stored summaries and loads the games only of a matchup without one (or whose summary does not
+  cover its games): 25,500 saved games in about 2 s instead of 6. `load_if_exists(games=False)` and
+  `get_results(games=False)` load the metadata only.
+
 ## [4.6.1] - 2026-11-08
 
 ### Added

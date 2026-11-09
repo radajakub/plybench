@@ -51,6 +51,7 @@ class ResultTracker(Saveable[[ConfigParser, ExperimentPathBuilder], Path, [Confi
             path_builder=path_builder,
             seed=data.get("seed"),
             sessions=data.get("sessions", []),
+            summary=data.get("summary"),
         )
 
     @classmethod
@@ -79,6 +80,7 @@ class ResultTracker(Saveable[[ConfigParser, ExperimentPathBuilder], Path, [Confi
         save_on_record: bool = True,
         seed: int | None = None,
         sessions: list[dict[str, Any]] | None = None,
+        summary: dict[str, dict[str, Any]] | None = None,
     ) -> None:
         self.experiment = experiment
         self.i = i
@@ -94,18 +96,23 @@ class ResultTracker(Saveable[[ConfigParser, ExperimentPathBuilder], Path, [Confi
         # one entry per run that played games here: what produced them (see common/provenance.py) and the rounds it played
         self.sessions: list[dict[str, Any]] = sessions if sessions is not None else []
         self._session: dict[str, Any] | None = None
+        # the running summary of the recorded games, from player i's view (plybench.analysis.summary); the harness updates it before it records a
+        # game, so it is saved with `completed`. None in metadata from before it was kept, until `--summaries write`
+        self.summary = summary
 
         self.base_path = self.path_builder.game_base(self.experiment, self.game, self.i, self.o, self.n)
         self.metadata_path = self.path_builder.metadata(self.base_path)
         self.games: list[GameTracker | None] = games if games is not None else [None for _ in range(n)]
 
-    def load_if_exists(self) -> None:
+    def load_if_exists(self, games: bool = True) -> None:
+        # the metadata, and with `games` every completed game (without: only what the metadata says, e.g. its summary)
         if self.metadata_path.exists():
             reference = self.load_metadata_only(self.metadata_path, self.parser, self.path_builder)
             self.completed = reference.completed
             self.sessions = reference.sessions
+            self.summary = reference.summary
             self.games = [None for _ in range(self.n)]
-            for game_round in self.completed:
+            for game_round in self.completed if games else ():
                 self.games[game_round - 1] = self.load_game(game_round)
 
     def record_game(self, game_round: int, game_tracker: GameTracker) -> None:
@@ -208,4 +215,5 @@ class ResultTracker(Saveable[[ConfigParser, ExperimentPathBuilder], Path, [Confi
             **({"seed": self.seed} if self.seed is not None else {}),
             # a session that has recorded no game yet is not stored
             **({"sessions": sessions} if (sessions := [session for session in self.sessions if session["rounds"]]) else {}),
+            **({"summary": self.summary} if self.summary is not None else {}),
         }

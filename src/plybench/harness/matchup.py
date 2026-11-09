@@ -4,6 +4,7 @@ import asyncio
 import uuid
 from collections.abc import Awaitable, Callable
 
+from plybench.analysis.summary import add_game, summarize
 from plybench.app import PlyBench
 from plybench.callbacks.game_callbacks import GameCallbacks
 from plybench.callbacks.matchup_callbacks import MatchupCallbacks
@@ -79,6 +80,10 @@ async def play_round(
     round_callbacks = matchup_callbacks.for_round(matchup.game, matchup.i, matchup.o, game_round, game_callbacks)
     game_tracker = await engine.play(player_pair, game_callbacks=round_callbacks, game_round=game_round, seed=result_tracker.game_seed(game_round))
 
+    # the summary first, so the record's metadata write carries it; metadata from before summaries starts from the games already loaded
+    if result_tracker.summary is None and result_tracker.completed:
+        result_tracker.summary = summarize([game for game in result_tracker.games if game is not None], matchup.i)
+    result_tracker.summary = add_game(result_tracker.summary, game_tracker, matchup.i)
     result_tracker.record_game(game_round, game_tracker)
     matchup_callbacks.on_round_complete(matchup.game, matchup.i, matchup.o, game_round)
     return game_tracker

@@ -291,7 +291,7 @@ class TrainingHarness:
         with open(manifest, "w") as f:
             json.dump({**run.to_dict(), "testers": self.tester_configs, "seed": self.seed, "sessions": sessions}, f, indent=2)
 
-    def _load_phase(self, phase: EpochPhase) -> ResultTracker:
+    def _load_phase(self, phase: EpochPhase, games: bool = True) -> ResultTracker:
         tracker = ResultTracker.new(
             self.path_builder.scope(self.experiment, phase),
             self._policy_config(phase.run, phase.player_epoch),
@@ -302,16 +302,16 @@ class TrainingHarness:
             path_builder=self.path_builder,
             seed=self.seed,
         )
-        tracker.load_if_exists()
+        tracker.load_if_exists(games)
         return tracker
 
-    def _load_epoch(self, epoch: Epoch) -> EpochResults:
-        train = self._load_phase(epoch.train) if epoch.index > 0 else None
-        return EpochResults(epoch, train, [self._load_phase(epoch.test(tester)) for tester in self._testers()])
+    def _load_epoch(self, epoch: Epoch, games: bool = True) -> EpochResults:
+        train = self._load_phase(epoch.train, games) if epoch.index > 0 else None
+        return EpochResults(epoch, train, [self._load_phase(epoch.test(tester), games) for tester in self._testers()])
 
-    def get_results(self, progress: bool | None = None) -> TrainingResults:
+    def get_results(self, progress: bool | None = None, games: bool = True) -> TrainingResults:
         runs = self.runs
         epochs: list[EpochResults] = []
         for run in track(runs, "Loading results", len(runs), progress):
-            epochs.extend(self._load_epoch(Epoch(run, index)) for index in range(run.training_config.num_epochs + 1))
+            epochs.extend(self._load_epoch(Epoch(run, index), games) for index in range(run.training_config.num_epochs + 1))
         return TrainingResults(runs, epochs)

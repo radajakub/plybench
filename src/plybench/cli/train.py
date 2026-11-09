@@ -33,7 +33,7 @@ from plybench.callbacks.training_callbacks import TrainingCallbacks
 from plybench.cli.shared import add_limits_args, add_training_source_args, build_op, training_from_args, warn_if_unconfigured
 from plybench.common.enums import MetricName
 from plybench.harness.plan import training_plan
-from plybench.harness.status import training_status
+from plybench.harness.status import check_summaries, training_status
 from plybench.harness.training.results import TrainingResults
 from plybench.harness.training.training import TrainingHarness
 from plybench.registry import Registry
@@ -85,6 +85,12 @@ def main() -> None:
     )
     parser.add_argument("--json", action="store_true", help="with --check: print the plan as JSON")
     parser.add_argument("--status", action="store_true", help="print the saved games and their metrics as JSON, then exit: nothing is played (for tools that poll a run)")
+    parser.add_argument(
+        "--summaries",
+        choices=["check", "write"],
+        help="compare each matchup's stored summary (in its metadata.json) with its saved games, then exit (exit 1 on a difference); write: store the "
+        "games' summary where it differs, changing nothing else",
+    )
     add_limits_args(parser)
     args = parser.parse_args()
 
@@ -98,6 +104,13 @@ def main() -> None:
     if args.status:
         print(json.dumps(training_status(harness)))
         return
+
+    if args.summaries:
+        problems = check_summaries(harness, write=args.summaries == "write")
+        print("\n".join(problems) if problems else "every summary matches its games")
+        if args.summaries == "write":
+            print(f"wrote {len(problems)} summaries")
+        raise SystemExit(1 if problems and args.summaries == "check" else 0)
 
     if args.check:
         plan = training_plan(harness)

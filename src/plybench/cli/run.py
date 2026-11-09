@@ -26,7 +26,7 @@ from plybench.callbacks.console_callbacks import console_benchmark_callbacks
 from plybench.callbacks.notification_callbacks import notification_benchmark_callbacks
 from plybench.cli.shared import add_limits_args, add_source_args, benchmark_from_args, build_op, warn_if_unconfigured
 from plybench.harness.plan import benchmark_plan
-from plybench.harness.status import benchmark_status
+from plybench.harness.status import benchmark_status, check_summaries
 
 
 def main() -> None:
@@ -44,6 +44,12 @@ def main() -> None:
     )
     parser.add_argument("--json", action="store_true", help="with --check: print the plan as JSON")
     parser.add_argument("--status", action="store_true", help="print the saved games and their metrics as JSON, then exit: nothing is played (for tools that poll a run)")
+    parser.add_argument(
+        "--summaries",
+        choices=["check", "write"],
+        help="compare each matchup's stored summary (in its metadata.json) with its saved games, then exit (exit 1 on a difference); write: store the "
+        "games' summary where it differs, changing nothing else",
+    )
     add_limits_args(parser)
     args = parser.parse_args()
 
@@ -57,6 +63,13 @@ def main() -> None:
     if args.status:
         print(json.dumps(benchmark_status(benchmark)))
         return
+
+    if args.summaries:
+        problems = check_summaries(benchmark, write=args.summaries == "write")
+        print("\n".join(problems) if problems else "every summary matches its games")
+        if args.summaries == "write":
+            print(f"wrote {len(problems)} summaries")
+        raise SystemExit(1 if problems and args.summaries == "check" else 0)
 
     if args.check:
         plan = benchmark_plan(benchmark)

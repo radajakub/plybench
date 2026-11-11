@@ -6,6 +6,18 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+### Added
+
+- `bandit`: a stochastic multi-armed bandit as a one-player game with chance, for the TAC's exploration experiment. One
+  game is one press of one of 2 to 8 buttons (red, blue, green, ...); chance draws the reward from the button's
+  distribution, and the reward is the return. A run of the bandit is a sequence of games. Each button has a finite reward
+  distribution, so other families can be added; Bernoulli buttons only for now (+1 with the button's probability, else
+  -1). Params: `p` (the win probabilities, fractions or decimals, e.g. `p=0.6;0.4;0.4;0.4;0.4`), `shift` (button $j$
+  gets `p[(j - shift) mod K]`, so replicates over shifts $0..K-1$ put the best probability on each button once) and
+  `rules=stated|hidden` (`hidden`: the prompt does not give the probabilities and is the same for every `p` and `shift`
+  with the same number of buttons). Solvable: $Q^*(a) = 2p_a - 1$. The information state shows the reward
+  (`pressed=red reward=+1`).
+
 ## [4.9.1] - 2026-11-09
 
 ### Fixed

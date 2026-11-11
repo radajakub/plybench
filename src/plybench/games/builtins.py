@@ -1,4 +1,5 @@
 from plybench.configs.game_params import NoGameParams
+from plybench.games.bandit.bandit import BanditEngine, BanditGameParams
 from plybench.games.breakthrough.breakthrough import BreakthroughEngine
 from plybench.games.connect_four.connect_four import ConnectFourEngine
 from plybench.games.monty_hall.monty_hall import MontyHallEngine, MontyHallGameParams
@@ -31,6 +32,7 @@ _BUILTIN_GAMES: list[GameSpec] = [
     GameSpec("breakthrough", NoGameParams, BreakthroughEngine, solvable=False),
     # single-player games
     GameSpec("monty_hall", MontyHallGameParams, MontyHallEngine, solvable=True),
+    GameSpec("bandit", BanditGameParams, BanditEngine, solvable=True),
 ]
 
 

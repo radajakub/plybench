@@ -6,6 +6,8 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+## [4.10.1] - 2026-11-11
+
 ### Added
 
 - Labels in experiment files: an optional `"label"` on any entry of a list (`{"value": ..., "label": "Text-REINFORCE", "enabled":

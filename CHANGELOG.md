@@ -6,6 +6,8 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+## [4.10.0] - 2026-11-11
+
 ### Added
 
 - `bandit`: a stochastic multi-armed bandit as a one-player game with chance, for the TAC's exploration experiment. One

@@ -55,6 +55,10 @@ class BenchmarkConfig(Serializable):
     def get_opponent_configs(self) -> list[str]:
         return [item.value for item in self.opponent_configs if item.enabled]
 
+    def get_player_labels(self) -> dict[str, str]:
+        # the labels of the players and opponents, by the config string as written
+        return {**ToggleItem.extract_labels(self.player_configs), **ToggleItem.extract_labels(self.opponent_configs)}
+
     def to_dict(self) -> dict[str, Any]:
         return {
             "game_configs": [item.to_dict() for item in self.game_configs],

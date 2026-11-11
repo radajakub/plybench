@@ -287,6 +287,13 @@ def test_training_curves_show_only_what_tells_them_apart():
     ]
 
 
+def test_a_training_curve_takes_its_label_from_the_experiment():
+    # keyed by the config string; the trainer too, where the curves differ in it
+    overrides = {"agent:one": "Text-REINFORCE", "random:distribution=uniform": "Uniform"}
+    assert curve_labels([_curve("one"), _curve("two")], overrides) == ["Text-REINFORCE", "Agent two"]
+    assert curve_labels([_curve("one"), _curve("one", trainer="random:distribution=uniform")], overrides) == ["Text-REINFORCE · vs none", "Text-REINFORCE · vs Uniform"]
+
+
 def test_a_game_title_is_its_name_and_params_on_one_line():
     assert game_title(_game("monty_hall:num_doors=4,final=pick")) == "Monty Hall (num_doors=4, final=pick, host=standard)"
 

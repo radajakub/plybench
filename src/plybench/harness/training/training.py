@@ -57,6 +57,7 @@ class TrainingHarness:
             config.num_replicates,
             path_builder,
             config.seed,
+            config.get_player_labels(),
         )
 
     def __init__(
@@ -71,6 +72,7 @@ class TrainingHarness:
         num_replicates: int,
         path_builder: TrainingHarnessPathBuilder | None = None,
         seed: int | None = None,
+        labels: dict[str, str] | None = None,
     ) -> None:
         self.experiment = experiment
         self.op = op
@@ -82,6 +84,8 @@ class TrainingHarness:
         self.num_replicates = num_replicates
         self.path_builder = path_builder if path_builder is not None else TrainingHarnessPathBuilder()
         self.seed = seed
+        # the experiment's labels by the player's config string as the results and the plots write it (to_string)
+        self.labels = {op.registry.player_config(value).to_string(): label for value, label in (labels or {}).items()}
 
     def _testers(self) -> list[PlayerConfig]:
         return [self.op.registry.player_config(tester) for tester in self.tester_configs]

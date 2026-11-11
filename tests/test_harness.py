@@ -20,6 +20,7 @@ from plybench.configs.matchup import Matchup
 from plybench.configs.player_params import PlayerParams
 from plybench.harness.benchmark.benchmark import Benchmark
 from plybench.harness.matchup import run_matchup_concurrent
+from plybench.harness.plan import benchmark_plan
 from plybench.player.player import Player, PlayerOutput
 from plybench.player.spec import PlayerSpec
 
@@ -119,6 +120,28 @@ def test_load_experiment_and_results_matrix(tmp_path, monkeypatch):
     )
     assert tracker.is_complete()
     assert len(results.for_player(registry.player_config("random:distribution=uniform"))) == 2
+
+
+def test_an_experiment_labels_its_players_by_their_config_strings(tmp_path, monkeypatch):
+    # a label is optional and written only when set; the harness keys it by the config string the results write; a disabled item's label is not read,
+    # so a config that no longer parses there breaks nothing
+    monkeypatch.chdir(tmp_path)
+    config = BenchmarkConfig(
+        game_configs=[ToggleItem("tic_tac_toe:", True)],
+        player_configs=[ToggleItem("random:distribution=uniform", True, "Uniform"), ToggleItem("mcts:max_simulations=30,rollout_count=1,uct_c=2.0", True)],
+        opponent_configs=[ToggleItem("random:distribution=normal", True, "Normal"), ToggleItem("gone:", False, "Removed player")],
+        num_games=2,
+    )
+    data = config.to_dict()
+    assert data["player_configs"][1] == {"value": "mcts:max_simulations=30,rollout_count=1,uct_c=2.0", "enabled": True}
+    assert BenchmarkConfig.from_dict(data) == config
+    with open(BenchmarkPathBuilder().experiment_path("labelled"), "w") as f:
+        json.dump(data, f)
+
+    benchmark = Benchmark.load_experiment(op, "labelled")
+    uniform, normal = registry.player_config("random:distribution=uniform"), registry.player_config("random:distribution=normal")
+    assert benchmark.labels == {uniform.to_string(): "Uniform", normal.to_string(): "Normal"}
+    assert benchmark_plan(benchmark).to_dict()["labels"] == benchmark.labels
 
 
 def test_config_backward_compatible_baseline(tmp_path, monkeypatch):

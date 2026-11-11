@@ -40,6 +40,8 @@ class ExperimentPlan:
     # per game config, the probabilities of a win, a draw and a loss under the optimal policy; solvable single-player games only (with an opponent
     # the outcome depends on the opponent's policy)
     optimal: dict[str, dict[str, float]] = field(default_factory=dict)
+    # the experiment's labels by the player's config string as the items write it, for tools that name the players
+    labels: dict[str, str] = field(default_factory=dict)
 
     @property
     def planned_games(self) -> int:
@@ -59,6 +61,7 @@ class ExperimentPlan:
             "models": self.models,
             "problems": self.problems,
             "optimal": self.optimal,
+            "labels": self.labels,
         }
 
     def summary(self) -> str:
@@ -135,7 +138,7 @@ def _optimal(op: PlyBench, games: list[str], problems: list[str]) -> dict[str, d
 
 def benchmark_plan(benchmark: Benchmark) -> ExperimentPlan:
     op = benchmark.op
-    plan = ExperimentPlan(benchmark.experiment, "benchmark")
+    plan = ExperimentPlan(benchmark.experiment, "benchmark", labels=dict(benchmark.labels))
     # in the order the benchmark plays them
     matrix = [(game, player, opponent) for player in benchmark.player_configs for opponent in benchmark.opponent_configs for game in benchmark.game_configs]
     for game, player, opponent in matrix:
@@ -151,7 +154,7 @@ def benchmark_plan(benchmark: Benchmark) -> ExperimentPlan:
 
 def training_plan(harness: TrainingHarness) -> ExperimentPlan:
     op = harness.op
-    plan = ExperimentPlan(harness.experiment, "training")
+    plan = ExperimentPlan(harness.experiment, "training", labels=dict(harness.labels))
     for run in harness.runs:
         schedule = run.training_config
         # epoch 0 is only evaluated; every epoch after it trains, then is evaluated against every tester

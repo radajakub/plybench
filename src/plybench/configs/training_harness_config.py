@@ -45,6 +45,10 @@ class TrainingHarnessConfig(Serializable):
     def get_training_configs(self) -> list[str]:
         return ToggleItem.extract_values(self.training_configs)
 
+    def get_player_labels(self) -> dict[str, str]:
+        # the labels of the trainees, trainers and testers, by the config string as written
+        return {**ToggleItem.extract_labels(self.player_configs), **ToggleItem.extract_labels(self.trainer_configs), **ToggleItem.extract_labels(self.tester_configs)}
+
     def to_dict(self) -> dict[str, Any]:
         return {
             "games": [item.to_dict() for item in self.game_configs],

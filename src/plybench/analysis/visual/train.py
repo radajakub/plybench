@@ -5,7 +5,7 @@ from __future__ import annotations
 from plybench.analysis.pooling import MetricOptions, MetricPool
 from plybench.analysis.statistics.bundle import CIBundle
 from plybench.analysis.training import LearningCurve
-from plybench.analysis.visual.bench.labels import metric_label, player_label
+from plybench.analysis.visual.bench.labels import Overrides, metric_label, player_label
 from plybench.analysis.visual.bench.presets import RATE_STEP, LineOptions, interval_of
 from plybench.analysis.visual.core.axis import Axis
 from plybench.analysis.visual.core.layers.base import Layer
@@ -54,16 +54,16 @@ def optimal_value(outcomes: dict[GameResults, float], metric: MetricName) -> flo
     return values.get(metric)
 
 
-def curve_labels(curves: list[LearningCurve]) -> list[str]:
-    # each curve by its player; the trainer, the training config and the replicate only where the curves differ in them. Two players
-    # with the same label are told apart by their full config
-    players = [player_label(curve.run.trainee) for curve in curves]
+def curve_labels(curves: list[LearningCurve], overrides: Overrides | None = None) -> list[str]:
+    # each curve by its player (its label in the experiment, when it has one); the trainer, the training config and the replicate only where the curves
+    # differ in them. Two players with the same label are told apart by their full config
+    players = [player_label(curve.run.trainee, overrides) for curve in curves]
     players = [
         curve.run.trainee.to_string() if any(other == label and peer.run.trainee.hash != curve.run.trainee.hash for other, peer in zip(players, curves)) else label
         for curve, label in zip(curves, players)
     ]
     parts = [[label] for label in players]
-    for describe in (lambda run: f"vs {player_label(run.trainer)}", lambda run: run.training_config.to_string(), lambda run: f"rep {run.replicate}"):
+    for describe in (lambda run: f"vs {player_label(run.trainer, overrides)}", lambda run: run.training_config.to_string(), lambda run: f"rep {run.replicate}"):
         values = [describe(curve.run) for curve in curves]
         if len(set(values)) > 1:
             for part, value in zip(parts, values):
@@ -79,6 +79,7 @@ def training_panel(
     title: str = "",
     reference_label: str = "Benchmark reference",
     optimal: float | None = None,
+    overrides: Overrides | None = None,
 ) -> Panel:
     if not curves:
         raise ValueError("a training panel needs at least one curve")
@@ -89,7 +90,7 @@ def training_panel(
     options = options or LineOptions()
     layers: list[Layer] = []
     has_data = False
-    for curve, label in zip(curves, curve_labels(curves)):
+    for curve, label in zip(curves, curve_labels(curves, overrides)):
         bundles = [point.metrics.combined.metrics.get(metric) for point in curve.points]
         has_data |= any(bundle is not None and bundle.n > 0 for bundle in bundles)
         layers.append(

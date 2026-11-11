@@ -39,6 +39,7 @@ class Benchmark:
             path_builder,
             COLOUR_RULES[config.colour_rule],
             config.seed,
+            config.get_player_labels(),
         )
 
     def __init__(
@@ -52,6 +53,7 @@ class Benchmark:
         path_builder: BenchmarkPathBuilder | None = None,
         colour_rule: ColourRule = first_starts,
         seed: int | None = None,
+        labels: dict[str, str] | None = None,
     ) -> None:
         self.experiment = experiment
         self.op = op
@@ -62,6 +64,8 @@ class Benchmark:
         self.path_builder = path_builder if path_builder is not None else BenchmarkPathBuilder()
         self.colour_rule = colour_rule
         self.seed = seed
+        # the experiment's labels by the player's config string as the results and the plots write it (to_string)
+        self.labels = {op.registry.player_config(value).to_string(): label for value, label in (labels or {}).items()}
 
     def _matrix(self) -> list[tuple[str, str, str]]:
         return [(game, player, opponent) for player in self.player_configs for opponent in self.opponent_configs for game in self.game_configs]

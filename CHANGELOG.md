@@ -6,6 +6,15 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+### Added
+
+- Labels in experiment files: an optional `"label"` on any entry of a list (`{"value": ..., "label": "Text-REINFORCE", "enabled":
+true}`), a name for plots and tools in place of the one built from the config. It is not part of the config, so renaming it
+  changes no path and no result; `ToggleItem.to_dict` writes it only when set. The labels of enabled players, trainers, testers
+  and opponents reach `Benchmark.labels` and `TrainingHarness.labels`, keyed by the config string the results write
+  (`to_string()`); `plybench-plot` and `plybench-plot-training` name the lines, the trainers and the panel titles by them
+  (`curve_labels` and `training_panel` take `overrides`), and `--check --json` gives them as `labels`.
+
 ## [4.10.0] - 2026-11-11
 
 ### Added

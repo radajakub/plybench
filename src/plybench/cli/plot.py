@@ -93,17 +93,18 @@ def parser_default_metrics() -> list[str]:
     return [MetricName.OPTIMALITY_RATE_NON_TRIVIAL.value]
 
 
-def _opponent_groups(results: BenchmarkResults, panel_by: str) -> list[tuple[str, list[PlayerConfig]]]:
+def _opponent_groups(results: BenchmarkResults, panel_by: str, labels: dict[str, str]) -> list[tuple[str, list[PlayerConfig]]]:
     if panel_by != "opponent":
         return [("", results.opponent_configs)]
-    return [(player_label(opponent), [opponent]) for opponent in results.opponent_configs]
+    return [(player_label(opponent, labels), [opponent]) for opponent in results.opponent_configs]
 
 
 def _series_groups(
-    results: BenchmarkResults, registry: Registry, args: argparse.Namespace, options: MetricOptions, color_by: ColorBy
+    results: BenchmarkResults, registry: Registry, args: argparse.Namespace, options: MetricOptions, color_by: ColorBy, labels: dict[str, str]
 ) -> list[tuple[str, MetricName, list[Series]]]:
-    requests = [SeriesRequest(metric, opponents, title) for metric in _metrics(args) for title, opponents in _opponent_groups(results, args.panel_by)]
-    batches = build_series_batch(results, registry, requests, results.game_configs, results.player_configs, options, color_by)
+    # the players and opponents by their labels in the experiment, where they have one
+    requests = [SeriesRequest(metric, opponents, title) for metric in _metrics(args) for title, opponents in _opponent_groups(results, args.panel_by, labels)]
+    batches = build_series_batch(results, registry, requests, results.game_configs, results.player_configs, options, color_by, labels)
 
     groups: list[tuple[str, MetricName, list[Series]]] = []
     for request, series in zip(requests, batches, strict=True):
@@ -188,7 +189,7 @@ def main() -> None:
         tick_rotation=args.tick_rotation,
     )
     color_by = _enum(ColorBy, args.color_by)
-    groups = _series_groups(results, op.registry, args, options, color_by)
+    groups = _series_groups(results, op.registry, args, options, color_by, benchmark.labels)
     if not groups:
         raise SystemExit("nothing to plot: no selected model has recorded data for this metric")
 

@@ -100,8 +100,8 @@ def main() -> None:
                 )
             reference_label = f"Benchmark: {player_label(baseline_player)}" if baseline_player is not None else "Benchmark reference"
             # a single-player game is played against the empty seat, which needs no mention
-            title = game_title(game) if tester.key == NONE_PLAYER else f"{game_title(game)} vs {player_label(tester)}"
-            panels.append(training_panel(curves, metric, reference, line_options, title, reference_label, optimal))
+            title = game_title(game) if tester.key == NONE_PLAYER else f"{game_title(game)} vs {player_label(tester, harness.labels)}"
+            panels.append(training_panel(curves, metric, reference, line_options, title, reference_label, optimal, harness.labels))
 
     figure = Figure(
         panels=panels,

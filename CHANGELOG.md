@@ -6,6 +6,10 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+### Changed
+
+- Requires `plyllm>=1.7.0`.
+
 ## [4.11.0] - 2026-11-12
 
 ### Added

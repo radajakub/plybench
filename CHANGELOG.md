@@ -6,6 +6,8 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+## [4.14.1] - 2026-11-12
+
 ### Added
 
 - `TrainingConfig.update_every`: a learner's batch size. After every `update_every` training games, and after the last

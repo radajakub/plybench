@@ -6,6 +6,8 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+## [4.11.0] - 2026-11-12
+
 ### Added
 
 - Reports: `plybench-run` and `plybench-train` take `--job-report <path>` and keep one JSON file of what the run plays (the

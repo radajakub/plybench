@@ -26,6 +26,7 @@ from plybench.harness.matchup import first_starts_by_parity, run_matchup_concurr
 from plybench.harness.training.results import EpochResults, TrainingResults
 from plybench.player.learnable import LearnablePlayer
 from plybench.player.player import Player, PlayerIdentifier
+from plybench.trackers.game_tracker import GameTracker
 from plybench.trackers.result_tracker import ResultTracker
 
 
@@ -205,6 +206,22 @@ class TrainingHarness:
             return learner if identifier == "i" else self.op.registry.build_player(game, player_config, identifier)
 
         learner.set_mode(Mode.TRAIN)
+        # with update_every, the learner is also handed every update_every games as a batch, and the games left at the end of the phase
+        every = phase.run.training_config.update_every
+        pending: list[GameTracker] = []
+        batches = 0
+
+        async def after_game(game: GameTracker) -> None:
+            nonlocal batches
+            await learner.observe(game)
+            if every is None:
+                return
+            pending.append(game)
+            if len(pending) == every:
+                batches += 1
+                await learner.observe_batch(list(pending), batches)
+                pending.clear()
+
         try:
             tracker = await run_matchup_sequential(
                 self.op,
@@ -214,11 +231,14 @@ class TrainingHarness:
                 path_builder=self.path_builder,
                 experiment=self.path_builder.scope(self.experiment, phase),
                 player_builder=build_player,
-                after_game=learner.observe,
+                after_game=after_game,
                 colour_rule=first_starts_by_parity,
                 seed=self.seed,
                 place=phase.place(self.experiment),
             )
+            if pending:
+                batches += 1
+                await learner.observe_batch(list(pending), batches)
             await learner.update([game for game in tracker.games if game is not None])
         finally:
             # whatever happens in the phase, the checkpoint that leaves it is frozen

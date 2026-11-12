@@ -6,6 +6,14 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+### Added
+
+- `TrainingConfig.update_every`: a learner's batch size. After every `update_every` training games, and after the last
+  game of a phase, the harness calls `LearnablePlayer.observe_batch(games, index)`, which proposes once with the new
+  hook `propose_batch(games)`, commits with `commit_batch(update)`, and caches the update as `batch_<index>`. A resumed
+  epoch replays the cached batches, as it replays games. Without `update_every`, schedules, run identities and records
+  are unchanged.
+
 ## [4.14.0] - 2026-11-12
 
 ## [4.13.1] - 2026-11-12

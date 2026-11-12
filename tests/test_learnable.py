@@ -21,6 +21,7 @@ from plybench.callbacks.training_callbacks import TrainingCallbacks
 from plybench.common.enums import Mode
 from plybench.configs.player_config import PlayerConfig
 from plybench.configs.player_params import CheckpointedParams
+from plybench.configs.training_config import TrainingConfig
 from plybench.configs.training_run import Epoch
 from plybench.harness.training.training import TrainingHarness
 from plybench.player.learnable import LEARNER_STATE, LearnablePlayer
@@ -352,3 +353,88 @@ def test_a_game_that_changes_at_an_epoch_is_played_from_that_epoch_on_and_resume
     # one run, named by its own game, whose learner kept learning across the switch and was resumed after it
     assert len(list((tmp_path / "results").rglob("run.json"))) == 1 and run.game.to_string() == "bandit:p=0;1,shift=0,rules=hidden,switch=1;0,switch_epoch=2,stationarity=omitted"
     assert _state(harness, 3)["commits"] == 3 * GAMES
+
+
+class _Batched(_Stub):
+    """A learner of batches too: each batch's update is the number of its games, committed into its own count."""
+
+    batches: ClassVar[list[tuple[str, int, list[int]]]] = []
+    # the batch whose proposal raises once
+    fail_batch: ClassVar[int | None] = None
+
+    def __init__(self, player_config: PlayerConfig, identifier) -> None:
+        super().__init__(player_config, identifier)
+        self.batched = 0
+
+    async def propose_batch(self, games: list[GameTracker]) -> float | None:
+        assert self.workdir is not None
+        index = len([name for name in _Batched.batches if name[0] == self.workdir.parent.name]) + 1
+        if index == _Batched.fail_batch:
+            _Batched.fail_batch = None
+            raise _Interrupted
+        _Batched.batches.append((self.workdir.parent.name, index, [game.game_round for game in games]))
+        return float(len(games))
+
+    def commit_batch(self, update: float) -> None:
+        self.batched += int(update)
+
+    def save_checkpoint(self, checkpoint: Path) -> None:
+        (checkpoint / "state.json").write_text(json.dumps({"total": self.total, "commits": self.commits, "batched": self.batched}))
+
+    def load_checkpoint(self, checkpoint: Path) -> None:
+        state = json.loads((checkpoint / "state.json").read_text())
+        self.total, self.commits, self.batched = state["total"], state["commits"], state["batched"]
+
+
+def _batched_harness(every: int) -> TrainingHarness:
+    _Stub.proposed, _Stub.fail_at, _Stub.nothing_at = [], None, set()
+    _Batched.batches, _Batched.fail_batch = [], None
+    op = PlyBench(LLMConfig())
+    op.registry.register_player(PlayerSpec("batched", _StubParams, lambda game, cfg, pid: _Batched(cfg, pid)))
+    uniform = "random:distribution=uniform"
+    schedule = f"num_epochs={EPOCHS},num_training_games={GAMES},num_test_games=2,update_every={every}"
+    return TrainingHarness("learnable", op, ["tic_tac_toe:"], ["batched:"], [uniform], [uniform], [schedule], 1)
+
+
+def test_update_every_is_named_only_when_set():
+    plain = "num_epochs=2,num_training_games=4,num_test_games=2"
+    assert TrainingConfig.from_string(plain).update_every is None and TrainingConfig.from_string(plain).to_string() == plain
+    batched = TrainingConfig.from_string(plain + ",update_every=3")
+    assert batched.update_every == 3 and TrainingConfig.from_string(batched.to_string()) == batched
+    with pytest.raises(ValueError, match="update_every must be positive"):
+        TrainingConfig.from_string(plain + ",update_every=0")
+
+
+def test_with_update_every_the_learner_gets_every_k_games_and_the_rest_at_the_end_of_the_phase(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    harness = _batched_harness(3)
+    _run(harness)
+
+    # 4 games in batches of 3: rounds 1-3, then round 4 at the end of the phase; each batch after its games were observed
+    assert _Batched.batches == [(f"epoch_{e}", index, rounds) for e in range(1, EPOCHS + 1) for index, rounds in ((1, [1, 2, 3]), (2, [4]))]
+    for epoch in range(1, EPOCHS + 1):
+        names = sorted(path.name for path in _learner_dir(harness, epoch).iterdir())
+        assert names == ["batch_1", "batch_2", "epoch", *(f"game_{r}" for r in range(1, GAMES + 1))]
+        assert (_learner_dir(harness, epoch) / "batch_1" / LEARNER_STATE).is_dir()
+    state = _state(harness, EPOCHS)
+    assert state["batched"] == EPOCHS * GAMES and state["commits"] == EPOCHS * GAMES
+
+
+def test_a_resumed_epoch_replays_the_cached_batches_and_proposes_only_the_rest(tmp_path, monkeypatch):
+    for name in ("uninterrupted", "resumed"):
+        (tmp_path / name).mkdir()
+    monkeypatch.chdir(tmp_path / "uninterrupted")
+    expected = _batched_harness(2)
+    _run(expected)
+    expected_state, expected_batches = _state(expected, EPOCHS), list(_Batched.batches)
+
+    monkeypatch.chdir(tmp_path / "resumed")
+    harness = _batched_harness(2)
+    _Batched.fail_batch = 2
+    with pytest.raises(_Interrupted):
+        _run(harness)
+    assert _Batched.batches == [("epoch_1", 1, [1, 2])]
+    _run(harness)
+    # the first batch was loaded, not proposed again; the run lands on the same counts
+    assert _Batched.batches == expected_batches and _Batched.batches.count(("epoch_1", 1, [1, 2])) == 1
+    assert _state(harness, EPOCHS)["batched"] == expected_state["batched"] and _state(harness, EPOCHS)["commits"] == expected_state["commits"]

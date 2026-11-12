@@ -84,6 +84,15 @@ class LearnablePlayer[U](Player, ABC):
         self._require_training("update")
         await self._update(games)
 
+    async def observe_batch(self, games: list[GameTracker], index: int) -> None:
+        # the index-th batch of this epoch's training games (TrainingConfig.update_every), after each of its games was observed
+        self._require_training("observe_batch")
+        name = f"batch_{index}"
+        update = await self._cached(name, lambda: self.propose_batch(games))
+        if update is not None:
+            self.commit_batch(update)
+        self._keep_state(name)
+
     def _require_training(self, action: str) -> None:
         if not self.is_training:
             raise RuntimeError(f"{self} is frozen: {action}() is only legal inside a training phase")
@@ -195,6 +204,13 @@ class LearnablePlayer[U](Player, ABC):
 
     async def propose_epoch(self, games: list[GameTracker]) -> U | None:
         return None
+
+    # a batch of training games (TrainingConfig.update_every): proposed once, cached as batch_<index> and replayed on a resume as a game's update is
+    async def propose_batch(self, games: list[GameTracker]) -> U | None:
+        return None
+
+    def commit_batch(self, update: U) -> None:
+        pass
 
     def commit_epoch(self, update: U) -> None:
         pass

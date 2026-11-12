@@ -7,10 +7,12 @@ import numpy as np
 
 from plybench.callbacks.game_callbacks import GameCallbacks
 from plybench.common.enums import GameResults
+from plybench.common.serializable import require_json_round_trip
 from plybench.configs.game_config import GameConfig
 from plybench.core.game import OpenSpielAction, OpenSpielObservation, TurnBasedGame
 from plybench.core.interface import InterfaceAction, InterfaceObservation, InterfaceTransformer
 from plybench.core.prompt_adapter import PromptAdapter
+from plybench.player.learnable import LearnablePlayer
 from plybench.player.player import Player
 from plybench.trackers.game_tracker import GameTracker
 from plybench.trackers.player_tracker import PlayerTrackerResolver
@@ -70,6 +72,16 @@ class TurnBasedEngine(ABC, Generic[TransformerT, AdapterT]):
         if reward1 < reward2:
             return GameResults.LOSS, GameResults.WIN
         return GameResults.DRAW, GameResults.DRAW
+
+    @staticmethod
+    def _finish(tracker: GameTracker, players: tuple[Player, Player]) -> None:
+        # each learner adds what it keeps of the game to the ending (its state, its shaped outcome), checked as JSON as the step data is
+        assert tracker.ending is not None, "the game has ended"
+        for player in players:
+            if isinstance(player, LearnablePlayer):
+                data = player.finish(tracker)
+                require_json_round_trip(data, f"What {player.player_config.key} keeps at the end of a game")
+                tracker.ending.players[player.player_config.hash] = data
 
     async def play(
         self, players: tuple[Player, Player], game_callbacks: GameCallbacks | None = None, game_round: int = 1, verbose: bool = False, seed: int | None = None
@@ -142,6 +154,7 @@ class TurnBasedEngine(ABC, Generic[TransformerT, AdapterT]):
             # (5) handle a failed move (illegal / malformed) and exit early
             if player_output.action is None:
                 tracker.add_fail(player.player_config, self._get_ending(self._ending_player(pid)), self.game.serialize_state())
+                self._finish(tracker, players)
                 results = (GameResults.MY_FAIL, GameResults.OPPONENT_FAIL) if pid == 0 else (GameResults.OPPONENT_FAIL, GameResults.MY_FAIL)
                 game_callbacks.on_game_end(tracker, results)
                 return tracker
@@ -151,6 +164,7 @@ class TurnBasedEngine(ABC, Generic[TransformerT, AdapterT]):
 
         result1, result2 = self._get_game_result()
         tracker.end_game(result1, self._get_ending(self._ending_player(pid)), self.game.serialize_state())
+        self._finish(tracker, players)
         game_callbacks.on_game_end(tracker, (result1, result2))
 
         return tracker

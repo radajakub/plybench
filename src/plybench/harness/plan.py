@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
-from pathlib import Path
 
 from plyllm import ModelConfig
 
 from plybench.app import PlyBench
+from plybench.common.paths import saved_games
 from plybench.configs.names import item_names
 from plybench.configs.player_config import PlayerConfig
 from plybench.core.minimax import optimal_outcomes
@@ -94,10 +94,6 @@ def _named(plan: ExperimentPlan, configs: list[dict[str, str]], prefixes: dict[s
     plan.items = [replace(item, name=name, names=axes) for item, axes, name in zip(plan.items, names, joined, strict=True)]
 
 
-def _saved(folder: Path) -> int:
-    return sum(1 for _ in folder.rglob("game_*.json")) if folder.exists() else 0
-
-
 def _check_players(op: PlyBench, games: list[str], players: list[str], problems: list[str], learners: frozenset[str] = frozenset()) -> list[ModelConfig]:
     # build every player for every game (a plugin validates its params there), and collect the models they call; `learners` must build a LearnablePlayer
     models: list[ModelConfig] = []
@@ -160,7 +156,7 @@ def benchmark_plan(benchmark: Benchmark) -> ExperimentPlan:
         folder = benchmark.path_builder.game_base(benchmark.experiment, game_config, player_config, opponent_config, benchmark.num_games)
         # the configs as the results write them (to_string), as a training run's, so a tool can match an item with its results
         key = folder.relative_to(benchmark.path_builder.results_dir / benchmark.experiment).as_posix()
-        plan.items.append(PlannedItem(game_config.to_string(), player_config.to_string(), opponent_config.to_string(), benchmark.num_games, _saved(folder), key=key))
+        plan.items.append(PlannedItem(game_config.to_string(), player_config.to_string(), opponent_config.to_string(), benchmark.num_games, saved_games(folder), key=key))
     _named(plan, [{"game": item.game, "player": item.player, "opponent": item.opponent} for item in plan.items], {"opponent": "vs "})
     models = _check_players(op, benchmark.game_configs, list(dict.fromkeys(benchmark.player_configs + benchmark.opponent_configs)), plan.problems)
     plan.models = _check_models(op, models, plan.problems)
@@ -173,12 +169,11 @@ def training_plan(harness: TrainingHarness) -> ExperimentPlan:
     plan = ExperimentPlan(harness.experiment, "training", labels=dict(harness.labels))
     for run in harness.runs:
         schedule = run.training_config
-        # epoch 0 is only evaluated; every epoch after it trains, then is evaluated against every tester
-        planned = schedule.num_epochs * schedule.num_training_games + (schedule.num_epochs + 1) * schedule.num_test_games * len(harness.tester_configs)
+        planned = harness.planned_games(run)
         folder = harness.path_builder.run_dir(harness.experiment, run)
         key = folder.relative_to(harness.path_builder.results_dir / harness.experiment).as_posix()
         plan.items.append(
-            PlannedItem(run.game.to_string(), run.trainee.to_string(), run.trainer.to_string(), planned, _saved(folder), schedule.to_string(), run.replicate, key=key)
+            PlannedItem(run.game.to_string(), run.trainee.to_string(), run.trainer.to_string(), planned, saved_games(folder), schedule.to_string(), run.replicate, key=key)
         )
     configs = [{"game": i.game, "player": i.player, "opponent": i.opponent, "schedule": i.schedule or "", "replicate": str(i.replicate)} for i in plan.items]
     _named(plan, configs, {"opponent": "vs ", "replicate": "rep "})

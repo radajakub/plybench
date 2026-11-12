@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, cast
 
@@ -111,16 +111,19 @@ class LLMPlayer(Player):
     ) -> PlayerOutput:
         system_message, messages = prompt_adapter.build_messages(observation, legal_moves, output_strategy, context)
 
-        # a blocked prompt is sent again and each block recorded; the last block is a failed move like below
+        # a blocked prompt is sent again and each block recorded, its id kept with the move; the last block is a failed move like below
         max_attempts = _BLOCK_RETRIES + 1
+        blocks: list[str] = []
         for attempt in range(1, max_attempts + 1):
             try:
                 response = await llm.generate(model, system_message, messages, output_schema=output_strategy.get_output_schema(), seed=seed)
             except LLMCallError as error:
                 if error.kind is FailureKind.PROMPT_BLOCKED:
+                    prompt_message = "\n".join(message.content for message in messages)
+                    block = PromptBlock.from_error(error, label, attempt, max_attempts, system_message.content, prompt_message)
+                    blocks.append(block.id)
                     if block_log is not None:
-                        prompt_message = "\n".join(message.content for message in messages)
-                        PromptBlock.from_error(error, label, attempt, max_attempts, system_message.content, prompt_message).append(block_log)
+                        block.append(block_log)
                     if attempt < max_attempts:
                         continue
                 # an answer that arrived but cannot be played is the model's move, recorded as a failure like any
@@ -131,8 +134,8 @@ class LLMPlayer(Player):
                     raise
                 # malformed text is shown as itself, like below; a refusal or a block only has the error to show
                 detail = error.response.output_text if error.kind is FailureKind.UNPARSEABLE else str(error)
-                return LLMPlayer._player_output(error.response, None, failure, detail, system_message, messages)
-            return LLMPlayer._process_response(prompt_adapter, output_strategy, response, legal_moves, system_message, messages)
+                return LLMPlayer._player_output(error.response, model, None, failure, detail, system_message, messages, None, blocks)
+            return LLMPlayer._process_response(prompt_adapter, output_strategy, response, model, legal_moves, system_message, messages, blocks)
         raise AssertionError("unreachable: the last attempt returns or raises")
 
     @staticmethod
@@ -140,24 +143,34 @@ class LLMPlayer(Player):
         prompt_adapter: PromptAdapter,
         output_strategy: OutputStrategy,
         response: LLMResponse,
+        model: ModelConfig,
         legal_moves: list[InterfaceAction],
         system_message: LLMMessage,
         messages: list[LLMMessage],
+        blocks: list[str],
     ) -> PlayerOutput:
         extracted = output_strategy.extract(response.output_text)
 
         if extracted.action is None:
-            return LLMPlayer._player_output(response, None, MoveFailure.MALFORMED, response.output_text, system_message, messages)
+            return LLMPlayer._player_output(response, model, None, MoveFailure.MALFORMED, response.output_text, system_message, messages, None, blocks)
 
         selected_action = prompt_adapter.lookup_move(legal_moves, extracted.action)
         if selected_action is None:
-            return LLMPlayer._player_output(response, None, MoveFailure.ILLEGAL, extracted.action, system_message, messages)
+            return LLMPlayer._player_output(response, model, None, MoveFailure.ILLEGAL, extracted.action, system_message, messages, extracted.action, blocks)
 
-        return LLMPlayer._player_output(response, selected_action, None, "", system_message, messages)
+        return LLMPlayer._player_output(response, model, selected_action, None, "", system_message, messages, extracted.action, blocks)
 
     @staticmethod
     def _player_output(
-        response: LLMResponse, action: InterfaceAction | None, failure: MoveFailure | None, failure_detail: str, system_message: LLMMessage, messages: list[LLMMessage]
+        response: LLMResponse,
+        model: ModelConfig,
+        action: InterfaceAction | None,
+        failure: MoveFailure | None,
+        failure_detail: str,
+        system_message: LLMMessage,
+        messages: list[LLMMessage],
+        extracted: str | None,
+        blocks: list[str],
     ) -> PlayerOutput:
         return PlayerOutput(
             action=action,
@@ -171,6 +184,13 @@ class LLMPlayer(Player):
             failure=failure,
             failure_detail=failure_detail,
             llm_seed=response.seed,
+            model_string=response.model_string,
+            model_options=asdict(model.options),
+            finish_reason=response.finish_reason,
+            truncated=response.truncated,
+            retries=response.retries,
+            extracted=extracted,
+            blocks=blocks,
         )
 
     def format_llm_output(self, player_output: PlayerOutput) -> str:

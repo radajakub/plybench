@@ -7,6 +7,7 @@ from __future__ import annotations
 import asyncio
 import json
 import random
+import shutil
 from dataclasses import dataclass
 from pathlib import Path
 from typing import ClassVar
@@ -20,7 +21,7 @@ from plybench.common.enums import Mode
 from plybench.configs.player_config import PlayerConfig
 from plybench.configs.player_params import CheckpointedParams
 from plybench.harness.training.training import TrainingHarness
-from plybench.player.learnable import LearnablePlayer
+from plybench.player.learnable import LEARNER_STATE, LearnablePlayer
 from plybench.player.player import PlayerOutput
 from plybench.player.spec import PlayerSpec
 from plybench.trackers.game_tracker import GameTracker
@@ -241,3 +242,67 @@ def test_a_call_cannot_be_recorded_outside_a_proposal():
 
     with pytest.raises(RuntimeError, match="only legal inside propose"):
         learner.record_call(LLMCall("judge", "openai", "gpt-5.4", "gpt-5.4", "", "", "", "", 0, 0, 0))
+
+
+def _kept(harness: TrainingHarness, epoch: int, name: str) -> dict:
+    return json.loads((_learner_dir(harness, epoch) / name / LEARNER_STATE / "state.json").read_text())
+
+
+def _endings(harness: TrainingHarness, epoch: int) -> list[dict]:
+    # what the learner kept at the end of each training game of an epoch, in round order
+    run = harness.runs[0]
+    folder = harness.path_builder.epoch_dir(harness.experiment, run, epoch)
+    games = sorted(folder.rglob("train*/**/game_*.json"), key=lambda path: int(path.stem.split("_")[1]))
+    return [next(iter(json.loads(path.read_text())["ending"]["players"].values())) for path in games]
+
+
+def test_the_state_after_each_game_is_kept_and_the_last_one_is_the_checkpoint(harness):
+    _run(harness)
+
+    for epoch in range(1, EPOCHS + 1):
+        commits = [_kept(harness, epoch, f"game_{r}")["commits"] for r in range(1, GAMES + 1)]
+        assert commits == [(epoch - 1) * GAMES + r for r in range(1, GAMES + 1)]
+        assert _kept(harness, epoch, f"game_{GAMES}") == _kept(harness, epoch, "epoch") == _state(harness, epoch)
+
+
+def test_each_training_game_links_the_state_it_started_from(harness):
+    _run(harness)
+
+    endings = _endings(harness, 2)
+    checkpoint = harness.path_builder.checkpoint(harness.experiment, harness.runs[0], 1).as_posix()
+    assert [ending["state"]["checkpoint"] for ending in endings] == [checkpoint] * GAMES
+    befores = [ending["state"]["before"] for ending in endings]
+    assert befores[0] == checkpoint
+    assert befores[1:] == [(_learner_dir(harness, 2) / f"game_{r}" / LEARNER_STATE).as_posix() for r in range(1, GAMES)]
+
+
+def test_a_replay_that_lands_on_another_state_is_refused(harness):
+    _Stub.fail_at = 3
+    with pytest.raises(_Interrupted):
+        _run(harness)
+    kept = _learner_dir(harness, 1) / "game_1" / LEARNER_STATE / "state.json"
+    kept.write_text(json.dumps({"total": -1.0, "commits": 1}))
+
+    with pytest.raises(ValueError, match=r"state replayed after game_1 differs .*state\.json"):
+        _run(harness)
+
+
+def test_a_state_lost_before_it_was_written_is_written_on_the_replay(harness):
+    _Stub.fail_at = 3
+    with pytest.raises(_Interrupted):
+        _run(harness)
+    shutil.rmtree(_learner_dir(harness, 1) / "game_2" / LEARNER_STATE)
+
+    _run(harness)
+
+    assert _kept(harness, 1, "game_2")["commits"] == 2
+
+
+def test_a_finished_training_run_is_not_checked_against_its_sessions(harness):
+    _run(harness)
+    manifest = harness.path_builder.manifest(harness.experiment, harness.runs[0])
+    stored = json.loads(manifest.read_text())
+    stored["sessions"][-1].pop("players")
+    manifest.write_text(json.dumps(stored))
+
+    harness.check_runs()

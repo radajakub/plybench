@@ -5,15 +5,15 @@ import json
 import os
 import shutil
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 
 from plybench.app import PlyBench
 from plybench.callbacks.game_callbacks import GameCallbacks
 from plybench.callbacks.training_callbacks import TrainingCallbacks
 from plybench.common.enums import Mode
-from plybench.common.paths import TrainingHarnessPathBuilder
+from plybench.common.paths import TrainingHarnessPathBuilder, saved_games
 from plybench.common.progress import track
-from plybench.common.provenance import package_of, provenance
+from plybench.common.provenance import package_of, provenance, session_changes
 from plybench.configs.matchup import Matchup
 from plybench.configs.player_config import PlayerConfig
 from plybench.configs.player_params import CheckpointedParams
@@ -285,6 +285,25 @@ class TrainingHarness:
             if differing:
                 changes = "; ".join(f"{name}: {old!r} there, {new!r} now" for name, (old, new) in differing.items())
                 raise ValueError(f"{folder} holds another run ({changes}); resuming it would mix the games of the two, so use another experiment name")
+            # a run with games left must go on with the players and code it was started with: each epoch phase is a matchup of its own, so the
+            # matchups' check alone would let a later epoch play on with other code. A finished run is not resumed, so it is not checked
+            sessions = stored.get("sessions", [])
+            if sessions and saved_games(folder) < self.planned_games(run) and (changes := session_changes(sessions[-1], self._session(run))):
+                raise ValueError(
+                    f"{folder} was trained by another player or other code: {'; '.join(changes)}. Resuming would mix the two in one run; remove {folder} "
+                    "and train it again from scratch"
+                )
+
+    def planned_games(self, run: TrainingRun) -> int:
+        # epoch 0 is only evaluated; every epoch after it trains, then is evaluated against every tester
+        schedule = run.training_config
+        return schedule.num_epochs * schedule.num_training_games + (schedule.num_epochs + 1) * schedule.num_test_games * len(self.tester_configs)
+
+    def _session(self, run: TrainingRun) -> dict[str, Any]:
+        # what produced a session's work on a run (common/provenance.py) and its players, every param included (PlayerConfig.describe)
+        testers = self._testers()
+        players = {"trainee": run.trainee.describe(), "trainer": run.trainer.describe(), "testers": {str(index): tester.describe() for index, tester in enumerate(testers)}}
+        return {**provenance(package_of(player.params) for player in [run.trainee, run.trainer, *testers]), "players": players}
 
     def _write_manifest(self, run: TrainingRun) -> None:
         # the paths carry identity only, so the counts behind a run live here
@@ -292,8 +311,7 @@ class TrainingHarness:
         manifest.parent.mkdir(parents=True, exist_ok=True)
         # every session that works on the run is added, as each may have run other code; the matchups keep their own
         sessions = json.loads(manifest.read_text()).get("sessions", []) if manifest.exists() else []
-        players = [run.trainee, run.trainer, *self._testers()]
-        sessions.append(provenance(package_of(player.params) for player in players))
+        sessions.append(self._session(run))
         with open(manifest, "w") as f:
             json.dump({**run.to_dict(), "testers": self.tester_configs, "seed": self.seed, "sessions": sessions}, f, indent=2)
 

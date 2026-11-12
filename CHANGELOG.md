@@ -6,6 +6,30 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+### Added
+
+- `LLMCall` records the call's `options` (every `LLMCallOptions` field, `None` for a provider default), `finish_reason`
+  and `truncated` (plyllm 1.7), `retries`, `batch`, and an optional `about` the agent names (e.g. the steps a call was
+  for). A move of one LLM call records the same on its `GameStep`: `model_string`, `model_options`, `finish_reason`,
+  `truncated`, `retries`; and `extracted`, the answer read before it was matched to a legal move.
+- `PromptBlock.id`; a move's `GameStep.blocks` lists the ids of its blocked attempts in the block log.
+- `PlayerConfig.describe()` and `PlayerParams.describe()`: every param as plain JSON, defaults included
+  (`common.serializable.record_of`). Each session in a matchup's `metadata.json` and a training run's `run.json` records
+  its players so.
+- `LearnablePlayer.finish(game)`, called by the engine at the end of every game: what the learner keeps in
+  `GameEnding.players` (by player hash). By default `state: {checkpoint, before}`, the state the game started from (in
+  training the state the previous game left).
+- The learner's state after every committed game and after the epoch's update, in `learner/<game_N|epoch>/state/` as
+  `save_checkpoint` writes it. A replay that lands on another state than the one kept is an error.
+
+### Changed
+
+- **A resumed matchup or training run must have the same players and code.** A session that continues earlier games is
+  compared with the last one: every param of every player, and the versions (and checkout commits) of plybench, plyllm
+  and each player's package. A difference, or an earlier session without player descriptions (before this release),
+  stops the run with what differs; the matchup or run is removed by hand and played again from scratch. A training run
+  is checked when it has games left (`check_runs`, so `--check` lists it as a problem).
+
 ## [4.11.2] - 2026-11-12
 
 ### Fixed

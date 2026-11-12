@@ -25,6 +25,11 @@ def _build_dir(dir_name: str | Path) -> Path:
     return directory
 
 
+def saved_games(folder: Path) -> int:
+    # the game records under a results folder (a matchup's, or a training run's with all its phases)
+    return sum(1 for _ in folder.rglob("game_*.json")) if folder.exists() else 0
+
+
 class BasePathBuilder(ABC):
     def __init__(self) -> None:
         self.base_experiments_dir = _build_dir("experiments")

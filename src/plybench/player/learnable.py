@@ -6,6 +6,7 @@ import shutil
 from abc import ABC, abstractmethod
 from collections.abc import Awaitable, Callable
 from pathlib import Path
+from typing import Any
 
 from plybench.common.enums import Mode
 from plybench.configs.player_config import PlayerConfig
@@ -19,6 +20,8 @@ from plybench.trackers.llm_call import LLMCall
 
 # the LLM calls of one proposal, next to its update in the update cache; a name save_update must not use
 LEARNER_CALLS = "llm_calls.json"
+# the learner's state after the update of a game (or of the epoch) was committed, as save_checkpoint writes it, next to the update
+LEARNER_STATE = "state"
 
 
 class LearnablePlayer[U](Player, ABC):
@@ -86,14 +89,46 @@ class LearnablePlayer[U](Player, ABC):
             raise RuntimeError(f"{self} is frozen: {action}() is only legal inside a training phase")
 
     async def _observe(self, game: GameTracker) -> None:
-        update = await self._cached(f"game_{game.game_round}", lambda: self.propose(game))
+        name = f"game_{game.game_round}"
+        update = await self._cached(name, lambda: self.propose(game))
         if update is not None:
             self.commit(update)
+        self._keep_state(name)
 
     async def _update(self, games: list[GameTracker]) -> None:
         update = await self._cached("epoch", lambda: self.propose_epoch(games))
         if update is not None:
             self.commit_epoch(update)
+        self._keep_state("epoch")
+
+    def _keep_state(self, name: str) -> None:
+        # the state after the commit, kept beside the update so the record shows what each game started from. A replay commits again and must
+        # land on the state it kept (the resume rule): a difference is an error, never overwritten. A state lost between commit and write is written
+        assert self.workdir is not None, "_cached checks the workdir before"
+        target = self.workdir / name / LEARNER_STATE
+        staged = self.workdir / f"{name}.{LEARNER_STATE}.tmp"
+        shutil.rmtree(staged, ignore_errors=True)
+        staged.mkdir(parents=True)
+        self.save_checkpoint(staged)
+        if not target.exists():
+            os.replace(staged, target)
+            return
+        kept, now = _files(target), _files(staged)
+        shutil.rmtree(staged)
+        if kept != now:
+            changed = sorted(path for path in kept.keys() | now.keys() if kept.get(path) != now.get(path))
+            raise ValueError(
+                f"{self}: the state replayed after {name} differs from the one kept in {target} ({', '.join(changed)}); commit must depend only on the state and the update"
+            )
+
+    def finish(self, game: GameTracker) -> dict[str, Any]:
+        # what the game record keeps of the learner beyond its moves (GameEnding.players): the state it played from, the checkpoint it was built
+        # with and, in training, the state the previous game of the epoch left (the checkpoint for the first). Paths as the checkpoint is given
+        checkpoint = self.checkpoint.as_posix() if self.checkpoint is not None else None
+        before = checkpoint
+        if self.is_training and self.workdir is not None and game.game_round > 1:
+            before = (self.workdir / f"game_{game.game_round - 1}" / LEARNER_STATE).as_posix()
+        return {"state": {"checkpoint": checkpoint, "before": before}}
 
     async def _cached(self, name: str, propose: Callable[[], Awaitable[U | None]]) -> U | None:
         # an update is proposed once per epoch and name; a replay loads it instead of proposing again
@@ -175,3 +210,8 @@ class LearnablePlayer[U](Player, ABC):
     @abstractmethod
     def save_checkpoint(self, checkpoint: Path) -> None:
         raise NotImplementedError
+
+
+def _files(directory: Path) -> dict[str, bytes]:
+    # every file under a directory by its relative path, with its content
+    return {path.relative_to(directory).as_posix(): path.read_bytes() for path in sorted(directory.rglob("*")) if path.is_file()}

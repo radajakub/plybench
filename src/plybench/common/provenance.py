@@ -60,6 +60,24 @@ def provenance(packages: Iterable[str] = ()) -> dict[str, Any]:
     }
 
 
+def _differences(old: Any, new: Any, path: str) -> list[str]:
+    # the leaves where two JSON values differ, each as "path: old -> new"
+    if isinstance(old, dict) and isinstance(new, dict):
+        return [line for key in sorted(old.keys() | new.keys()) for line in _differences(old.get(key), new.get(key), f"{path}.{key}" if path else key)]
+    return [] if old == new else [f"{path}: {old!r} -> {new!r}"]
+
+
+def session_changes(previous: dict[str, Any], current: dict[str, Any]) -> list[str]:
+    # what makes a session other than the one it continues: another player (every param, defaults included) or another version of plybench,
+    # plyllm or a player's package (its version, and its commit when it runs from a checkout). Empty when the two may share results
+    if "players" not in previous:
+        return ["the earlier session recorded no player descriptions (plybench before 4.12)"]
+    changes = _differences(previous["players"], current["players"], "players")
+    old = previous.get("packages", {})
+    changes += [line for name, package in current["packages"].items() for line in _differences(old.get(name), package, f"packages.{name}")]
+    return changes
+
+
 def package_of(obj: object) -> str:
     # the top-level package that defines a class or function, e.g. "plyagents" for the tac player's params
     module = obj.__module__ if isinstance(obj, type) else type(obj).__module__

@@ -1,9 +1,13 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from dataclasses import is_dataclass
 from pathlib import Path
+from typing import Any
 
 from plyllm import ModelConfig
+
+from plybench.common.serializable import record_of
 
 
 class PlayerParams(ABC):
@@ -28,6 +32,12 @@ class PlayerParams(ABC):
     # every model the player calls, for a check before a run (providers configured, models known) and for total limits; none by default
     def models(self) -> list[ModelConfig]:
         return []
+
+    # every param as plain JSON, defaults included (record_of): what a session records of the player, and what a resumed session must match
+    def describe(self) -> dict[str, Any]:
+        if not is_dataclass(self):
+            raise TypeError(f"{type(self).__name__} is not a dataclass, so it must override describe()")
+        return record_of(self)
 
 
 class CheckpointedParams(PlayerParams):

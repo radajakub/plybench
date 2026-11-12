@@ -25,9 +25,21 @@ class LLMCall:
     seed: int | None = None
     # the failure kind (plyllm FailureKind value) when the answer arrived but could not be used; None for a usable answer
     failure: str | None = None
+    # the options the call was made with (plyllm LLMCallOptions); None for an option left to the provider's default. None in records from before it was kept
+    options: dict[str, Any] | None = None
+    # why the provider stopped, as its API names it, and whether that is a cut at the output limit (plyllm 1.7); None when it reports none
+    finish_reason: str | None = None
+    truncated: bool = False
+    # the transport retries before the answer arrived, and whether it came through a provider's Batch API
+    retries: int = 0
+    batch: bool = False
+    # what the call was about, named by the agent (e.g. {"steps": [1, 2]} or {"key": ...}); None when it names nothing
+    about: dict[str, Any] | None = None
 
     @classmethod
-    def from_response(cls, role: str, model: ModelConfig, system: LLMMessage, messages: list[LLMMessage], response: LLMResponse, failure: str | None = None) -> LLMCall:
+    def from_response(
+        cls, role: str, model: ModelConfig, system: LLMMessage, messages: list[LLMMessage], response: LLMResponse, failure: str | None = None, about: dict[str, Any] | None = None
+    ) -> LLMCall:
         return cls(
             role,
             model.provider.value,
@@ -42,6 +54,12 @@ class LLMCall:
             response.tokens.reasoning_tokens,
             response.seed,
             failure,
+            asdict(model.options),
+            response.finish_reason,
+            response.truncated,
+            response.retries,
+            response.batch,
+            about,
         )
 
     @classmethod

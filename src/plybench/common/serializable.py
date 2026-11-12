@@ -4,6 +4,8 @@ import fcntl
 import json
 import os
 from abc import ABC, abstractmethod
+from dataclasses import fields, is_dataclass
+from enum import Enum
 from pathlib import Path
 from typing import Any, Generic, ParamSpec, Self, TypeVar
 
@@ -21,6 +23,24 @@ def require_json_round_trip(value: Any, what: str) -> None:
         raise ValueError(f"{what} is not JSON: {error}") from error
     if restored != value:
         raise ValueError(f"{what} does not read back from JSON unchanged; keep to dicts with string keys, lists, strings, numbers, booleans and None")
+
+
+def record_of(value: Any) -> Any:
+    # a value as plain JSON with every field of a dataclass, defaults included, so a record states what was used and not only what differs from
+    # today's defaults; a field outside the value's identity (compare=False, e.g. a debug switch) is left out. Anything else is kept as it is
+    if is_dataclass(value) and not isinstance(value, type):
+        return {field.name: record_of(getattr(value, field.name)) for field in fields(value) if field.compare}
+    if isinstance(value, Enum):
+        return value.value
+    if isinstance(value, Path):
+        return value.as_posix()
+    if isinstance(value, dict):
+        return {str(key): record_of(item) for key, item in value.items()}
+    if isinstance(value, (set, frozenset)):
+        return sorted(record_of(item) for item in value)
+    if isinstance(value, (list, tuple)):
+        return [record_of(item) for item in value]
+    return value
 
 
 class Serializable(ABC, Generic[DeserializeArgs]):

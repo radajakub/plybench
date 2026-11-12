@@ -38,6 +38,17 @@ class PlayerOutput:
     llm_seed: int | None = None
     # every call of a move that takes several, added with add_call; empty for a move of one call, which the fields above describe
     calls: list[LLMCall] = field(default_factory=list)
+    # the move's one LLM call, as LLMCall records a call: the exact model that answered, the options it was called with (None for a provider
+    # default), why it stopped and whether that cut the answer, its transport retries; None for a bot or a move of several calls
+    model_string: str | None = None
+    model_options: dict[str, Any] | None = None
+    finish_reason: str | None = None
+    truncated: bool | None = None
+    retries: int | None = None
+    # the answer the output strategy read from the text, before it was matched to a legal move; None when it read none or there was no text
+    extracted: str | None = None
+    # the ids of the blocked attempts before this move's answer, as the block log keeps them (PromptBlock.id)
+    blocks: list[str] = field(default_factory=list)
 
     def add_call(self, call: LLMCall) -> None:
         # the token fields stay the move's totals, which the usage analysis reads

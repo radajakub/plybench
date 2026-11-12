@@ -18,20 +18,24 @@ class GameEnding(Serializable):
         result = GameResults.from_value(data["result"])
         if result is None:
             raise ValueError(f"Invalid game result: {data['result']}")
-        return cls(data["seq"], data["observation"], result, data.get("serialized_state"))
+        return cls(data["seq"], data["observation"], result, data.get("serialized_state"), data.get("players"))
 
-    def __init__(self, seq: int, observation: str, result: GameResults, serialized_state: str | None = None) -> None:
+    def __init__(self, seq: int, observation: str, result: GameResults, serialized_state: str | None = None, players: dict[str, dict[str, Any]] | None = None) -> None:
         self.seq = seq
         self.observation = observation
         self.result = result
         # the state the game ended in (the terminal state, or the one a failed move left unchanged), so it can be rebuilt in any
         # format, as each step's can; None in records from before it was kept
         self.serialized_state = serialized_state
+        # what a learner keeps at the end of the game (LearnablePlayer.finish), by player hash; empty for other players
+        self.players = players if players is not None else {}
 
     def to_dict(self) -> dict[str, Any]:
         res: dict[str, Any] = {"seq": self.seq, "observation": self.observation, "result": self.result.value}
         if self.serialized_state is not None:
             res["serialized_state"] = self.serialized_state
+        if self.players:
+            res["players"] = self.players
         return res
 
 
@@ -51,6 +55,13 @@ class GameStep(Serializable):
             data=data.get("data", None),
             llm_seed=data.get("llm_seed"),
             calls=[LLMCall.from_dict(call) for call in data.get("calls", [])],
+            model_string=data.get("model_string"),
+            model_options=data.get("model_options"),
+            finish_reason=data.get("finish_reason"),
+            truncated=data.get("truncated"),
+            retries=data.get("retries"),
+            extracted=data.get("extracted"),
+            blocks=data.get("blocks", []),
         )
 
     def __init__(
@@ -67,6 +78,13 @@ class GameStep(Serializable):
         data: dict[str, Any] | None = None,
         llm_seed: int | None = None,
         calls: list[LLMCall] | None = None,
+        model_string: str | None = None,
+        model_options: dict[str, Any] | None = None,
+        finish_reason: str | None = None,
+        truncated: bool | None = None,
+        retries: int | None = None,
+        extracted: str | None = None,
+        blocks: list[str] | None = None,
     ) -> None:
         # core benchmark-trackable fields
         self.seq = seq
@@ -86,6 +104,16 @@ class GameStep(Serializable):
         self.llm_seed = llm_seed
         # every call of a move that took several; empty for a move of one call or none
         self.calls = calls if calls is not None else []
+        # the move's one LLM call as PlayerOutput describes it (model, options, finish reason, retries); None for a bot, a move of several calls,
+        # or a record from before they were kept
+        self.model_string = model_string
+        self.model_options = model_options
+        self.finish_reason = finish_reason
+        self.truncated = truncated
+        self.retries = retries
+        # the answer read from the text before it was matched to a legal move, and the ids of the blocked attempts in the block log
+        self.extracted = extracted
+        self.blocks = blocks if blocks is not None else []
 
     def to_dict(self) -> dict[str, Any]:
         res: dict[str, Any] = {
@@ -106,6 +134,11 @@ class GameStep(Serializable):
             res["llm_seed"] = self.llm_seed
         if self.calls:
             res["calls"] = [call.to_dict() for call in self.calls]
+        for name in ("model_string", "model_options", "finish_reason", "truncated", "retries", "extracted"):
+            if (value := getattr(self, name)) is not None:
+                res[name] = value
+        if self.blocks:
+            res["blocks"] = self.blocks
         if self.data:
             res["data"] = self.data
         return res
@@ -187,6 +220,13 @@ class GameTracker(Serializable[[ConfigParser]]):
                 data=data or None,
                 llm_seed=player_output.llm_seed,
                 calls=list(player_output.calls),
+                model_string=player_output.model_string,
+                model_options=player_output.model_options,
+                finish_reason=player_output.finish_reason,
+                truncated=player_output.truncated,
+                retries=player_output.retries,
+                extracted=player_output.extracted,
+                blocks=list(player_output.blocks),
             )
         )
 

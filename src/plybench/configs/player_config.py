@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 from dataclasses import dataclass
+from typing import Any
 
 from plybench.configs.player_params import PlayerParams
 
@@ -24,6 +25,10 @@ class PlayerConfig:
         # short, deterministic id derived from the canonical serialization; used only to match a
         # player to its recorded steps (stable across processes, unlike builtin hash()).
         return hashlib.sha256(self.to_string().encode()).hexdigest()[:12]
+
+    def describe(self) -> dict[str, Any]:
+        # the player as a session records it: its key, its config string and every param, defaults included
+        return {"key": self.key, "config": self.to_string(), "params": self.params.describe()}
 
     def __str__(self) -> str:
         return self.to_string()

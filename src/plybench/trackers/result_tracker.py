@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from plybench.common.paths import BenchmarkPathBuilder, ExperimentPathBuilder
+from plybench.common.provenance import session_changes
 from plybench.common.serializable import Saveable
 from plybench.configs.game_config import GameConfig
 from plybench.configs.parser import ConfigParser
@@ -154,8 +155,16 @@ class ResultTracker(Saveable[[ConfigParser, ExperimentPathBuilder], Path, [Confi
             raise
 
     def begin_session(self, provenance: dict[str, Any]) -> None:
-        # the rounds this run plays are filed under it; stored with the metadata when its first game is recorded
-        self._session = {**provenance, "rounds": []}
+        # the rounds this run plays are filed under it, with both players described; stored with the metadata when its first game is recorded.
+        # A session that continues earlier games must play the same players with the same code, or the matchup would mix two experiments
+        session = {**provenance, "players": {"i": self.i.describe(), "o": self.o.describe()}, "rounds": []}
+        played = [earlier for earlier in self.sessions if earlier["rounds"]]
+        if played and (changes := session_changes(played[-1], session)):
+            raise ValueError(
+                f"{self.metadata_path} was played by another player or other code: {'; '.join(changes)}. Resuming would mix the two in one matchup; "
+                f"remove {self.base_path} and play it again from scratch"
+            )
+        self._session = session
         self.sessions.append(self._session)
 
     def check_seed(self) -> None:

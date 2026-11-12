@@ -7,6 +7,7 @@ import asyncio
 import fcntl
 import json
 import threading
+from dataclasses import replace
 
 import pytest
 from plyllm import FailureKind, LLMCallError, LLMConfig, LLMResponse, LLMTokens, Provider
@@ -367,3 +368,55 @@ def test_appending_a_prompt_block_waits_for_another_writer(tmp_path):
 
     assert not writer.is_alive()
     assert _block_records(block_log) == [_BLOCK]
+
+
+# --- what a move records of its call ----------------------------------------------------------------
+def test_a_move_records_its_call_and_the_answer_it_read():
+    # the exact model, the options it was called with (None: the provider's default), why it stopped, the retries, and the answer as read
+    answer = replace(_answer('{"action": "C1R1"}'), finish_reason="length", retries=2)
+
+    out = _llm_move(_ScriptedLLM(answer))
+
+    assert out.model_string == "gpt-5.4"
+    assert out.model_options == {"reasoning_effort": None, "thinking_enabled": False, "max_tokens": None, "temperature": None}
+    assert (out.finish_reason, out.truncated, out.retries) == ("length", True, 2)
+    assert out.extracted == "<C1R1>" and out.blocks == []
+
+
+def test_an_illegal_answer_keeps_what_was_read():
+    out = _llm_move(_ScriptedLLM(_answer('{"action": "C9R9"}')))
+
+    assert out.failure is MoveFailure.ILLEGAL and out.extracted == "<C9R9>"
+
+
+def test_a_move_names_its_blocked_attempts_by_their_ids_in_the_block_log(tmp_path):
+    block_log = tmp_path / "llm_blocks.jsonl"
+
+    out = _llm_move(_ScriptedLLM(_blocked(), _blocked(), _answer('{"action": "C1R1"}')), block_log)
+
+    ids = [block.id for block in _block_records(block_log)]
+    assert len(ids) == 2 and all(ids) and out.blocks == ids
+
+
+def test_a_step_keeps_the_call_fields_through_a_saved_game(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    tracker = _play("random:distribution=uniform", "random:distribution=normal")
+    step = tracker.steps[0]
+    step.model_string, step.model_options, step.finish_reason, step.truncated, step.retries = "m-1", {"max_tokens": 10}, "stop", False, 0
+    step.extracted, step.blocks = "C1R1", ["abc"]
+
+    restored = GameTracker.from_dict(json.loads(json.dumps(tracker.to_dict())), registry).steps[0]
+
+    assert (restored.model_string, restored.model_options, restored.finish_reason, restored.truncated, restored.retries) == ("m-1", {"max_tokens": 10}, "stop", False, 0)
+    assert (restored.extracted, restored.blocks) == ("C1R1", ["abc"])
+    # a bot's step records none of them
+    assert "model_string" not in tracker.to_dict()["steps"][1] and "blocks" not in tracker.to_dict()["steps"][1]
+
+
+def test_a_player_is_described_by_every_param_defaults_included():
+    described = registry.player_config("llm:actions:structured:openai:gpt-5.4:").describe()
+
+    assert described["key"] == "llm" and described["config"] == "llm:actions:structured:openai:gpt-5.4:"
+    assert described["params"]["model"]["options"] == {"reasoning_effort": None, "thinking_enabled": False, "max_tokens": None, "temperature": None}
+    assert described["params"]["observation_type"] == "actions"
+    assert json.loads(json.dumps(described)) == described

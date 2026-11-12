@@ -144,3 +144,39 @@ def test_a_certain_button_has_one_outcome():
     assert game.state.chance_outcomes() == [(1, pytest.approx(1.0))]
     root = solve_game(engine.game)[0, START]
     assert root is not None and root.Q(0) == pytest.approx(1.0) and root.Q(1) == pytest.approx(-1.0)
+
+
+def test_a_switch_changes_the_probabilities_from_its_epoch_on():
+    config = registry.game_config("bandit:p=0;1,switch=0.8;0.2,switch_epoch=2,shift=1,rules=hidden,stationarity=omitted")
+    assert config.to_string() == "bandit:p=0;1,shift=1,rules=hidden,switch=4/5;1/5,switch_epoch=2,stationarity=omitted"
+    assert config.path == "bandit_2_buttons_p_0_1_shift_1_hidden_switch_4-5_1-5_epoch_2_stationarity_omitted"
+    assert registry.game_config(config.to_string()) == config
+    # before the switch the run's own game; from it on a game without a switch, with the same shift, rules and prompt
+    assert config.at_epoch(0) is config and config.at_epoch(1) is config
+    after = config.at_epoch(2)
+    assert after == config.at_epoch(5) and after.to_string() == "bandit:p=4/5;1/5,shift=1,rules=hidden,stationarity=omitted"
+    root = solve_game(registry.build_engine(after).game)[0, START]
+    assert root is not None and root.A() == [1] and root.Q(1) == pytest.approx(0.6)
+    # a game without a switch is the same in every epoch
+    plain = registry.game_config("bandit:p=0.6;0.4")
+    assert plain.at_epoch(3) is plain
+
+
+def test_the_stationarity_sentence_can_be_omitted():
+    stated, omitted = _prompt(_engine("p=0.6;0.4,rules=hidden")), _prompt(_engine("p=0.6;0.4,rules=hidden,stationarity=omitted"))
+    assert "Each button wins with its own fixed probability, which does not change between games. You are not told these probabilities." in stated
+    assert "does not change" not in omitted and "Each button wins with its own probability. You are not told these probabilities." in omitted
+    assert omitted.replace("its own probability.", "its own fixed probability, which does not change between games.") == stated
+
+
+def test_invalid_switches_are_refused():
+    with pytest.raises(ValueError, match="needs both"):
+        registry.game_config("bandit:p=0;1,switch=1;0")
+    with pytest.raises(ValueError, match="needs both"):
+        registry.game_config("bandit:p=0;1,switch_epoch=2")
+    with pytest.raises(ValueError, match="as many probabilities"):
+        registry.game_config("bandit:p=0;1,switch=1;0;0,switch_epoch=2")
+    with pytest.raises(ValueError, match="at least 1"):
+        registry.game_config("bandit:p=0;1,switch=1;0,switch_epoch=0")
+    with pytest.raises(ValueError, match="Invalid stationarity"):
+        registry.game_config("bandit:stationarity=dropped")

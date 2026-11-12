@@ -94,6 +94,29 @@ def test_a_training_report_follows_the_status_of_its_runs(tmp_path, monkeypatch)
     assert json.loads((tmp_path / "again.json").read_text())["items"] == []
 
 
+def test_a_training_report_counts_the_moves_of_each_phase_against_the_game_of_its_epoch(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    _Stub.proposed, _Stub.fail_at, _Stub.nothing_at = [], None, set()
+    # the stub presses red: never optimal before the switch (0 against 1), always after it (4/5 against 1/5)
+    game = "bandit:p=0;1,switch=4/5;1/5,switch_epoch=2,rules=hidden"
+    harness = TrainingHarness("moves", _op(), [game], ["stub:"], ["none:"], ["none:"], ["num_epochs=3,num_training_games=3,num_test_games=4"], 1, seed=0)
+    path = tmp_path / "report.json"
+    reporter = TrainingReporter(harness, path)
+    asyncio.run(harness.run(sync=True, training_callbacks=reporter.callbacks()))
+    reporter.file.close(finished=True)
+    report = json.loads(path.read_text())
+
+    lines = {(block["group"], block["measure"]): block for block in _blocks(report, "line") if "group" in block}
+    test, train = lines[("tests vs none", "win rate")], lines[("training games vs the trainer", "win rate")]
+    for block, games, epochs in ((test, 4, [0, 1, 2, 3]), (train, 3, [1, 2, 3])):
+        [series] = block["series"]
+        assert [point["x"] for point in series["points"]] == epochs
+        assert all(point["moves"] == [{"move": "<button:red>", "count": games, "optimal": games if point["x"] >= 2 else 0}] for point in series["points"])
+        # the optimum of both games the run plays
+        assert sorted(reference["value"] for reference in block["references"]) == [0.8, 1.0]
+    json.dumps(report, allow_nan=False)
+
+
 def test_run_writes_the_report_and_a_finished_experiment_reports_nothing(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     base = ["plybench-run", "--name", "cli", "--games", "nim:", "--players", UNIFORM, "--opponents", OPTIMAL, "--quiet", "--seed", "0"]

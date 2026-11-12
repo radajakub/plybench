@@ -39,6 +39,11 @@ class Epoch:
     index: int
 
     @property
+    def game(self) -> GameConfig:
+        # what this epoch trains and tests on: the run's game, or what it changes into at this epoch
+        return self.run.game.at_epoch(self.index)
+
+    @property
     def train(self) -> TrainPhase:
         return TrainPhase(self)
 

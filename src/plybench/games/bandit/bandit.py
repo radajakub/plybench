@@ -20,29 +20,60 @@ def _fractions(p: tuple[Fraction, ...]) -> str:
     return ";".join(str(chance) for chance in p)
 
 
+def _path_fractions(p: tuple[Fraction, ...]) -> str:
+    return "_".join(str(chance) for chance in p).replace("/", "-")
+
+
 @dataclass(frozen=True, eq=True)
 class BanditGameParams(GameParams):
     p: tuple[Fraction, ...] = parse_p(str(_DEFAULT_PARAMS["p"]))
     shift: int = 0
     rules: str = "stated"  # `hidden`: the prompt does not give the win probabilities; only the prompt changes, not the game
+    # the win probabilities from the training epoch `switch_epoch` on, with the same shift: a training run plays `p` before and `switch` after (at_epoch)
+    switch: tuple[Fraction, ...] | None = None
+    switch_epoch: int | None = None
+    # `omitted`: the prompt does not say that the probabilities never change, which a switch makes false
+    stationarity: str = "stated"
 
     @classmethod
     def from_string(cls, params_string: str) -> BanditGameParams:
         params = extract_params(params_string)
         p = parse_p(params["p"]) if "p" in params else cls.p
-        shift, rules = int(params.get("shift", 0)), params.get("rules", "stated")
+        shift, rules, stationarity = int(params.get("shift", 0)), params.get("rules", "stated"), params.get("stationarity", "stated")
         check_shift(shift)
         if rules not in _RULES:
             raise ValueError(f"Invalid rules: {rules}; expected one of {', '.join(_RULES)}")
-        return cls(p=p, shift=shift, rules=rules)
+        if stationarity not in _STATIONARITY:
+            raise ValueError(f"Invalid stationarity: {stationarity}; expected one of {', '.join(_STATIONARITY)}")
+        if ("switch" in params) != ("switch_epoch" in params):
+            raise ValueError("A switch needs both switch (the probabilities after it) and switch_epoch (the first epoch that plays them)")
+        switch = parse_p(params["switch"]) if "switch" in params else None
+        switch_epoch = int(params["switch_epoch"]) if "switch_epoch" in params else None
+        if switch is not None and len(switch) != len(p):
+            raise ValueError(f"The switch must give as many probabilities as p: {len(switch)} for {len(p)} buttons")
+        # epoch 0 only tests the untrained player, so the first epoch a switch can change is 1
+        if switch_epoch is not None and switch_epoch < 1:
+            raise ValueError(f"The switch epoch must be at least 1, not {switch_epoch}")
+        return cls(p=p, shift=shift, rules=rules, switch=switch, switch_epoch=switch_epoch, stationarity=stationarity)
 
     def to_string(self) -> str:
-        # the probabilities as exact fractions, so a decimal and a fraction are one game
-        return f"p={_fractions(self.p)},shift={self.shift},rules={self.rules}"
+        # the probabilities as exact fractions, so a decimal and a fraction are one game; the switch and the stationarity only when set, so the strings
+        # of the games before them are unchanged
+        switch = f",switch={_fractions(self.switch)},switch_epoch={self.switch_epoch}" if self.switch is not None else ""
+        stationarity = f",stationarity={self.stationarity}" if self.stationarity != "stated" else ""
+        return f"p={_fractions(self.p)},shift={self.shift},rules={self.rules}{switch}{stationarity}"
 
     @property
     def path_suffix(self) -> str:
-        return f"{len(self.p)}_buttons_p_{'_'.join(str(chance) for chance in self.p).replace('/', '-')}_shift_{self.shift}_{self.rules}"
+        switch = f"_switch_{_path_fractions(self.switch)}_epoch_{self.switch_epoch}" if self.switch is not None else ""
+        stationarity = f"_stationarity_{self.stationarity}" if self.stationarity != "stated" else ""
+        return f"{len(self.p)}_buttons_p_{_path_fractions(self.p)}_shift_{self.shift}_{self.rules}{switch}{stationarity}"
+
+    def at_epoch(self, epoch: int) -> BanditGameParams:
+        # before the switch the run's own params; from it on a game without a switch that plays the new probabilities
+        if self.switch is None or self.switch_epoch is None or epoch < self.switch_epoch:
+            return self
+        return BanditGameParams(p=self.switch, shift=self.shift, rules=self.rules, stationarity=self.stationarity)
 
     @property
     def chances(self) -> tuple[Fraction, ...]:
@@ -127,7 +158,7 @@ class BanditTransformer(InterfaceTransformer[BanditAction, BanditObservation, []
 
 BANDIT_HEAD_PROMPT = """
 In front of you are {num_buttons} buttons: {buttons}.
-Each button wins with its own fixed probability, which does not change between games. {chance_rule}
+{stationarity} {chance_rule}
 You press one button, and the game ends: you win if the button wins, and you lose otherwise.
 """
 
@@ -135,6 +166,9 @@ _HIDDEN_CHANCE_RULE = "You are not told these probabilities."
 
 # which rules the prompt hides: none, or the win probabilities
 _RULES = ("stated", "hidden")
+
+# whether the prompt says that the probabilities never change
+_STATIONARITY = {"stated": "Each button wins with its own fixed probability, which does not change between games.", "omitted": "Each button wins with its own probability."}
 
 
 def _chance_rule(chances: tuple[Fraction, ...]) -> str:
@@ -152,7 +186,7 @@ class BanditPromptAdapter(SinglePlayerPromptAdapter[[BanditGameParams]]):
     def restart_prompt(self, params: BanditGameParams) -> None:
         chance_rule = _HIDDEN_CHANCE_RULE if params.rules == "hidden" else _chance_rule(params.chances)
         buttons = ", ".join(COLOURS[: len(params.p)])
-        self.head_prompt = self.head_prompt_template.format(num_buttons=len(params.p), buttons=buttons, chance_rule=chance_rule)
+        self.head_prompt = self.head_prompt_template.format(num_buttons=len(params.p), buttons=buttons, stationarity=_STATIONARITY[params.stationarity], chance_rule=chance_rule)
 
     def observation_prompt(self, observation: LLMObservation) -> str:
         # one state, before the press: both observation types tell it, as in Monty Hall

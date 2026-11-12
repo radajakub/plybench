@@ -17,9 +17,11 @@ from plyllm import LLM, LLMConfig, OpenAIProviderConfig
 
 from plybench.analysis.usage import calls_cost, calls_usage, learning_calls
 from plybench.app import PlyBench
+from plybench.callbacks.training_callbacks import TrainingCallbacks
 from plybench.common.enums import Mode
 from plybench.configs.player_config import PlayerConfig
 from plybench.configs.player_params import CheckpointedParams
+from plybench.configs.training_run import Epoch
 from plybench.harness.training.training import TrainingHarness
 from plybench.player.learnable import LEARNER_STATE, LearnablePlayer
 from plybench.player.player import PlayerOutput
@@ -322,3 +324,31 @@ def test_a_training_game_reads_back_with_the_learner_folder_it_was_learned_into(
     assert learner.ending is not None and learner.ending["learned"] == (_learner_dir(harness, 1) / "game_2").as_posix()
     assert learner.description is not None and learner.description["key"] == "stub"
     assert len(learner.events) == sum(1 for event in learner.events if event.phase == "move")
+
+
+def test_a_game_that_changes_at_an_epoch_is_played_from_that_epoch_on_and_resumed_there(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    _Stub.proposed, _Stub.fail_at, _Stub.nothing_at = [], None, set()
+    op = PlyBench(LLMConfig())
+    op.registry.register_player(PlayerSpec("stub", _StubParams, lambda game, cfg, pid: _Stub(cfg, pid)))
+    # the stub presses red, which never wins before the switch and always wins after it
+    game = "bandit:p=0;1,switch=1;0,switch_epoch=2,rules=hidden,stationarity=omitted"
+    harness = TrainingHarness("switch", op, [game], ["stub:"], ["none:"], ["none:"], [f"num_epochs=3,num_training_games={GAMES},num_test_games=2"], 1, seed=0)
+
+    def interrupt_after_the_switch(epoch: Epoch) -> None:
+        if epoch.index == 3:
+            _Stub.fail_at = 2
+
+    with pytest.raises(_Interrupted):
+        asyncio.run(harness.run(sync=True, training_callbacks=TrainingCallbacks(epoch_start_callback=interrupt_after_the_switch)))
+    _run(harness)
+
+    [run] = harness.runs
+    after = "bandit:p=1;0,shift=0,rules=hidden,stationarity=omitted"
+    for epoch in harness.get_results().epochs:
+        phases = epoch.tests + ([epoch.train] if epoch.train is not None else [])
+        assert {tracker.game.to_string() for tracker in phases} == {run.game.to_string() if epoch.epoch.index < 2 else after}
+        assert all(tracker.summary is not None and tracker.summary["win_rate"]["value"] == (0.0 if epoch.epoch.index < 2 else 1.0) for tracker in phases)
+    # one run, named by its own game, whose learner kept learning across the switch and was resumed after it
+    assert len(list((tmp_path / "results").rglob("run.json"))) == 1 and run.game.to_string() == "bandit:p=0;1,shift=0,rules=hidden,switch=1;0,switch_epoch=2,stationarity=omitted"
+    assert _state(harness, 3)["commits"] == 3 * GAMES

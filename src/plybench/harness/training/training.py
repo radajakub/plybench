@@ -14,6 +14,7 @@ from plybench.common.enums import Mode
 from plybench.common.paths import TrainingHarnessPathBuilder, saved_games
 from plybench.common.progress import track
 from plybench.common.provenance import package_of, provenance, session_changes
+from plybench.configs.game_config import GameConfig
 from plybench.configs.matchup import Matchup
 from plybench.configs.player_config import PlayerConfig
 from plybench.configs.player_params import CheckpointedParams
@@ -178,7 +179,7 @@ class TrainingHarness:
     async def _learn(self, epoch: Epoch, checkpoint: Path, game_callbacks: GameCallbacks | None, training_callbacks: TrainingCallbacks) -> None:
         # case if there is no checkpoint
         run = epoch.run
-        learner = self._build_learner(run, run.trainee if epoch.index == 0 else self._policy_config(run, epoch.index - 1))
+        learner = self._build_learner(epoch.game, run.trainee if epoch.index == 0 else self._policy_config(run, epoch.index - 1))
         # first epoch does not train, it is evaluated on empty memory, i.e. no state
         if epoch.index > 0:
             learner.begin_epoch(self.path_builder.learner_dir(self.experiment, run, epoch.index))
@@ -197,7 +198,7 @@ class TrainingHarness:
 
     async def _train(self, epoch: Epoch, learner: LearnablePlayer, game_callbacks: GameCallbacks | None, training_callbacks: TrainingCallbacks) -> ResultTracker:
         phase = epoch.train
-        matchup = Matchup(phase.run.game, self._policy_config(phase.run, phase.player_epoch), phase.opponent, phase.num_games)
+        matchup = Matchup(epoch.game, self._policy_config(phase.run, phase.player_epoch), phase.opponent, phase.num_games)
 
         def build_player(game: TurnBasedGame, player_config: PlayerConfig, identifier: PlayerIdentifier) -> Player:
             # the learner is the one thing an epoch carries across its games; the trainer is rebuilt per round
@@ -233,7 +234,7 @@ class TrainingHarness:
         return list(await asyncio.gather(*(asyncio.create_task(self._play_phase(phase, concurrency, game_callbacks, training_callbacks)) for phase in phases)))
 
     async def _play_phase(self, phase: EpochPhase, max_concurrent: int | None, game_callbacks: GameCallbacks | None, training_callbacks: TrainingCallbacks) -> ResultTracker:
-        matchup = Matchup(phase.run.game, self._policy_config(phase.run, phase.player_epoch), phase.opponent, phase.num_games)
+        matchup = Matchup(phase.epoch.game, self._policy_config(phase.run, phase.player_epoch), phase.opponent, phase.num_games)
         return await run_matchup_concurrent(
             self.op,
             matchup,
@@ -252,9 +253,9 @@ class TrainingHarness:
         params = cast(CheckpointedParams, run.trainee.params)
         return PlayerConfig(run.trainee.key, params.with_checkpoint(self.path_builder.checkpoint(self.experiment, run, epoch)))
 
-    def _build_learner(self, run: TrainingRun, config: PlayerConfig) -> LearnablePlayer:
+    def _build_learner(self, game: GameConfig, config: PlayerConfig) -> LearnablePlayer:
         # building an engine is the registry's only route to a TurnBasedGame; the rounds build their own
-        engine = self.op.registry.build_engine(run.game)
+        engine = self.op.registry.build_engine(game)
         player = self.op.registry.build_player(engine.game, config, "i")
         if not isinstance(player, LearnablePlayer):
             raise TypeError(f"trainee {config.to_string()} is not a LearnablePlayer and cannot be trained")
@@ -320,7 +321,7 @@ class TrainingHarness:
             self.path_builder.scope(self.experiment, phase),
             self._policy_config(phase.run, phase.player_epoch),
             phase.opponent,
-            phase.run.game,
+            phase.epoch.game,
             phase.num_games,
             self.op.registry,
             path_builder=self.path_builder,

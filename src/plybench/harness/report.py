@@ -4,6 +4,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+from plybench.analysis.replay import ReplayerCache
 from plybench.analysis.summary import CONFIDENCE
 from plybench.callbacks.benchmark_callbacks import BenchmarkCallbacks
 from plybench.callbacks.training_callbacks import TrainingCallbacks
@@ -20,6 +21,8 @@ from plybench.trackers.result_tracker import ResultTracker
 # left when it starts; what is saved already is not shown), rewritten while it plays from the trackers it holds (each one's running summary), so a tool
 # reads one file. A benchmark: the outcomes per matchup and a table of win rate and tokens. A training: a grid of the epochs, the outcome measures of
 # the tests per tester (with their interval) and of the training games (without: the learner changes during them), and the output tokens of the tests.
+# Each point of a training's outcome measures carries the learner's moves in that phase (`moves`), counted over its decisions, with how many of them
+# the solver rates optimal in a solvable game.
 
 OUTCOMES = [
     {"key": "win", "label": "win", "role": "good"},
@@ -122,8 +125,16 @@ class TrainingReporter:
             if any(not tracker.is_complete() for epoch in epochs for tracker in self._phases(epoch)):
                 self.runs.append((run, epochs))
         self.live: dict[Path, ResultTracker] = {}
-        self.optimal = optimal_outcomes_of(harness.op, harness.game_configs, [])
+        # the optimum of every game an epoch plays, which is the run's game unless it changes at an epoch
+        self.optimal = optimal_outcomes_of(harness.op, self._epoch_games([run for run, _ in self.runs]), [])
+        self.replayers = ReplayerCache(harness.op.registry)
+        # the learner's moves of each recorded game, as (move, optimal or None), by the phase's metadata and the round: a game is read and replayed once
+        self.moves: dict[tuple[Path, int], list[tuple[str, bool | None]]] = {}
         self.file = ReportFile(path, self.build)
+
+    @staticmethod
+    def _epoch_games(runs: list[TrainingRun]) -> list[str]:
+        return list(dict.fromkeys(Epoch(run, index).game.to_string() for run in runs for index in range(run.training_config.num_epochs + 1)))
 
     @staticmethod
     def _phases(epoch: EpochResults) -> list[ResultTracker]:
@@ -193,10 +204,37 @@ class TrainingReporter:
         points = []
         for epoch in epochs:
             tracker = pick(epoch)
-            value = _estimate(self._tracker(tracker), metric, interval) if tracker is not None else None
-            if value is not None and value["value"] is not None:
-                points.append({"x": epoch.epoch.index, **{name: entry for name, entry in value.items() if entry is not None}})
+            tracker = self._tracker(tracker) if tracker is not None else None
+            value = _estimate(tracker, metric, interval) if tracker is not None else None
+            if tracker is not None and value is not None and value["value"] is not None:
+                points.append({"x": epoch.epoch.index, **{name: entry for name, entry in value.items() if entry is not None}, "moves": self._moves(tracker)})
         return {"item": key, "points": points}
+
+    def _moves(self, tracker: ResultTracker) -> list[dict[str, Any]]:
+        # the learner's moves in the phase's recorded games, most frequent first; `optimal` only where the solver rated every one of them
+        counts: dict[str, list[int]] = {}
+        rated = True
+        for game_round in sorted(tracker.completed):
+            key = (tracker.metadata_path, game_round)
+            if key not in self.moves:
+                game = tracker.games[game_round - 1] or tracker.load_game(game_round)
+                if game is None:
+                    continue
+                optimal: dict[int, bool] = {}
+                if self.harness.op.registry.solvable(tracker.game.key):
+                    try:
+                        optimal = {stats.seq: stats.is_optimal for stats in self.replayers(tracker.game).replay_stats(game, tracker.i)}
+                    except Exception:
+                        # any error: the moves are still counted, without the solver's rating
+                        optimal = {}
+                self.moves[key] = [(step.move, optimal.get(step.seq)) for step in game.steps if step.player_hash == tracker.i.hash]
+            for move, is_optimal in self.moves[key]:
+                entry = counts.setdefault(move, [0, 0])
+                entry[0] += 1
+                entry[1] += bool(is_optimal)
+                rated = rated and is_optimal is not None
+        ordered = sorted(counts.items(), key=lambda item: (-item[1][0], item[0]))
+        return [{"move": move, "count": count, **({"optimal": optimal} if rated else {})} for move, (count, optimal) in ordered]
 
     def _pooled(self, epochs: list[EpochResults], metric: str) -> list[dict[str, Any]]:
         # the tests of an epoch as one mean: each tester's mean weighted by its count (exact for means)
@@ -210,7 +248,7 @@ class TrainingReporter:
 
     def _references(self, optimal: Callable[[dict[str, float]], float]) -> list[dict[str, Any]]:
         # the optimal policy's value of the reported runs' games in a measure, one line per distinct value, named by its game only when they differ
-        games = list(dict.fromkeys(run.game.to_string() for run, _ in self.runs))
+        games = self._epoch_games([run for run, _ in self.runs])
         by_value: dict[float, list[str]] = {}
         for game in games:
             if game in self.optimal:

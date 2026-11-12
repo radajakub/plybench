@@ -20,6 +20,10 @@ class GameParams(ABC):
         """The game-specific part of the result path (may be empty); GameConfig prefixes the key."""
         raise NotImplementedError
 
+    def at_epoch(self, epoch: int) -> GameParams:
+        # the params a training epoch plays: the same in every epoch, unless a game changes at an epoch (the bandit's switch)
+        return self
+
 
 @dataclass(frozen=True, eq=True)
 class NoGameParams(GameParams):

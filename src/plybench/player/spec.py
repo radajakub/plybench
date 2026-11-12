@@ -7,6 +7,7 @@ from plybench.configs.player_config import PlayerConfig
 from plybench.configs.player_params import PlayerParams
 from plybench.core.game import TurnBasedGame
 from plybench.player.player import Player, PlayerIdentifier
+from plybench.trace.model import TraceReader
 from plybench.trackers.player_tracker import PlayerTracker
 
 type PlayerBuilder = Callable[[TurnBasedGame, PlayerConfig, PlayerIdentifier], Player]
@@ -20,3 +21,5 @@ class PlayerSpec:
     build: PlayerBuilder
     # optional per-player tracker deciding what extras to persist on each GameStep
     tracker: PlayerTracker | None = None
+    # optional reader of the player's part of a saved game (plybench.trace); None: plybench.trace.load.read_player
+    trace: TraceReader | None = None

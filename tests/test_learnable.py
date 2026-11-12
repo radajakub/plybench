@@ -24,6 +24,7 @@ from plybench.harness.training.training import TrainingHarness
 from plybench.player.learnable import LEARNER_STATE, LearnablePlayer
 from plybench.player.player import PlayerOutput
 from plybench.player.spec import PlayerSpec
+from plybench.trace.load import load_game
 from plybench.trackers.game_tracker import GameTracker
 from plybench.trackers.llm_call import LLMCall
 
@@ -306,3 +307,18 @@ def test_a_finished_training_run_is_not_checked_against_its_sessions(harness):
     manifest.write_text(json.dumps(stored))
 
     harness.check_runs()
+
+
+def test_a_training_game_reads_back_with_the_learner_folder_it_was_learned_into(harness):
+    _run(harness)
+    folder = harness.path_builder.epoch_dir(harness.experiment, harness.runs[0], 1)
+    game_file = next(folder.rglob("train*/**/game_2.json"))
+
+    trace = load_game(game_file, harness.op.registry)
+
+    # the seats alternate in training, so the learner is found by its key
+    [learner] = [player for player in trace.players.values() if player.key == "stub"]
+    assert trace.place is not None and trace.place["phase"] == "train"
+    assert learner.ending is not None and learner.ending["learned"] == (_learner_dir(harness, 1) / "game_2").as_posix()
+    assert learner.description is not None and learner.description["key"] == "stub"
+    assert len(learner.events) == sum(1 for event in learner.events if event.phase == "move")

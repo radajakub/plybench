@@ -128,7 +128,11 @@ class LearnablePlayer[U](Player, ABC):
         before = checkpoint
         if self.is_training and self.workdir is not None and game.game_round > 1:
             before = (self.workdir / f"game_{game.game_round - 1}" / LEARNER_STATE).as_posix()
-        return {"state": {"checkpoint": checkpoint, "before": before}}
+        kept: dict[str, Any] = {"state": {"checkpoint": checkpoint, "before": before}}
+        # in training, also where this game's update, calls and state go (the learner folder of the game, written once the game is learned from)
+        if self.is_training and self.workdir is not None:
+            kept["learned"] = (self.workdir / f"game_{game.game_round}").as_posix()
+        return kept
 
     async def _cached(self, name: str, propose: Callable[[], Awaitable[U | None]]) -> U | None:
         # an update is proposed once per epoch and name; a replay loads it instead of proposing again

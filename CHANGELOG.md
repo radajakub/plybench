@@ -6,6 +6,18 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+### Added
+
+- `plybench.trace`: a saved game read back as a trace. `load_game(game_file, registry)` gives a `GameTrace` with each
+  player's `PlayerTrace`: its description (from the session that played the round), its `Component`s, its `Event`s in
+  order (`move`, then `learn`; each with `inputs` and `outputs` as `Value`s whose `Source` names where a value came from:
+  the game, a memory entry, the reference, another event, an LLM call) and its `MemoryView`s. Only recorded files are
+  joined; no player code is run. `to_dict()` gives plain JSON.
+- `PlayerSpec.trace`: a plugin player's reader of its part of a game; a player without one is read by
+  `plybench.trace.load.read_player` (one event per move: an LLM move's prompts, answer, extracted answer and call, or a
+  bot's observation and move).
+- `LearnablePlayer.finish` also keeps `learned` in training: the learner folder of the game (update, calls, state).
+
 ## [4.12.0] - 2026-11-12
 
 ### Added

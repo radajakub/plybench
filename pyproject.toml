@@ -61,6 +61,7 @@ plybench-play = "plybench.cli.play:main"
 plybench-analyze = "plybench.cli.analyze:main"
 plybench-plot = "plybench.cli.plot:main"
 plybench-plot-training = "plybench.cli.plot_training:main"
+plybench-trace = "plybench.cli.trace:main"
 
 [project.urls]
 Homepage = "https://plybench.jakubrada.com"

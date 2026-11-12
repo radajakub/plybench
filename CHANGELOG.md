@@ -6,6 +6,14 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+### Added
+
+- `plybench-trace <game.json>`: prints one saved game as a trace (`plybench.trace.text.render`): each player's components
+  with every param, every move and the learning from the game (each event with what went in, where it came from, and
+  what came out; prompts, answers and calls whole), and its memories as the game started (entries read, written, and
+  not touched). `--player`, `--sections`, `--max-chars` (one line per text), `--all-entries`; `--json` prints the
+  `GameTrace` instead.
+
 ## [4.13.0] - 2026-11-12
 
 ### Added

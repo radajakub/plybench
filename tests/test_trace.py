@@ -10,10 +10,12 @@ import json
 from plyllm import LLMConfig
 
 from plybench.app import PlyBench
+from plybench.cli import trace as trace_cli
 from plybench.configs.matchup import Matchup
 from plybench.harness.matchup import run_matchup_concurrent
 from plybench.trace.load import load_game, move_event
 from plybench.trace.model import Source
+from plybench.trace.text import render
 from plybench.trackers.game_tracker import GameStep
 
 op = PlyBench(LLMConfig())
@@ -70,3 +72,21 @@ def test_an_llm_move_reads_as_its_prompts_answer_and_call():
     # a bot's step: the observation in, the move out, no call
     bot = move_event(GameStep(2, "random:", "h", "state", "obs", "<C2R2>"), 2, "random")
     assert [value.name for value in bot.inputs] == ["observation"] and bot.call is None
+
+
+def test_the_text_and_the_json_of_a_game(tmp_path, monkeypatch, capsys):
+    monkeypatch.chdir(tmp_path)
+    tracker = asyncio.run(run_matchup_concurrent(op, MATCHUP, experiment="exp", max_concurrent=1, seed=3))
+    game_file = tracker.path_builder.game_file(tracker.base_path, 1)
+    trace = load_game(game_file, registry)
+
+    text = render(trace)
+    assert text.startswith("Game tic_tac_toe: round 1") and "== Player i: random:distribution=uniform" in text and " Step 1" in text
+    assert "    in  observation ← game: " in text and "    out move: <" in text
+    # only the chosen player and sections; a limit keeps every text on one line
+    short = render(trace, ["o"], ("moves",), 40)
+    assert "== Player i" not in short and "Components" not in short and all(len(line) < 120 for line in short.splitlines()[2:])
+
+    monkeypatch.setattr("sys.argv", ["plybench-trace", str(game_file), "--json"])
+    trace_cli.main()
+    assert json.loads(capsys.readouterr().out) == trace.to_dict()

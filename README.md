@@ -325,6 +325,7 @@ Then analyze or export the transcripts:
 
 ```bash
 uv run plybench-analyze --experiment my_experiment   # compute per-matchup statistics + confidence intervals
+uv run plybench-trace results/<...>/game_3.json       # one game step by step: each component's config, inputs with their source, outputs, calls, memories
 uv run python scripts/export.py --experiment my_experiment --out my_experiment.tar.gz   # export results for the PlyBench website
 uv run plybench-play --game tic_tac_toe: --i human: --o optimal:stochastic=True  # play interactively
 ```

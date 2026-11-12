@@ -6,6 +6,8 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+## [4.11.2] - 2026-11-12
+
 ### Fixed
 
 - Reports: a change within `ReportFile`'s interval (5 s by default) was dropped until the next change, so a script that

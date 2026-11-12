@@ -6,6 +6,8 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+## [4.13.0] - 2026-11-12
+
 ### Added
 
 - `plybench.trace`: a saved game read back as a trace. `load_game(game_file, registry)` gives a `GameTrace` with each

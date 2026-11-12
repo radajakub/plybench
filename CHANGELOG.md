@@ -6,6 +6,8 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+## [4.13.1] - 2026-11-12
+
 ### Added
 
 - `plybench-trace <game.json>`: prints one saved game as a trace (`plybench.trace.text.render`): each player's components

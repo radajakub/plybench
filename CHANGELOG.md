@@ -6,6 +6,8 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+## [4.12.0] - 2026-11-12
+
 ### Added
 
 - `LLMCall` records the call's `options` (every `LLMCallOptions` field, `None` for a provider default), `finish_reason`

@@ -24,8 +24,9 @@ from plyllm import DEFAULT_CONCURRENCY
 from plybench.callbacks.benchmark_callbacks import BenchmarkCallbacks
 from plybench.callbacks.console_callbacks import console_benchmark_callbacks
 from plybench.callbacks.notification_callbacks import notification_benchmark_callbacks
-from plybench.cli.shared import add_limits_args, add_source_args, benchmark_from_args, build_op, warn_if_unconfigured
+from plybench.cli.shared import add_limits_args, add_report_args, add_source_args, benchmark_from_args, build_op, warn_if_unconfigured
 from plybench.harness.plan import benchmark_plan
+from plybench.harness.report import BenchmarkReporter
 from plybench.harness.status import benchmark_status, check_summaries
 
 
@@ -50,6 +51,7 @@ def main() -> None:
         help="compare each matchup's stored summary (and a training phase's place) in its metadata.json with its saved games, then exit (exit 1 on a "
         "difference); write: store them where they differ, changing nothing else",
     )
+    add_report_args(parser)
     add_limits_args(parser)
     args = parser.parse_args()
 
@@ -90,8 +92,19 @@ def main() -> None:
             failure=lambda error: f"{label} crashed at {progress()}: {describe(error)}",
         )
 
+    # the report: its items from what is saved now, then rewritten as the games are saved; finished only when the run returned
+    reporter = BenchmarkReporter(benchmark, args.job_report) if args.job_report is not None else None
+    if reporter is not None:
+        callbacks = BenchmarkCallbacks.combine(callbacks, reporter.callbacks())
+        reporter.file.write()
+    finished = False
     with notify:
-        results = asyncio.run(benchmark.run(sync=args.sync, concurrency=rounds_concurrency, benchmark_callbacks=callbacks))
+        try:
+            results = asyncio.run(benchmark.run(sync=args.sync, concurrency=rounds_concurrency, benchmark_callbacks=callbacks))
+            finished = True
+        finally:
+            if reporter is not None:
+                reporter.file.close(finished)
 
     complete = sum(1 for tracker in results.trackers if tracker.is_complete())
     print(f"\ndone: {complete}/{len(results.trackers)} matchups complete under results/benchmarks/{benchmark.experiment}/")

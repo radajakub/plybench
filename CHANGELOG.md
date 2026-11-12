@@ -6,6 +6,30 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+### Added
+
+- Reports: `plybench-run` and `plybench-train` take `--job-report <path>` and keep one JSON file of what the run plays (the
+  matchups or training runs with games left when it starts, nothing saved before), its progress and its results so far,
+  rewritten from the trackers while it plays (at most every 5 s, and at the end with `finished`). A tool reads one file
+  instead of starting `--status`. The shape (version 1: `items`, `shared`, `progress`, and `blocks` of type `grid`,
+  `table`, `line`, `bars`) is documented in `plybench.report`; scripts write their own with the same `Report` and
+  `ReportFile`. A failed write is a warning and never stops a run.
+- `plybench.configs.names`: short names of config strings from the config grammar alone (params split at the commas
+  outside brackets): what every config of an axis shares is left out, models are named by their name, an experiment's
+  label wins, and two configs never get one name. Used by the reports and by `--check`.
+- `--check --json`: every item has `key` (its results folder relative to the experiment's, the key of its report item),
+  `name` and `names` (per axis); the plan has `shared`.
+
+### Changed
+
+- `TrainingHarness.load_epoch` (was `_load_epoch`) and `harness.plan.optimal_outcomes_of` (was `_optimal`) are public,
+  for the reports.
+
+### Fixed
+
+- The comment on the CLI selection (`--games`, `--players`, `--trainees`, ...): it replaces the experiment's enabled lines
+  of its axis, it does not narrow them.
+
 ## [4.10.1] - 2026-11-11
 
 ### Added

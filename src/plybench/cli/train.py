@@ -30,9 +30,10 @@ from plybench.analysis.usage import TokenUsage, calls_cost, calls_usage, learnin
 from plybench.callbacks.console_callbacks import console_training_callbacks
 from plybench.callbacks.notification_callbacks import notification_training_callbacks
 from plybench.callbacks.training_callbacks import TrainingCallbacks
-from plybench.cli.shared import add_limits_args, add_training_source_args, build_op, training_from_args, warn_if_unconfigured
+from plybench.cli.shared import add_limits_args, add_report_args, add_training_source_args, build_op, training_from_args, warn_if_unconfigured
 from plybench.common.enums import MetricName
 from plybench.harness.plan import training_plan
+from plybench.harness.report import TrainingReporter
 from plybench.harness.status import check_summaries, training_status
 from plybench.harness.training.results import TrainingResults
 from plybench.harness.training.training import TrainingHarness
@@ -91,6 +92,7 @@ def main() -> None:
         help="compare each matchup's stored summary (and a training phase's place) in its metadata.json with its saved games, then exit (exit 1 on a "
         "difference); write: store them where they differ, changing nothing else",
     )
+    add_report_args(parser)
     add_limits_args(parser)
     args = parser.parse_args()
 
@@ -131,8 +133,19 @@ def main() -> None:
             failure=lambda error: f"{label} crashed at {progress()}: {describe(error)}",
         )
 
+    # the report: its items from what is saved now, then rewritten as the games are saved; finished only when the run returned
+    reporter = TrainingReporter(harness, args.job_report) if args.job_report is not None else None
+    if reporter is not None:
+        callbacks = TrainingCallbacks.combine(callbacks, reporter.callbacks())
+        reporter.file.write()
+    finished = False
     with notify:
-        results = asyncio.run(harness.run(sync=args.sync, concurrency=rounds_concurrency, runs_concurrency=args.runs_concurrency, training_callbacks=callbacks))
+        try:
+            results = asyncio.run(harness.run(sync=args.sync, concurrency=rounds_concurrency, runs_concurrency=args.runs_concurrency, training_callbacks=callbacks))
+            finished = True
+        finally:
+            if reporter is not None:
+                reporter.file.close(finished)
 
     metric = MetricName.from_value(args.metric)
     if metric is None:

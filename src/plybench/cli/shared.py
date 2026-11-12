@@ -27,6 +27,10 @@ def warn_if_unconfigured() -> None:
         print(f"warning: --notify set but notifications are not configured ({error}); they will be skipped")
 
 
+def add_report_args(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--job-report", type=Path, help="keep a report of what this run plays and its results so far in this JSON file, rewritten while it plays (plybench.report)")
+
+
 def add_limits_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--limits", type=Path, help=f"per-model quotas of your account, as JSON (default: ${LIMITS_ENV}, then ./limits.json if present)")
 
@@ -76,7 +80,8 @@ def add_source_args(parser: argparse.ArgumentParser) -> None:
 
 def benchmark_from_args(op: PlyBench, args: argparse.Namespace) -> Benchmark:
     if args.experiment:
-        # per-axis overrides restrict the experiment's enabled set at run time
+        # a per-axis selection replaces the experiment's enabled lines of that axis (any config, enabled or not); the results are still filed under the
+        # experiment
         return Benchmark.load_experiment(op, args.experiment, game_override=args.games, player_override=args.players, opponent_override=args.opponents)
     if not (args.games and args.players and args.opponents):
         raise SystemExit("provide --experiment, or all of --games / --players / --opponents (+ optional --num-games)")
@@ -97,8 +102,8 @@ def add_training_source_args(parser: argparse.ArgumentParser) -> None:
 
 def training_from_args(op: PlyBench, args: argparse.Namespace) -> TrainingHarness:
     if args.experiment:
-        # per-axis overrides restrict the experiment's enabled set at run time; num_replicates is not
-        # overridable, it belongs to the experiment the results are filed under
+        # a per-axis selection replaces the experiment's enabled lines of that axis (any config, enabled or not); num_replicates is not overridable, it
+        # belongs to the experiment the results are filed under
         return TrainingHarness.load_experiment(
             op,
             args.experiment,

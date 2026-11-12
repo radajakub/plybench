@@ -311,7 +311,7 @@ class TrainingHarness:
         tracker.load_if_exists(games)
         return tracker
 
-    def _load_epoch(self, epoch: Epoch, games: bool = True) -> EpochResults:
+    def load_epoch(self, epoch: Epoch, games: bool = True) -> EpochResults:
         train = self._load_phase(epoch.train, games) if epoch.index > 0 else None
         return EpochResults(epoch, train, [self._load_phase(epoch.test(tester), games) for tester in self._testers()])
 
@@ -319,5 +319,5 @@ class TrainingHarness:
         runs = self.runs
         epochs: list[EpochResults] = []
         for run in track(runs, "Loading results", len(runs), progress):
-            epochs.extend(self._load_epoch(Epoch(run, index), games) for index in range(run.training_config.num_epochs + 1))
+            epochs.extend(self.load_epoch(Epoch(run, index), games) for index in range(run.training_config.num_epochs + 1))
         return TrainingResults(runs, epochs)

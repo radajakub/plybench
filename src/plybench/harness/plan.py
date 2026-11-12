@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 from plyllm import ModelConfig
 
 from plybench.app import PlyBench
+from plybench.configs.names import item_names
 from plybench.configs.player_config import PlayerConfig
 from plybench.core.minimax import optimal_outcomes
 from plybench.harness.benchmark.benchmark import Benchmark
@@ -28,6 +29,10 @@ class PlannedItem:
     saved_games: int
     schedule: str | None = None
     replicate: int | None = None
+    # the item's results folder relative to the experiment's (the key of its report item), its short name and its name on each axis (plybench.configs.names)
+    key: str = ""
+    name: str = ""
+    names: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass
@@ -42,6 +47,8 @@ class ExperimentPlan:
     optimal: dict[str, dict[str, float]] = field(default_factory=dict)
     # the experiment's labels by the player's config string as the items write it, for tools that name the players
     labels: dict[str, str] = field(default_factory=dict)
+    # per axis, what every item shares and its names leave out
+    shared: dict[str, list[str]] = field(default_factory=dict)
 
     @property
     def planned_games(self) -> int:
@@ -62,6 +69,7 @@ class ExperimentPlan:
             "problems": self.problems,
             "optimal": self.optimal,
             "labels": self.labels,
+            "shared": self.shared,
         }
 
     def summary(self) -> str:
@@ -78,6 +86,12 @@ class ExperimentPlan:
         if not self.problems:
             lines.append("no problems found")
         return "\n".join(lines)
+
+
+def _named(plan: ExperimentPlan, configs: list[dict[str, str]], prefixes: dict[str, str]) -> None:
+    # the items' names, as a report of the same items names them
+    names, joined, plan.shared = item_names(configs, plan.labels, prefixes)
+    plan.items = [replace(item, name=name, names=axes) for item, axes, name in zip(plan.items, names, joined, strict=True)]
 
 
 def _saved(folder: Path) -> int:
@@ -114,7 +128,7 @@ def _check_models(op: PlyBench, models: list[ModelConfig], problems: list[str]) 
     return names
 
 
-def _optimal(op: PlyBench, games: list[str], problems: list[str]) -> dict[str, dict[str, float]]:
+def optimal_outcomes_of(op: PlyBench, games: list[str], problems: list[str]) -> dict[str, dict[str, float]]:
     # the outcomes of the optimal policy of every solvable single-player game; the solution is read from the minimax cache, or solved and saved there
     # on first use, as a run with an optimal player or an oracle component would
     optimal: dict[str, dict[str, float]] = {}
@@ -145,10 +159,12 @@ def benchmark_plan(benchmark: Benchmark) -> ExperimentPlan:
         game_config, player_config, opponent_config = op.registry.game_config(game), op.registry.player_config(player), op.registry.player_config(opponent)
         folder = benchmark.path_builder.game_base(benchmark.experiment, game_config, player_config, opponent_config, benchmark.num_games)
         # the configs as the results write them (to_string), as a training run's, so a tool can match an item with its results
-        plan.items.append(PlannedItem(game_config.to_string(), player_config.to_string(), opponent_config.to_string(), benchmark.num_games, _saved(folder)))
+        key = folder.relative_to(benchmark.path_builder.results_dir / benchmark.experiment).as_posix()
+        plan.items.append(PlannedItem(game_config.to_string(), player_config.to_string(), opponent_config.to_string(), benchmark.num_games, _saved(folder), key=key))
+    _named(plan, [{"game": item.game, "player": item.player, "opponent": item.opponent} for item in plan.items], {"opponent": "vs "})
     models = _check_players(op, benchmark.game_configs, list(dict.fromkeys(benchmark.player_configs + benchmark.opponent_configs)), plan.problems)
     plan.models = _check_models(op, models, plan.problems)
-    plan.optimal = _optimal(op, benchmark.game_configs, plan.problems)
+    plan.optimal = optimal_outcomes_of(op, benchmark.game_configs, plan.problems)
     return plan
 
 
@@ -160,7 +176,12 @@ def training_plan(harness: TrainingHarness) -> ExperimentPlan:
         # epoch 0 is only evaluated; every epoch after it trains, then is evaluated against every tester
         planned = schedule.num_epochs * schedule.num_training_games + (schedule.num_epochs + 1) * schedule.num_test_games * len(harness.tester_configs)
         folder = harness.path_builder.run_dir(harness.experiment, run)
-        plan.items.append(PlannedItem(run.game.to_string(), run.trainee.to_string(), run.trainer.to_string(), planned, _saved(folder), schedule.to_string(), run.replicate))
+        key = folder.relative_to(harness.path_builder.results_dir / harness.experiment).as_posix()
+        plan.items.append(
+            PlannedItem(run.game.to_string(), run.trainee.to_string(), run.trainer.to_string(), planned, _saved(folder), schedule.to_string(), run.replicate, key=key)
+        )
+    configs = [{"game": i.game, "player": i.player, "opponent": i.opponent, "schedule": i.schedule or "", "replicate": str(i.replicate)} for i in plan.items]
+    _named(plan, configs, {"opponent": "vs ", "replicate": "rep "})
     try:
         harness.check_runs()
     except ValueError as error:
@@ -168,5 +189,5 @@ def training_plan(harness: TrainingHarness) -> ExperimentPlan:
     players = list(dict.fromkeys(harness.player_configs + harness.trainer_configs + harness.tester_configs))
     models = _check_players(op, harness.game_configs, players, plan.problems, frozenset(harness.player_configs))
     plan.models = _check_models(op, models, plan.problems)
-    plan.optimal = _optimal(op, harness.game_configs, plan.problems)
+    plan.optimal = optimal_outcomes_of(op, harness.game_configs, plan.problems)
     return plan

@@ -6,6 +6,7 @@ from __future__ import annotations
 import asyncio
 import json
 import sys
+import time
 
 from plyllm import LLMConfig
 from test_learnable import _Stub, _StubParams
@@ -18,6 +19,7 @@ from plybench.harness.report import BenchmarkReporter, TrainingReporter
 from plybench.harness.status import benchmark_status, training_status
 from plybench.harness.training.training import TrainingHarness
 from plybench.player.spec import PlayerSpec
+from plybench.report import Item, Report, ReportFile
 
 UNIFORM = "random:distribution=uniform"
 OPTIMAL = "optimal:stochastic=True"
@@ -103,3 +105,38 @@ def test_run_writes_the_report_and_a_finished_experiment_reports_nothing(tmp_pat
     monkeypatch.setattr(sys, "argv", [*base, "--num-games", "2", "--job-report", "second.json"])
     run.main()
     assert json.loads((tmp_path / "second.json").read_text())["items"] == []
+
+
+def _counting(tmp_path, interval):
+    # a ReportFile whose report has one item, done as `done[0]`, and the dones of every build it made
+    done, built = [0], []
+
+    def build():
+        built.append(done[0])
+        return Report(items=[Item("a", {"player": UNIFORM}, 10, done[0])])
+
+    return ReportFile(tmp_path / "report.json", build, interval), done, built
+
+
+def test_a_change_within_the_interval_is_written_when_it_ends(tmp_path):
+    file, done, built = _counting(tmp_path, 0.2)
+    file.changed()
+    # three changes within the interval: none written now, one write of the last when it ends
+    for value in (1, 2, 3):
+        done[0] = value
+        file.changed()
+    assert built == [0]
+    time.sleep(0.4)
+    assert built == [0, 3]
+    assert json.loads((tmp_path / "report.json").read_text())["progress"]["done"] == 3
+
+
+def test_close_writes_at_once_and_no_change_is_written_after(tmp_path):
+    file, done, built = _counting(tmp_path, 0.2)
+    file.changed()
+    done[0] = 5
+    file.changed()
+    file.close(True)
+    time.sleep(0.4)
+    assert built == [0, 5]
+    assert json.loads((tmp_path / "report.json").read_text())["finished"]

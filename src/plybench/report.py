@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import math
 import os
+import threading
 import time
 import warnings
 from collections.abc import Callable, Sequence
@@ -36,7 +37,7 @@ from plybench.configs.names import item_names
 # Numbers are finite or null (JSON has no NaN). A key is the item's results folder relative to the experiment's, unique within a report.
 
 VERSION = 1
-# at most one write in this many seconds while the process works; the last one is always written
+# at most one write in this many seconds while the process works (a script may pass its own); a change within them is written when they end
 MIN_INTERVAL = 5.0
 
 
@@ -122,27 +123,51 @@ class Report:
 
 
 class ReportFile:
-    # a report rewritten while a process works: `changed` builds and saves it at most every MIN_INTERVAL seconds, `close` always. A failure to build or
-    # write is a warning, never an error: a report must not stop a run
+    # a report rewritten while a process works: `changed` builds and saves it at most every min_interval seconds, `write` and `close` at once. A change
+    # within the interval is not dropped: a timer writes it when the interval ends (one write for all changes within it), so the file is at most one
+    # interval behind. The timer builds the report on its own thread while the process may change what that reads; a build that fails there is a
+    # warning, and the next change or `close` writes again. A failure to build or write is a warning, never an error: a report must not stop a run
     def __init__(self, path: Path, build: Callable[[], Report], min_interval: float = MIN_INTERVAL) -> None:
         self.path = path
         self.build = build
         self.min_interval = min_interval
         self._last = -math.inf
+        self._timer: threading.Timer | None = None
+        # one write at a time: the timer's and the process's would share the temporary file
+        self._lock = threading.Lock()
 
     def changed(self) -> None:
-        if time.monotonic() - self._last >= self.min_interval:
-            self.write()
+        with self._lock:
+            if self._timer is not None:
+                return
+            wait = self._last + self.min_interval - time.monotonic()
+            if wait > 0:
+                self._timer = threading.Timer(wait, self._pending)
+                # a daemon: a timer still waiting never keeps the process alive
+                self._timer.daemon = True
+                self._timer.start()
+                return
+        self.write()
+
+    def _pending(self) -> None:
+        with self._lock:
+            self._timer = None
+        self.write()
 
     def write(self, finished: bool = False) -> None:
-        self._last = time.monotonic()
-        try:
-            report = self.build()
-            report.finished = finished
-            report.save(self.path)
-        except Exception as error:
-            # any error: the run goes on, and the next game tries again
-            warnings.warn(f"the report {self.path} was not written: {type(error).__name__}: {error}", stacklevel=2)
+        with self._lock:
+            # this write has the newest state, so a change waiting for the timer is written by it
+            if self._timer is not None:
+                self._timer.cancel()
+                self._timer = None
+            self._last = time.monotonic()
+            try:
+                report = self.build()
+                report.finished = finished
+                report.save(self.path)
+            except Exception as error:
+                # any error: the run goes on, and the next change tries again
+                warnings.warn(f"the report {self.path} was not written: {type(error).__name__}: {error}", stacklevel=2)
 
     def close(self, finished: bool) -> None:
         self.write(finished)

@@ -6,6 +6,12 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+### Fixed
+
+- Reports: a change within `ReportFile`'s interval (5 s by default) was dropped until the next change, so a script that
+  reports rarely (every 100 moves) showed an older progress for minutes. It is now written by a timer when the interval
+  ends, one write for all changes within it; `write` and `close` still write at once.
+
 ## [4.11.1] - 2026-11-12
 
 ### Changed

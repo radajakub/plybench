@@ -14,20 +14,20 @@ def test_split_top_splits_only_outside_brackets():
 
 
 def test_a_shared_model_and_shared_params_are_left_out():
-    players = [f"tac:actor=llm[model={MODEL},memory=False],debug=true", f"tac:actor=llm[model={MODEL},budget=600,apply=compress[model={MODEL}]],critic=oracle,debug=true"]
+    players = [f"textrl:actor=llm[model={MODEL},memory=False],debug=true", f"textrl:actor=llm[model={MODEL},budget=600,apply=compress[model={MODEL}]],critic=oracle,debug=true"]
     names, shared = short_names(players)
     assert names == {players[0]: "actor=llm[memory=False]", players[1]: "actor=llm[budget=600,apply=compress],critic=oracle"}
     assert shared == [f"model={MODEL}", "debug=true"]
 
 
 def test_different_models_keep_their_names_and_a_label_wins():
-    players = ["tac:actor=llm[model=openai:gpt-5-nano]", "tac:actor=llm[model=gemini:gemini-3.5-flash-lite]", "tac:actor=tabular"]
+    players = ["textrl:actor=llm[model=openai:gpt-5-nano]", "textrl:actor=llm[model=gemini:gemini-3.5-flash-lite]", "textrl:actor=tabular"]
     names, _ = short_names(players, {players[2]: "tabular baseline"})
     assert names == {players[0]: "actor=llm[model=gpt-5-nano]", players[1]: "actor=llm[model=gemini-3.5-flash-lite]", players[2]: "tabular baseline"}
 
 
 def test_names_stay_unique_when_models_differ_only_in_provider_or_options():
-    players = ["tac:actor=llm[model=gemini:flash[thinking_enabled=True]]", "tac:actor=llm[model=gemini:flash[thinking_enabled=False]]"]
+    players = ["textrl:actor=llm[model=gemini:flash[thinking_enabled=True]]", "textrl:actor=llm[model=gemini:flash[thinking_enabled=False]]"]
     names, _ = short_names(players)
     assert len(set(names.values())) == 2
 

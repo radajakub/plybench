@@ -79,6 +79,6 @@ def session_changes(previous: dict[str, Any], current: dict[str, Any]) -> list[s
 
 
 def package_of(obj: object) -> str:
-    # the top-level package that defines a class or function, e.g. "plyagents" for the tac player's params
+    # the top-level package that defines a class or function, e.g. "plyagents" for the textrl player's params
     module = obj.__module__ if isinstance(obj, type) else type(obj).__module__
     return module.split(".")[0]

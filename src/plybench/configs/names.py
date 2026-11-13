@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 # Short readable names of config strings, for tools that show many of them side by side (the report, `--check`, plyweb). It works on the config
-# grammar only, never on what a param means, so it names any player a plugin adds (a TAC as well as an `llm` player): a config is `<key>:<params>`,
+# grammar only, never on what a param means, so it names any player a plugin adds (a TextRL player as well as an `llm` player): a config is `<key>:<params>`,
 # its params split at the commas outside brackets, and a param may nest `type[k=v,...]`. A name leaves out what every config of an axis shares (its
 # params in common, the one model they all call) and keeps a model by its name alone (no provider, no options); an experiment file's label wins.
 

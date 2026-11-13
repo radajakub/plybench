@@ -3,7 +3,7 @@ what went into each component, where it came from and what came out (prompts, an
 
 Examples:
     uv run plybench-trace results/training/tac_bandit/.../epoch_2/train/game_3.json
-    uv run plybench-trace <game.json> --player tac --sections moves learning --max-chars 200
+    uv run plybench-trace <game.json> --player textrl --sections moves learning --max-chars 200
     uv run plybench-trace <game.json> --json > game_3.trace.json
 """
 
@@ -23,7 +23,7 @@ from plybench.trace.text import SECTIONS, render
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("game", type=Path, help="a saved game_<N>.json")
-    parser.add_argument("--player", nargs="+", help="the players to show, by seat (i, o) or key (e.g. tac); default both")
+    parser.add_argument("--player", nargs="+", help="the players to show, by seat (i, o) or key (e.g. textrl); default both")
     parser.add_argument("--sections", nargs="+", choices=SECTIONS, default=list(SECTIONS), help="what to print per player (default all)")
     parser.add_argument("--max-chars", type=int, help="cut every text to one line of this length (default: whole texts)")
     parser.add_argument("--all-entries", action="store_true", help="memory: print the text of the entries the game did not touch too")

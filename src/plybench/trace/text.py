@@ -43,6 +43,8 @@ def _source(source: Source | None, events: tuple[Event, ...]) -> str:
         return f" ← [{source.index}] {event.component}" + (f" (step {event.step})" if event.step is not None else "")
     if source.kind == "call":
         return f" ← call #{source.index}"
+    if source.kind == "batch":
+        return f" ← game {source.round}, step {source.index}"
     return f" ← {source.kind}"
 
 
@@ -92,7 +94,8 @@ def _memory(view: MemoryView, limit: int | None, all_entries: bool) -> list[str]
         marks = ", ".join(
             part for part in (f"read at steps {list(entry.read_at)}" if entry.read_at else "", f"written from steps {list(entry.written_at)}" if entry.written_at else "") if part
         )
-        lines.append(f"    {marks}; visits {entry.visits}, writes {entry.writes}, actions {json.dumps(entry.actions, ensure_ascii=False)}")
+        samples = f", samples {entry.samples}" if entry.samples is not None else ""
+        lines.append(f"    {marks}; visits {entry.visits}, writes {entry.writes}{samples}, actions {json.dumps(entry.actions, ensure_ascii=False)}")
         lines.append(f"      key: {_value(entry.key, limit)}")
         lines.append(f"      text: {_value(entry.text, limit) or '(empty)'}")
     lines.append(f"    not read or written in this game: {len(untouched)} entries")

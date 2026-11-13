@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from plybench.registry import Registry
-from plybench.trace.model import Component, Event, GameTrace, PlayerTrace, Source, TraceContext, Value
+from plybench.trace.model import Component, Event, GameTrace, PlayerTrace, Source, TraceContext, TraceStep, Value
 from plybench.trackers.game_tracker import GameStep, GameTracker
 from plybench.trackers.step_data import StepData
 
@@ -14,8 +14,9 @@ GAME = Source("game")
 _MOVE_CALL = ("model_string", "model_options", "finish_reason", "truncated", "retries", "blocks", "llm_seed", "input_tokens", "output_tokens", "reasoning_tokens")
 
 
-def load_game(game_file: Path, registry: Registry) -> GameTrace:
-    # one saved game with both players read: each by its plugin's reader (PlayerSpec.trace), or by read_player
+def load_game(game_file: Path, registry: Registry, players: bool = True) -> GameTrace:
+    # one saved game with both players read: each by its plugin's reader (PlayerSpec.trace), or by read_player; players=False: the game as played
+    # only (its moves, its end, its params), without reading the players or their learning
     game = GameTracker.from_dict(json.loads(game_file.read_text()), registry)
     metadata_file = game_file.parent / "metadata.json"
     metadata = json.loads(metadata_file.read_text()) if metadata_file.exists() else {}
@@ -24,8 +25,8 @@ def load_game(game_file: Path, registry: Registry) -> GameTrace:
     # phase alternates who starts)
     session = next((session for session in metadata.get("sessions", []) if game.game_round in session.get("rounds", [])), {})
     described = {description["config"]: description for description in session.get("players", {}).values()}
-    players = {}
-    for identifier, config in (("i", game.i_player), ("o", game.o_player)):
+    read: dict[str, PlayerTrace] = {}
+    for identifier, config in (("i", game.i_player), ("o", game.o_player)) if players else ():
         ending = game.ending.players.get(config.hash) if game.ending is not None else None
         context = TraceContext(
             game,
@@ -40,9 +41,18 @@ def load_game(game_file: Path, registry: Registry) -> GameTrace:
             lambda recorded: _resolve(recorded, game_file),
         )
         reader = registry.resolve_player(config.key).trace or read_player
-        players[identifier] = reader(context)
+        read[identifier] = reader(context)
     result = game.ending.result.name.lower() if game.ending is not None else None
-    return GameTrace(game_file.as_posix(), metadata.get("game_config"), game.game_round, game.seed, place, result, players)
+    # the seat of each move by its player; none when both seats are one player (self-play), as the steps do not tell them apart
+    seats = {game.i_player.hash: "i", game.o_player.hash: "o"} if game.i_player.hash != game.o_player.hash else {}
+    steps = tuple(TraceStep(seats.get(step.player_hash), step.observation, step.move) for step in game.steps)
+    final = game.ending.observation if game.ending is not None else None
+    return GameTrace(game_file.as_posix(), metadata.get("game_config"), game.game_round, game.seed, place, result, read, steps, final, game.instance_params, game.other_params)
+
+
+def game_files(folder: Path) -> list[Path]:
+    # the saved games directly in a folder (a matchup's, or a training phase's), by round
+    return sorted(folder.glob("game_*.json"), key=lambda path: int(path.stem.removeprefix("game_")) if path.stem.removeprefix("game_").isdigit() else 0)
 
 
 def _resolve(recorded: str, game_file: Path) -> Path:

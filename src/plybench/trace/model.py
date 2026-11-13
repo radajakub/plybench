@@ -16,11 +16,13 @@ from plybench.trackers.game_tracker import GameStep, GameTracker
 @dataclass(frozen=True)
 class Source:
     # where a value came from: the game ("game"), an entry of a memory ("memory": memory and key), the reference counts at a key ("reference": key),
-    # another event of the same player ("event": its index in events), an LLM call ("call": its index in the learner's llm_calls.json)
+    # another event of the same player ("event": its index in events), an LLM call ("call": its index in the learner's llm_calls.json), a step of
+    # another game learned from in the same batch ("batch": its round, index: the step)
     kind: str
     memory: str | None = None
     key: str | None = None
     index: int | None = None
+    round: int | None = None
 
 
 @dataclass(frozen=True)
@@ -54,7 +56,8 @@ class Component:
 
 @dataclass(frozen=True)
 class MemoryEntry:
-    # one entry of a memory as the game started from it, with the steps that read it and the steps whose lessons were written into it
+    # one entry of a memory as the game started from it, with the steps that read it and the steps whose lessons were written into it; samples: the
+    # lessons written into it so far (several per write when a batch reduces them), None when the player does not count them
     key: str
     text: str
     visits: int
@@ -62,6 +65,7 @@ class MemoryEntry:
     writes: int
     read_at: tuple[int, ...] = ()
     written_at: tuple[int, ...] = ()
+    samples: int | None = None
 
 
 @dataclass(frozen=True)
@@ -86,6 +90,15 @@ class PlayerTrace:
 
 
 @dataclass(frozen=True)
+class TraceStep:
+    # one move of the game, of either player, as the game file records it: the seat that moved (None when both seats are the same player), the
+    # observation it moved from, and the move
+    seat: str | None
+    observation: str
+    move: str
+
+
+@dataclass(frozen=True)
 class GameTrace:
     path: str
     # the game config from the matchup's metadata.json; None without it
@@ -97,6 +110,12 @@ class GameTrace:
     # the result for seat i ("win", "loss", "draw", "my_fail", "opponent_fail"); None for a game without an ending
     result: str | None
     players: dict[str, PlayerTrace] = field(default_factory=dict)
+    # the game as played, for a view of its states: every move of both players in order, the observation it ended in (None without an ending), the
+    # instance's params (e.g. the doors of Monty Hall) and its other params (e.g. the Magic Square layout)
+    steps: tuple[TraceStep, ...] = ()
+    final: str | None = None
+    instance_params: dict[str, Any] | None = None
+    other_params: dict[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return record_of(self)

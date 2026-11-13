@@ -6,6 +6,17 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+### Added
+
+- `plybench.trace`: `Source(kind="batch", round, index)`, a value that came from a step of another game learned from in
+  the same batch; `MemoryEntry.samples`, the lessons written into an entry so far (None when the player does not count
+  them). `plybench-trace` prints both.
+- `GameTrace.steps` (every move of both players in order: seat, observation, move), `GameTrace.final` (the observation
+  the game ended in), `GameTrace.instance_params` and `GameTrace.other_params`: what a view needs to draw the game's
+  states, LLM moves included (their events hold the prompts, not the observation).
+- `plybench-trace <game or folder> --steps`: the game, or every game directly in the folder by round, as played (moves, end, params) as
+  JSON, without reading the players (`load_game(..., players=False)`), for a view of many games such as a training phase's.
+
 ## [4.14.1] - 2026-11-12
 
 ### Added

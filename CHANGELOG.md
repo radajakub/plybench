@@ -6,6 +6,8 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+## [4.15.0] - 2026-11-13
+
 ### Added
 
 - `plybench.trace`: `Source(kind="batch", round, index)`, a value that came from a step of another game learned from in

@@ -66,6 +66,17 @@ def test_a_plan_gives_the_optimal_outcomes_of_solvable_single_player_games_only(
     assert training_plan(harness).optimal == {"monty_hall:": plan.optimal["monty_hall:"]}
 
 
+def test_a_training_plan_gives_the_optimal_outcomes_of_the_game_a_switch_changes_into_from_its_epoch(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    _Stub.proposed, _Stub.fail_at, _Stub.nothing_at = [], None, set()
+    game = "bandit:p=0;1,switch=4/5;1/5,switch_epoch=2"
+    harness = TrainingHarness("plan", _op(), [game], ["stub:"], [UNIFORM], [UNIFORM], ["num_epochs=3,num_training_games=1,num_test_games=1"], 1, seed=0)
+    plan = training_plan(harness)
+    assert list(plan.optimal) == [game, f"{game} from epoch 2"] and plan.problems == []
+    assert plan.optimal[game]["win"] == 1.0 and abs(plan.optimal[f"{game} from epoch 2"]["win"] - 0.8) < 1e-12
+    assert f"optimal policy of {game} from epoch 2: win 0.800" in plan.summary()
+
+
 def test_a_model_without_credentials_is_a_problem(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     plan = benchmark_plan(Benchmark("plan", _op(), ["tic_tac_toe:"], [LLM_PLAYER], [UNIFORM], 2, seed=0))

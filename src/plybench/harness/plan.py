@@ -124,11 +124,11 @@ def _check_models(op: PlyBench, models: list[ModelConfig], problems: list[str]) 
     return names
 
 
-def optimal_outcomes_of(op: PlyBench, games: list[str], problems: list[str]) -> dict[str, dict[str, float]]:
-    # the outcomes of the optimal policy of every solvable single-player game; the solution is read from the minimax cache, or solved and saved there
-    # on first use, as a run with an optimal player or an oracle component would
+def optimal_outcomes_of(op: PlyBench, games: dict[str, str], problems: list[str]) -> dict[str, dict[str, float]]:
+    # the outcomes of the optimal policy of every solvable single-player game, by name (games: name -> game string); the solution is read from the
+    # minimax cache, or solved and saved there on first use, as a run with an optimal player or an oracle component would
     optimal: dict[str, dict[str, float]] = {}
-    for game_string in games:
+    for name, game_string in games.items():
         config = op.registry.game_config(game_string)
         if not op.registry.solvable(config.key):
             continue
@@ -140,9 +140,9 @@ def optimal_outcomes_of(op: PlyBench, games: list[str], problems: list[str]) -> 
             outcomes = optimal_outcomes(engine.game)
         except Exception as error:
             # any error, as for the players: the check reports every problem at once
-            problems.append(f"the optimal policy of {game_string} cannot be evaluated: {type(error).__name__}: {error}")
+            problems.append(f"the optimal policy of {name} cannot be evaluated: {type(error).__name__}: {error}")
             continue
-        optimal[game_string] = {result.name.lower(): probability for result, probability in outcomes.items()}
+        optimal[name] = {result.name.lower(): probability for result, probability in outcomes.items()}
     return optimal
 
 
@@ -160,7 +160,7 @@ def benchmark_plan(benchmark: Benchmark) -> ExperimentPlan:
     _named(plan, [{"game": item.game, "player": item.player, "opponent": item.opponent} for item in plan.items], {"opponent": "vs "})
     models = _check_players(op, benchmark.game_configs, list(dict.fromkeys(benchmark.player_configs + benchmark.opponent_configs)), plan.problems)
     plan.models = _check_models(op, models, plan.problems)
-    plan.optimal = optimal_outcomes_of(op, benchmark.game_configs, plan.problems)
+    plan.optimal = optimal_outcomes_of(op, {game: game for game in benchmark.game_configs}, plan.problems)
     return plan
 
 
@@ -184,5 +184,21 @@ def training_plan(harness: TrainingHarness) -> ExperimentPlan:
     players = list(dict.fromkeys(harness.player_configs + harness.trainer_configs + harness.tester_configs))
     models = _check_players(op, harness.game_configs, players, plan.problems, frozenset(harness.player_configs))
     plan.models = _check_models(op, models, plan.problems)
-    plan.optimal = optimal_outcomes_of(op, harness.game_configs, plan.problems)
+    plan.optimal = optimal_outcomes_of(op, _epoch_games(harness), plan.problems)
     return plan
+
+
+def _epoch_games(harness: TrainingHarness) -> dict[str, str]:
+    # each game as written, and each game it changes into at a later epoch (GameParams.at_epoch, the bandit's switch), named by the epoch it is
+    # played from: game string by name
+    epochs = max((run.training_config.num_epochs for run in harness.runs), default=0)
+    games: dict[str, str] = {}
+    for game_string in harness.game_configs:
+        games[game_string] = game_string
+        config = previous = harness.op.registry.game_config(game_string)
+        for index in range(1, epochs + 1):
+            played = config.at_epoch(index)
+            if played != previous:
+                games[f"{game_string} from epoch {index}"] = played.to_string()
+            previous = played
+    return games

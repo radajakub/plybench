@@ -62,7 +62,7 @@ class BenchmarkReporter:
         # the matchups with games left, as the metadata says now; a matchup's own tracker replaces its entry once it starts
         loaded = benchmark.get_results(progress=False, games=False).trackers
         self.trackers: dict[Path, ResultTracker] = {tracker.metadata_path: tracker for tracker in loaded if not tracker.is_complete()}
-        self.optimal = optimal_outcomes_of(benchmark.op, benchmark.game_configs, [])
+        self.optimal = optimal_outcomes_of(benchmark.op, {game: game for game in benchmark.game_configs}, [])
         self.file = ReportFile(path, self.build)
 
     def callbacks(self) -> BenchmarkCallbacks:
@@ -126,7 +126,7 @@ class TrainingReporter:
                 self.runs.append((run, epochs))
         self.live: dict[Path, ResultTracker] = {}
         # the optimum of every game an epoch plays, which is the run's game unless it changes at an epoch
-        self.optimal = optimal_outcomes_of(harness.op, self._epoch_games([run for run, _ in self.runs]), [])
+        self.optimal = optimal_outcomes_of(harness.op, {game: game for game in self._epoch_games([run for run, _ in self.runs])}, [])
         self.replayers = ReplayerCache(harness.op.registry)
         # the learner's moves of each recorded game, as (move, optimal or None), by the phase's metadata and the round: a game is read and replayed once
         self.moves: dict[tuple[Path, int], list[tuple[str, bool | None]]] = {}

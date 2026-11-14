@@ -97,7 +97,10 @@ def _memory(view: MemoryView, limit: int | None, all_entries: bool) -> list[str]
         samples = f", samples {entry.samples}" if entry.samples is not None else ""
         lines.append(f"    {marks}; visits {entry.visits}, writes {entry.writes}{samples}, actions {json.dumps(entry.actions, ensure_ascii=False)}")
         lines.append(f"      key: {_value(entry.key, limit)}")
-        lines.append(f"      text: {_value(entry.text, limit) or '(empty)'}")
+        if entry.values is not None:
+            lines.append(f"      values: {json.dumps(entry.values, ensure_ascii=False)}")
+        else:
+            lines.append(f"      text: {_value(entry.text, limit) or '(empty)'}")
     lines.append(f"    not read or written in this game: {len(untouched)} entries")
     for entry in untouched:
         lines.append(f"      - {_one_line(entry.key, limit or 120)} (visits {entry.visits}, writes {entry.writes})")

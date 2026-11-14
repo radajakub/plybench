@@ -98,16 +98,19 @@ def test_the_text_and_the_json_of_a_game(tmp_path, monkeypatch, capsys):
     assert json.loads(capsys.readouterr().out) == trace.to_dict()
 
 
-def test_a_step_of_another_game_of_the_batch_and_the_samples_of_an_entry_are_shown():
+def test_a_step_of_another_game_of_the_batch_the_samples_of_an_entry_and_a_tables_values_are_shown():
     write = Event("learn", "actor.apply", (Value("part", "a lesson", Source("batch", index=2, round=1)),), (Value("new", "notes"),))
     memory = MemoryView("actor", "state", (MemoryEntry("k", "notes", 2, {}, 1, (1,), (1,), 3), MemoryEntry("other", "", 0, {}, 0, (2,))))
-    trace = GameTrace("game_2.json", "tic_tac_toe:", 2, 0, None, "win", {"i": PlayerTrace("textrl", "textrl:", None, (), (write,), (memory,))})
+    table = MemoryView("critic", "state", (MemoryEntry("k", "", 3, {"<a>": 2, "<b>": 1}, 3, (1,), values={"V": 0.5, "<a>": 0.75, "<b>": -1.0}),))
+    trace = GameTrace("game_2.json", "tic_tac_toe:", 2, 0, None, "win", {"i": PlayerTrace("textrl", "textrl:", None, (), (write,), (memory, table))})
 
     text = render(trace)
 
     assert "    in  part ← game 1, step 2: a lesson" in text
     # samples where the player counts them, nothing where it does not
     assert "visits 2, writes 1, samples 3, actions" in text and "visits 0, writes 0, actions" in text
+    # a table's entry: its numbers instead of a text
+    assert '      values: {"V": 0.5, "<a>": 0.75, "<b>": -1.0}' in text
 
 
 def test_a_folder_of_games_reads_as_played_without_the_players(tmp_path, monkeypatch, capsys):

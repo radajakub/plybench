@@ -57,7 +57,8 @@ class Component:
 @dataclass(frozen=True)
 class MemoryEntry:
     # one entry of a memory as the game started from it, with the steps that read it and the steps whose lessons were written into it; samples: the
-    # lessons written into it so far (several per write when a batch reduces them), None when the player does not count them
+    # lessons written into it so far (several per write when a batch reduces them), None when the player does not count them; values: the numbers
+    # a table keeps at the key (e.g. V, or Q per action, with `actions` its updates per action), None for a textual memory
     key: str
     text: str
     visits: int
@@ -66,6 +67,7 @@ class MemoryEntry:
     read_at: tuple[int, ...] = ()
     written_at: tuple[int, ...] = ()
     samples: int | None = None
+    values: dict[str, float] | None = None
 
 
 @dataclass(frozen=True)

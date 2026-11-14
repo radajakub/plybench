@@ -6,6 +6,8 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+## [4.16.0] - 2026-11-14
+
 ### Added
 
 - `plybench.trace`: `MemoryEntry.values`, the numbers a table keeps at an entry's key (e.g. V, or Q per action, with

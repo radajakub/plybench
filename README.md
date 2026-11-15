@@ -321,6 +321,20 @@ The LLM matchups require the relevant provider API keys (see [Configuration](#co
 incur API cost; bot-vs-bot matchups run offline. Results are written under
 `results/benchmarks/<experiment>/`.
 
+Rebuild a JSON report from saved results, including completed runs, with `--report-only`:
+
+```bash
+uv run plybench-train --experiment bandit_baselines --report-only bandit-report.json --notify
+uv run plybench-run --experiment my_experiment --report-only benchmark-report.json --notify
+```
+
+This uses the current experiment selection (or the same inline arguments as a run), writes only the output
+report, and exits without playing games or calling models. Training curves aggregate replicates as in live
+reports. Partial experiments include the results available so far and remain unfinished in the report.
+Use the original configuration to reproduce a job's selection; this does not replace its report in plyweb
+automatically. Add `--report-source <existing-report.json>` to keep only that report's item keys;
+this requires the same experiment configuration and overrides that produced it. The command prints the output path when it finishes; `--notify` also sends a notification.
+
 Then analyze or export the transcripts:
 
 ```bash

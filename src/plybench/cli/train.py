@@ -30,7 +30,7 @@ from plybench.analysis.usage import TokenUsage, calls_cost, calls_usage, learnin
 from plybench.callbacks.console_callbacks import console_training_callbacks
 from plybench.callbacks.notification_callbacks import notification_training_callbacks
 from plybench.callbacks.training_callbacks import TrainingCallbacks
-from plybench.cli.shared import add_limits_args, add_report_args, add_training_source_args, build_op, training_from_args, warn_if_unconfigured
+from plybench.cli.shared import add_limits_args, add_report_args, add_training_source_args, build_op, report_item_keys, training_from_args, warn_if_unconfigured, write_saved_report
 from plybench.common.enums import MetricName
 from plybench.harness.plan import training_plan
 from plybench.harness.report import TrainingReporter
@@ -95,6 +95,10 @@ def main() -> None:
     add_report_args(parser)
     add_limits_args(parser)
     args = parser.parse_args()
+    if args.report_source is not None and args.report_only is None:
+        parser.error("--report-source requires --report-only")
+    if args.report_only is not None and (args.check or args.status or args.summaries):
+        parser.error("--report-only cannot be combined with --check, --status or --summaries")
 
     # None leaves each provider at its own default (Metacentrum takes fewer parallel calls than the rest)
     concurrency = args.concurrency
@@ -102,6 +106,11 @@ def main() -> None:
 
     op = build_op(concurrency=concurrency, limits=args.limits)
     harness = training_from_args(op, args)
+
+    if args.report_only is not None:
+        reporter = TrainingReporter(harness, args.report_only, include_complete=True, item_keys=report_item_keys(args.report_source))
+        write_saved_report(reporter.build, args.report_only, args.notify)
+        return
 
     if args.status:
         print(json.dumps(training_status(harness)))

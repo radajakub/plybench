@@ -6,6 +6,8 @@ from __future__ import annotations
 import argparse
 import json
 import warnings
+from collections.abc import Callable
+from contextlib import nullcontext
 from pathlib import Path
 
 import clankers
@@ -16,6 +18,7 @@ from plybench.common.paths import BenchmarkPathBuilder
 from plybench.harness.benchmark.benchmark import Benchmark
 from plybench.harness.benchmark.results import BenchmarkResults
 from plybench.harness.training.training import TrainingHarness
+from plybench.report import Report
 
 
 def warn_if_unconfigured() -> None:
@@ -28,7 +31,36 @@ def warn_if_unconfigured() -> None:
 
 
 def add_report_args(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("--job-report", type=Path, help="keep a report of what this run plays and its results so far in this JSON file, rewritten while it plays (plybench.report)")
+    reports = parser.add_mutually_exclusive_group()
+    reports.add_argument(
+        "--job-report", type=Path, help="keep a report of what this run plays and its results so far in this JSON file, rewritten while it plays (plybench.report)"
+    )
+    reports.add_argument("--report-only", type=Path, help="write a report of all selected saved results to this JSON file, including completed runs, then exit without playing")
+
+    parser.add_argument("--report-source", type=Path, help="with --report-only: restrict the report to the item keys in this existing report (preserves a job's scope)")
+
+
+def report_item_keys(source: Path | None) -> set[str] | None:
+    if source is None:
+        return None
+    data = json.loads(source.read_text())
+    if not isinstance(data, dict) or not isinstance(data.get("items"), list):
+        raise ValueError(f"{source} is not a report with items")
+    items = data["items"]
+    if any(not isinstance(item, dict) or not isinstance(item.get("key"), str) for item in items):
+        raise ValueError(f"{source} has an item without a string key")
+    return {item["key"] for item in items}
+
+
+def write_saved_report(build: Callable[[], Report], path: Path, notify: bool) -> None:
+    # Unlike a live job report, a failed rebuild must fail the command; only the output report is written.
+    if notify:
+        warn_if_unconfigured()
+    with clankers.Engage(f"report {path}") if notify else nullcontext():
+        report = build()
+        report.finished = all(item.done == item.planned for item in report.items)
+        report.save(path)
+        print(f"report written to {path}")
 
 
 def add_limits_args(parser: argparse.ArgumentParser) -> None:

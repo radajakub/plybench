@@ -23,6 +23,7 @@ from plybench.trackers.result_tracker import ResultTracker
 # the tests per tester (with their interval) and of the training games (without: the learner changes during them), and the output tokens of the tests.
 # Each point of a training's outcome measures carries the learner's moves in that phase (`moves`), counted over its decisions, with how many of them
 # the solver rates optimal in a solvable game.
+# include_complete also includes finished work when rebuilding a report from saved results.
 
 OUTCOMES = [
     {"key": "win", "label": "win", "role": "good"},
@@ -57,11 +58,16 @@ def _percent(value: float) -> str:
 
 
 class BenchmarkReporter:
-    def __init__(self, benchmark: Benchmark, path: Path) -> None:
+    def __init__(self, benchmark: Benchmark, path: Path, *, include_complete: bool = False, item_keys: set[str] | None = None) -> None:
         self.benchmark = benchmark
         # the matchups with games left, as the metadata says now; a matchup's own tracker replaces its entry once it starts
         loaded = benchmark.get_results(progress=False, games=False).trackers
-        self.trackers: dict[Path, ResultTracker] = {tracker.metadata_path: tracker for tracker in loaded if not tracker.is_complete()}
+        self.trackers: dict[Path, ResultTracker] = {tracker.metadata_path: tracker for tracker in loaded if include_complete or not tracker.is_complete()}
+        if item_keys is not None:
+            self.trackers = {path: tracker for path, tracker in self.trackers.items() if self._key(tracker) in item_keys}
+            missing = item_keys - {self._key(tracker) for tracker in self.trackers.values()}
+            if missing:
+                raise ValueError(f"report items are absent from the selection: {', '.join(sorted(missing))}")
         self.optimal = optimal_outcomes_of(benchmark.op, {game: game for game in benchmark.game_configs}, [])
         self.file = ReportFile(path, self.build)
 
@@ -115,15 +121,20 @@ class BenchmarkReporter:
 
 
 class TrainingReporter:
-    def __init__(self, harness: TrainingHarness, path: Path) -> None:
+    def __init__(self, harness: TrainingHarness, path: Path, *, include_complete: bool = False, item_keys: set[str] | None = None) -> None:
         self.harness = harness
         self.testers = [harness.op.registry.player_config(tester).to_string() for tester in harness.tester_configs]
         # the runs with games left, each with its epochs as the metadata says now; a phase's own tracker replaces its entry once the phase starts
         self.runs: list[tuple[TrainingRun, list[EpochResults]]] = []
         for run in harness.runs:
             epochs = [harness.load_epoch(Epoch(run, index), games=False) for index in range(run.training_config.num_epochs + 1)]
-            if any(not tracker.is_complete() for epoch in epochs for tracker in self._phases(epoch)):
+            if include_complete or any(not tracker.is_complete() for epoch in epochs for tracker in self._phases(epoch)):
                 self.runs.append((run, epochs))
+        if item_keys is not None:
+            self.runs = [(run, epochs) for run, epochs in self.runs if self._key(run) in item_keys]
+            missing = item_keys - {self._key(run) for run, _ in self.runs}
+            if missing:
+                raise ValueError(f"report items are absent from the selection: {', '.join(sorted(missing))}")
         self.live: dict[Path, ResultTracker] = {}
         # the optimum of every game an epoch plays, which is the run's game unless it changes at an epoch
         self.optimal = optimal_outcomes_of(harness.op, {game: game for game in self._epoch_games([run for run, _ in self.runs])}, [])

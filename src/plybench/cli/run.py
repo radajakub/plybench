@@ -24,7 +24,7 @@ from plyllm import DEFAULT_CONCURRENCY
 from plybench.callbacks.benchmark_callbacks import BenchmarkCallbacks
 from plybench.callbacks.console_callbacks import console_benchmark_callbacks
 from plybench.callbacks.notification_callbacks import notification_benchmark_callbacks
-from plybench.cli.shared import add_limits_args, add_report_args, add_source_args, benchmark_from_args, build_op, warn_if_unconfigured
+from plybench.cli.shared import add_limits_args, add_report_args, add_source_args, benchmark_from_args, build_op, report_item_keys, warn_if_unconfigured, write_saved_report
 from plybench.harness.plan import benchmark_plan
 from plybench.harness.report import BenchmarkReporter
 from plybench.harness.status import benchmark_status, check_summaries
@@ -54,6 +54,10 @@ def main() -> None:
     add_report_args(parser)
     add_limits_args(parser)
     args = parser.parse_args()
+    if args.report_source is not None and args.report_only is None:
+        parser.error("--report-source requires --report-only")
+    if args.report_only is not None and (args.check or args.status or args.summaries):
+        parser.error("--report-only cannot be combined with --check, --status or --summaries")
 
     # None leaves each provider at its own default (Metacentrum takes fewer parallel calls than the rest)
     concurrency = args.concurrency
@@ -61,6 +65,11 @@ def main() -> None:
 
     op = build_op(concurrency=concurrency, limits=args.limits)
     benchmark = benchmark_from_args(op, args)
+
+    if args.report_only is not None:
+        reporter = BenchmarkReporter(benchmark, args.report_only, include_complete=True, item_keys=report_item_keys(args.report_source))
+        write_saved_report(reporter.build, args.report_only, args.notify)
+        return
 
     if args.status:
         print(json.dumps(benchmark_status(benchmark)))

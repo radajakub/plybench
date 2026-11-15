@@ -15,7 +15,8 @@ from test_learnable import _Stub, _StubParams
 from plybench.analysis.statistics.distribution import Distribution
 from plybench.analysis.statistics.intervals import t_ci
 from plybench.app import PlyBench
-from plybench.cli import run
+from plybench.cli import run, train
+from plybench.cli.shared import write_saved_report
 from plybench.harness.benchmark.benchmark import Benchmark
 from plybench.harness.plan import benchmark_plan
 from plybench.harness.report import BenchmarkReporter, TrainingReporter
@@ -225,3 +226,121 @@ def test_pooled_moves_leave_out_ratings_unless_every_move_is_rated():
     ]
     [series] = replicate_series(entries, {"a": "g", "b": "g"}, rate=True)
     assert series["points"][0]["moves"] == [{"move": "blue", "count": 4}, {"move": "red", "count": 3}]
+
+
+@pytest.mark.parametrize("complete", [False, True])
+@pytest.mark.parametrize("training", [False, True])
+def test_report_only_includes_completed_results_without_playing_or_changing_them(tmp_path, monkeypatch, capsys, complete, training):
+    monkeypatch.chdir(tmp_path)
+    op = _op()
+    harness = None
+    if training:
+        _Stub.proposed, _Stub.fail_at, _Stub.nothing_at = [], None, set()
+        schedule = "num_epochs=1,num_training_games=2,num_test_games=3"
+        args = ("saved", op, ["bandit:p=4/5;1/5"], ["stub:"], ["none:"], ["none:"], [schedule])
+        asyncio.run(TrainingHarness(*args, 2 if complete else 1, seed=0).run(sync=True))
+        harness = TrainingHarness(*args, 2, seed=0)
+        monkeypatch.setattr(train, "training_from_args", lambda op, args: harness)
+        cli = train
+        command = "plybench-train"
+    else:
+        games = ["nim:", "tic_tac_toe:"]
+        asyncio.run(Benchmark("saved", op, games if complete else games[:1], [UNIFORM], [OPTIMAL], 2, seed=0).run(sync=True))
+        benchmark = Benchmark("saved", op, games, [UNIFORM], [OPTIMAL], 2, seed=0)
+        monkeypatch.setattr(run, "benchmark_from_args", lambda op, args: benchmark)
+        cli = run
+        command = "plybench-run"
+
+    def refuse(*args, **kwargs):
+        raise AssertionError("report-only attempted to run games")
+
+    monkeypatch.setattr(TrainingHarness, "run", refuse)
+    monkeypatch.setattr(Benchmark, "run", refuse)
+    monkeypatch.setattr(cli, "build_op", lambda **kwargs: op)
+    saved = {path: path.read_bytes() for path in (tmp_path / "results").rglob("*") if path.is_file()}
+    monkeypatch.setattr(sys, "argv", [command, "--experiment", "saved", "--report-only", "rebuilt.json"])
+    cli.main()
+    report = json.loads((tmp_path / "rebuilt.json").read_text())
+    assert "report written to rebuilt.json" in capsys.readouterr().out
+    assert report["finished"] == complete and len(report["items"]) == 2
+    assert (report["progress"]["done"] == report["progress"]["total"]) == complete
+    assert report["progress"]["done"] > 0
+    assert saved == {path: path.read_bytes() for path in (tmp_path / "results").rglob("*") if path.is_file()}
+    if training:
+        [win] = [block for block in _blocks(report, "line") if block.get("group") == "tests vs none" and block["measure"] == "win rate"]
+        [series] = win["series"]
+        assert series["replicates"] == 2 and [point["x"] for point in series["points"]] == [0, 1]
+        assert all(point["n"] == (2 if complete else 1) and ("lower" in point) == complete for point in series["points"])
+        assert harness is not None
+        status = training_status(harness)
+        for point in series["points"]:
+            values = [
+                entry["epochs"][point["x"]]["tests"]["none:"]["metrics"]["win_rate"]["value"]
+                for entry in status["runs"]
+                if entry["epochs"][point["x"]]["tests"]["none:"]["metrics"]
+            ]
+            assert point["value"] == pytest.approx(sum(values) / len(values))
+    else:
+        [table] = _blocks(report, "table")
+        assert sum(row["win_rate"] is not None for row in table["rows"]) == (2 if complete else 1)
+
+
+@pytest.mark.parametrize("cli", [run, train])
+@pytest.mark.parametrize("option", ["--check", "--status", "--summaries", "--job-report"])
+def test_report_only_rejects_conflicting_modes(monkeypatch, cli, option):
+    extra = ["check"] if option == "--summaries" else ["live.json"] if option == "--job-report" else []
+    monkeypatch.setattr(sys, "argv", ["plybench", "--report-only", "rebuilt.json", option, *extra])
+    with pytest.raises(SystemExit) as error:
+        cli.main()
+    assert error.value.code == 2
+
+
+def test_report_only_propagates_write_failures(tmp_path, monkeypatch):
+    def refuse(self, path):
+        raise OSError("cannot write report")
+
+    monkeypatch.setattr(Report, "save", refuse)
+    with pytest.raises(OSError, match="cannot write report"):
+        write_saved_report(Report, tmp_path / "report.json", notify=False)
+
+
+@pytest.mark.parametrize("training", [False, True])
+def test_report_source_keeps_exact_item_scope_and_rejects_unknown_keys(tmp_path, monkeypatch, training):
+    monkeypatch.chdir(tmp_path)
+    op = _op()
+    if training:
+        _Stub.proposed, _Stub.fail_at, _Stub.nothing_at = [], None, set()
+        harness = TrainingHarness("source", op, ["bandit:p=4/5;1/5"], ["stub:"], ["none:"], ["none:"], ["num_epochs=1,num_training_games=1,num_test_games=2"], 2, seed=0)
+        asyncio.run(harness.run(sync=True))
+        initial = TrainingReporter(harness, tmp_path / "unused.json", include_complete=True).build().to_dict()
+        monkeypatch.setattr(train, "training_from_args", lambda op, args: harness)
+        cli = train
+    else:
+        benchmark = Benchmark("source", op, ["nim:", "tic_tac_toe:"], [UNIFORM], [OPTIMAL], 2, seed=0)
+        asyncio.run(benchmark.run(sync=True))
+        initial = BenchmarkReporter(benchmark, tmp_path / "unused.json", include_complete=True).build().to_dict()
+        monkeypatch.setattr(run, "benchmark_from_args", lambda op, args: benchmark)
+        cli = run
+    source = tmp_path / "source.json"
+    selected = initial["items"][1]
+    source.write_text(json.dumps(initial | {"items": [selected]}))
+    monkeypatch.setattr(cli, "build_op", lambda **kwargs: op)
+    monkeypatch.setattr(sys, "argv", ["plybench", "--experiment", "source", "--report-only", "rebuilt.json", "--report-source", str(source)])
+    cli.main()
+    rebuilt = json.loads((tmp_path / "rebuilt.json").read_text())
+    assert len(rebuilt["items"]) == 1 and rebuilt["progress"]["done"] == selected["done"]
+    assert all(rebuilt["items"][0][field] == selected[field] for field in ("key", "configs", "planned", "done"))
+    if training:
+        # A single selected replicate must not be averaged with the excluded replicate.
+        assert all(series.get("item") == selected["key"] for block in _blocks(rebuilt, "line") for series in block["series"])
+    source.write_text(json.dumps({"items": [{"key": "unknown"}]}))
+    with pytest.raises(ValueError, match="absent from the selection"):
+        cli.main()
+
+
+@pytest.mark.parametrize("cli", [run, train])
+def test_report_source_requires_report_only(monkeypatch, cli):
+    monkeypatch.setattr(sys, "argv", ["plybench", "--report-source", "source.json"])
+    with pytest.raises(SystemExit) as error:
+        cli.main()
+    assert error.value.code == 2

@@ -6,6 +6,12 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+### Added
+
+- `plybench-train --report-only <file>` and `plybench-run --report-only <file>` rebuild JSON reports
+  from all selected saved results, including completed runs, without playing games or calling models.
+  `--report-source <file>` restricts the rebuild to the items in an existing job report.
+
 ## [4.17.0] - 2026-11-15
 
 ### Added

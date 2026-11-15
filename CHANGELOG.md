@@ -6,6 +6,8 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+## [4.18.0] - 2026-11-15
+
 ### Added
 
 - `plybench-train --report-only <file>` and `plybench-run --report-only <file>` rebuild JSON reports

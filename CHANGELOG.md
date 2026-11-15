@@ -6,6 +6,8 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+## [4.17.0] - 2026-11-15
+
 ### Added
 
 - Training job reports aggregate replicate curves in Python: one mean and 95% t interval per group,

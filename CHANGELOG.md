@@ -6,6 +6,12 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+### Added
+
+- Training job reports aggregate replicate curves in Python: one mean and 95% t interval per group,
+  contributing replicate counts, 10–90% spread and pooled moves. Progress grids carry summed group rows
+  with their individual replicates for expansion. Single-run reports retain their own intervals.
+
 ## [4.16.0] - 2026-11-14
 
 ### Added

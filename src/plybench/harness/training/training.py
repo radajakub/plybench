@@ -134,6 +134,7 @@ class TrainingHarness:
         runs_concurrency: int | None = None,  # how many games can be started at a single point in time
         game_callbacks: GameCallbacks | None = None,
         training_callbacks: TrainingCallbacks | None = None,
+        games: bool = True,
     ) -> TrainingResults:
         self.check_runs()
         training_callbacks = training_callbacks if training_callbacks is not None else TrainingCallbacks()
@@ -144,7 +145,8 @@ class TrainingHarness:
         else:
             await self._run_async(concurrency, runs_concurrency, game_callbacks, training_callbacks)
 
-        results = self.get_results()
+        # The CLI keeps metadata here and loads one evaluation phase at a time for its final curves.
+        results = self.get_results(games=games)
         training_callbacks.on_training_end(results)
         return results
 

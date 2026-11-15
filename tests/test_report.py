@@ -8,9 +8,12 @@ import json
 import sys
 import time
 
+import pytest
 from plyllm import LLMConfig
 from test_learnable import _Stub, _StubParams
 
+from plybench.analysis.statistics.distribution import Distribution
+from plybench.analysis.statistics.intervals import t_ci
 from plybench.app import PlyBench
 from plybench.cli import run
 from plybench.harness.benchmark.benchmark import Benchmark
@@ -19,7 +22,7 @@ from plybench.harness.report import BenchmarkReporter, TrainingReporter
 from plybench.harness.status import benchmark_status, training_status
 from plybench.harness.training.training import TrainingHarness
 from plybench.player.spec import PlayerSpec
-from plybench.report import Item, Report, ReportFile
+from plybench.report import Item, Report, ReportFile, replicate_series
 
 UNIFORM = "random:distribution=uniform"
 OPTIMAL = "optimal:stochastic=True"
@@ -72,6 +75,12 @@ def test_a_training_report_follows_the_status_of_its_runs(tmp_path, monkeypatch)
     harness = TrainingHarness("report", _op(), ["tic_tac_toe:"], ["stub:"], [UNIFORM], [UNIFORM, OPTIMAL], [schedule], 2, seed=0)
     path = tmp_path / "report.json"
     reporter = TrainingReporter(harness, path)
+    initial = reporter.build().to_dict()
+    [initial_grid] = _blocks(initial, "grid")
+    [initial_row] = initial_grid["rows"]
+    assert initial_row["cells"] == [{"done": 0, "total": 16}, {"done": 0, "total": 22}, {"done": 0, "total": 22}]
+    assert len(initial_row["rows"]) == 2
+    assert all(len(block["series"]) == 1 and block["series"][0]["replicates"] == 2 and block["series"][0]["points"] == [] for block in _blocks(initial, "line"))
     asyncio.run(harness.run(sync=True, training_callbacks=reporter.callbacks()))
     reporter.file.close(finished=True)
     report = json.loads(path.read_text())
@@ -83,10 +92,23 @@ def test_a_training_report_follows_the_status_of_its_runs(tmp_path, monkeypatch)
 
     status = training_status(harness)
     win = next(b for b in _blocks(report, "line") if b["group"] == f"tests vs {OPTIMAL}" and b["measure"] == "win rate")
-    for series, run_status in zip(win["series"], status["runs"], strict=True):
-        assert [point["value"] for point in series["points"]] == [epoch["tests"][OPTIMAL]["metrics"]["win_rate"]["value"] for epoch in run_status["epochs"]]
+    [series] = win["series"]
+    assert series["group"] == report["items"][0]["group"] and series["replicates"] == 2 and "item" not in series
+    raw = [reporter._series(item["key"], epochs, reporter._test_of(OPTIMAL), "win_rate") for (_, epochs), item in zip(reporter.runs, report["items"], strict=True)]
+    for point in series["points"]:
+        values = [run["epochs"][point["x"]]["tests"][OPTIMAL]["metrics"]["win_rate"]["value"] for run in status["runs"]]
+        interval = t_ci(Distribution(values))
+        assert point["value"] == interval.value and point["n"] == 2
+        assert point["lower"] == max(0, interval.lower) and point["upper"] == min(1, interval.upper)
+        assert sum(move["count"] for move in point["moves"]) == sum(
+            move["count"] for entry in raw for original in entry["points"] if original["x"] == point["x"] for move in original["moves"]
+        )
+    assert len(grid["rows"]) == 1 and len(grid["rows"][0]["rows"]) == 2
+    assert grid["rows"][0]["group"] == series["group"]
+    for index, cell in enumerate(grid["rows"][0]["cells"]):
+        assert cell == {field: sum(row["cells"][index][field] for row in grid["rows"][0]["rows"]) for field in ("done", "total")}
     train = next(b for b in _blocks(report, "line") if b["group"] == "training games vs the trainer" and b["measure"] == "win rate")
-    assert all("lower" not in point and [p["x"] for p in series["points"]] == [1, 2] for series in train["series"] for point in series["points"])
+    assert all("lower" in point and point["n"] == 2 and [p["x"] for p in series["points"]] == [1, 2] for series in train["series"] for point in series["points"])
 
     # a later run of the finished experiment plays nothing: an empty report
     again = TrainingReporter(harness, tmp_path / "again.json")
@@ -163,3 +185,43 @@ def test_close_writes_at_once_and_no_change_is_written_after(tmp_path):
     time.sleep(0.4)
     assert built == [0, 5]
     assert json.loads((tmp_path / "report.json").read_text())["finished"]
+
+
+def test_replicate_series_uses_between_run_intervals_spread_and_pooled_moves():
+    entries = [
+        {"item": f"rep{index}", "points": [{"x": 0, "value": value, "lower": -100, "upper": 100, "moves": [{"move": "red", "count": index + 1, "optimal": index}]}]}
+        for index, value in enumerate([0.2, 0.4, 0.6])
+    ]
+    [series] = replicate_series(entries, {entry["item"]: "group" for entry in entries}, rate=True)
+    [point] = series["points"]
+    interval = t_ci(Distribution([0.2, 0.4, 0.6]))
+    assert series["group"] == "group" and series["replicates"] == 3
+    assert point["value"] == pytest.approx(0.4) and point["n"] == 3
+    assert (point["lower"], point["upper"]) == pytest.approx((max(0, interval.lower), min(1, interval.upper)))
+    assert (point["q10"], point["q90"]) == pytest.approx((0.24, 0.56))
+    assert point["moves"] == [{"move": "red", "count": 6, "optimal": 3}]
+
+
+def test_replicate_series_handles_partial_empty_and_single_runs():
+    entries = [
+        {"item": "a0", "points": [{"x": 0, "value": 10}, {"x": 1, "value": 20}]},
+        {"item": "a1", "points": [{"x": 0, "value": 30}, {"x": 1, "value": None}, {"x": 2, "value": float("nan")}]},
+        {"item": "b0", "points": []},
+        {"item": "b1", "points": []},
+        {"item": "single", "points": [{"x": 0, "value": 0.5, "lower": 0.1, "upper": 0.9}]},
+    ]
+    first, empty, single = replicate_series(entries, {"a0": "a", "a1": "a", "b0": "b", "b1": "b"}, rate=False)
+    assert [point["n"] for point in first["points"]] == [2, 1]
+    assert first["points"][0]["lower"] < 0 and first["points"][0]["upper"] > 30
+    assert first["points"][1] == {"x": 1, "value": 20, "n": 1, "q10": 20, "q90": 20}
+    assert empty == {"group": "b", "replicates": 2, "points": []} and single == entries[-1]
+    assert replicate_series([], {}, rate=True) == []
+
+
+def test_pooled_moves_leave_out_ratings_unless_every_move_is_rated():
+    entries = [
+        {"item": "a", "points": [{"x": 0, "value": 1, "moves": [{"move": "red", "count": 2, "optimal": 2}]}]},
+        {"item": "b", "points": [{"x": 0, "value": 0, "moves": [{"move": "red", "count": 1}, {"move": "blue", "count": 4}]}]},
+    ]
+    [series] = replicate_series(entries, {"a": "g", "b": "g"}, rate=True)
+    assert series["points"][0]["moves"] == [{"move": "blue", "count": 4}, {"move": "red", "count": 3}]

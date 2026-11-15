@@ -45,7 +45,7 @@ def report_curves(results: TrainingResults, registry: Registry, tester_configs: 
     for tester_config in tester_configs:
         tester = registry.player_config(tester_config)
         for run in results.runs:
-            curve = analysis.curve(run, tester)
+            curve = analysis.curve(run, tester, load_games=True)
             print(f"\n{run.game.path}: {run.trainee.path} vs {run.trainer.path} rep{run.replicate} — {metric.value} vs {tester_config}")
             for point in curve.points:
                 bundle = point.bundle(metric)
@@ -141,7 +141,7 @@ def main() -> None:
     finished = False
     with notify:
         try:
-            results = asyncio.run(harness.run(sync=args.sync, concurrency=rounds_concurrency, runs_concurrency=args.runs_concurrency, training_callbacks=callbacks))
+            results = asyncio.run(harness.run(sync=args.sync, concurrency=rounds_concurrency, runs_concurrency=args.runs_concurrency, training_callbacks=callbacks, games=False))
             finished = True
         finally:
             if reporter is not None:

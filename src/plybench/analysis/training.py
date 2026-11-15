@@ -12,6 +12,7 @@ from plybench.configs.player_config import PlayerConfig
 from plybench.configs.training_run import TrainingRun
 from plybench.harness.training.results import TrainingResults
 from plybench.registry import Registry
+from plybench.trackers.result_tracker import ResultTracker
 
 
 @dataclass(frozen=True)
@@ -65,10 +66,14 @@ class TrainingAnalysis:
         self.confidence = confidence
         self.include_fails = include_fails
 
-    def curve(self, run: TrainingRun, tester: PlayerConfig) -> LearningCurve:
-        points = [
-            EpochPoint(index, compute_matchup_metrics(tracker, self.registry, self.confidence, self.include_fails)) for index, tracker in enumerate(self.results.curve(run, tester))
-        ]
+    def _point(self, index: int, tracker: ResultTracker, load_games: bool) -> EpochPoint:
+        # Keep the loaded games local to one phase; the curve retains only its computed metrics.
+        if load_games:
+            tracker = ResultTracker.load(tracker.metadata_path, tracker.parser, tracker.path_builder)
+        return EpochPoint(index, compute_matchup_metrics(tracker, self.registry, self.confidence, self.include_fails))
+
+    def curve(self, run: TrainingRun, tester: PlayerConfig, load_games: bool = False) -> LearningCurve:
+        points = [self._point(index, tracker, load_games) for index, tracker in enumerate(self.results.curve(run, tester))]
         return LearningCurve(run, tester, points)
 
     def curves(self, testers: list[PlayerConfig], progress: bool | None = None) -> list[LearningCurve]:

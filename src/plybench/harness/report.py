@@ -14,7 +14,7 @@ from plybench.harness.benchmark.benchmark import Benchmark
 from plybench.harness.plan import optimal_outcomes_of
 from plybench.harness.training.results import EpochResults
 from plybench.harness.training.training import TrainingHarness
-from plybench.report import Item, Report, ReportFile, estimate
+from plybench.report import Item, Report, ReportFile, estimate, replicate_series
 from plybench.trackers.result_tracker import ResultTracker
 
 # The report (plybench.report) of plybench-run and plybench-train with `--job-report`: the matchups or training runs this process plays (those with games
@@ -177,7 +177,23 @@ class TrainingReporter:
                 phases = [self._tracker(tracker) for tracker in self._phases(epoch)]
                 cells.append({"done": sum(len(t.completed) for t in phases), "total": sum(t.n for t in phases)})
             grid.append({"item": item.key, "cells": cells})
-        report.add_grid("epochs", [str(index) for index in range(width)], grid, note="one cell per epoch (epoch 0 only tests): empty, partly played, done")
+        groups = {item.key: item.group for item in report.items}
+        members: dict[str, list[dict[str, Any]]] = {}
+        for row in grid:
+            members.setdefault(groups[row["item"]] or row["item"], []).append(row)
+        grouped_grid = []
+        for key, rows in members.items():
+            if len(rows) == 1:
+                grouped_grid.append(rows[0])
+                continue
+            cells = [
+                {field: sum(row["cells"][index][field] for row in rows if index < len(row["cells"])) for field in ("done", "total")}
+                for index in range(max(len(row["cells"]) for row in rows))
+            ]
+            grouped_grid.append({"group": key, "cells": cells, "rows": rows})
+        report.add_grid("epochs", [str(index) for index in range(width)], grouped_grid, note="one cell per epoch (epoch 0 only tests): empty, partly played, done")
+        replicated = any(len(rows) > 1 for rows in members.values())
+        replicate_note = f"{round(CONFIDENCE * 100)}% t intervals of the mean across available replicates; spread: 10–90%; no interval when n < 2"
 
         tester_names, _ = short_names(self.testers, self.harness.labels)
         for tester in self.testers:
@@ -185,15 +201,40 @@ class TrainingReporter:
             for metric, label, optimal in MEASURES:
                 pick = self._test_of(tester)
                 series = [self._series(item.key, epochs, pick, metric) for (_, epochs), item in zip(self.runs, report.items, strict=True)]
-                report.add_line(f"{label}, {group}", "epoch", label, True, series, self._references(optimal), group=group, measure=label, note=INTERVAL_NOTE)
+                report.add_line(
+                    f"{label}, {group}",
+                    "epoch",
+                    label,
+                    True,
+                    replicate_series(series, groups, True),
+                    self._references(optimal),
+                    group=group,
+                    measure=label,
+                    note=f"{replicate_note}; single runs: {INTERVAL_NOTE}" if replicated else INTERVAL_NOTE,
+                )
         group = "training games vs the trainer"
         for metric, label, optimal in MEASURES:
             series = [self._series(item.key, epochs, lambda epoch: epoch.train, metric, interval=False) for (_, epochs), item in zip(self.runs, report.items, strict=True)]
             report.add_line(
-                f"{label}, {group}", "epoch", label, True, series, self._references(optimal), group=group, measure=label, note="no interval: the learner changes within the epoch"
+                f"{label}, {group}",
+                "epoch",
+                label,
+                True,
+                replicate_series(series, groups, True),
+                self._references(optimal),
+                group=group,
+                measure=label,
+                note=f"{replicate_note}; single runs: no within-epoch interval" if replicated else "no interval: the learner changes within the epoch",
             )
         series = [{"item": item.key, "points": self._pooled(epochs, "output_tokens_per_game")} for (_, epochs), item in zip(self.runs, report.items, strict=True)]
-        report.add_line("output tokens per game, tests (all testers)", "epoch", "output tokens per game", False, series)
+        report.add_line(
+            "output tokens per game, tests (all testers)",
+            "epoch",
+            "output tokens per game",
+            False,
+            replicate_series(series, groups, False),
+            note=replicate_note if replicated else None,
+        )
         return report
 
     @staticmethod

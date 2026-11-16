@@ -93,8 +93,11 @@ def main() -> None:
         "difference); write: store them where they differ, changing nothing else",
     )
     add_report_args(parser)
+    parser.add_argument("--report-moves", action="store_true", help="with --report-only: also read saved games for move breakdowns and solver ratings (can be slow)")
     add_limits_args(parser)
     args = parser.parse_args()
+    if args.report_moves and args.report_only is None:
+        parser.error("--report-moves requires --report-only")
     if args.report_source is not None and args.report_only is None:
         parser.error("--report-source requires --report-only")
     if args.report_only is not None and (args.check or args.status or args.summaries):
@@ -108,7 +111,7 @@ def main() -> None:
     harness = training_from_args(op, args)
 
     if args.report_only is not None:
-        reporter = TrainingReporter(harness, args.report_only, include_complete=True, item_keys=report_item_keys(args.report_source))
+        reporter = TrainingReporter(harness, args.report_only, include_complete=True, item_keys=report_item_keys(args.report_source), include_moves=args.report_moves)
         write_saved_report(reporter.build, args.report_only, args.notify)
         return
 

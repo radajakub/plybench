@@ -333,7 +333,10 @@ report, and exits without playing games or calling models. Training curves aggre
 reports. Partial experiments include the results available so far and remain unfinished in the report.
 Use the original configuration to reproduce a job's selection; this does not replace its report in plyweb
 automatically. Add `--report-source <existing-report.json>` to keep only that report's item keys;
-this requires the same experiment configuration and overrides that produced it. The command prints the output path when it finishes; `--notify` also sends a notification.
+this requires the same experiment configuration and overrides that produced it.
+Training rebuilds use saved phase summaries by default, without reading games for move details.
+Add `--report-moves` to also rebuild move breakdowns and solver ratings; this reads and replays the saved
+games and can be slow. Live job reports continue to include moves. The command prints the output path when it finishes; `--notify` also sends a notification.
 
 Then analyze or export the transcripts:
 

@@ -6,6 +6,12 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+### Added
+
+- Training report rebuilds use saved phase summaries by default. Add `--report-moves` to
+  `plybench-train --report-only <file>` to also read games for move breakdowns and solver ratings.
+  Live job reports continue to include moves.
+
 ## [4.18.0] - 2026-11-15
 
 ### Added

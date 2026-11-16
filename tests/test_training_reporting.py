@@ -5,6 +5,7 @@ import json
 import sys
 import weakref
 
+import pytest
 from test_learnable import _Stub
 from test_status import OPTIMAL, UNIFORM, _op
 
@@ -12,6 +13,7 @@ from plybench.analysis.training import TrainingAnalysis
 from plybench.callbacks.training_callbacks import TrainingCallbacks
 from plybench.cli import train
 from plybench.common.enums import MetricName
+from plybench.harness.report import TrainingReporter
 from plybench.harness.training.training import TrainingHarness
 from plybench.trackers.result_tracker import ResultTracker
 
@@ -83,3 +85,43 @@ def test_training_cli_finalizes_without_loading_all_games(tmp_path, monkeypatch,
     train.report_curves(ended[0], harness.op.registry, harness.tester_configs, MetricName.WIN_RATE)
     curves = capsys.readouterr().out
     assert curves in output
+
+
+@pytest.mark.parametrize("moves", [False, True])
+def test_report_rebuild_reads_games_only_when_moves_are_requested(tmp_path, monkeypatch, moves):
+    monkeypatch.chdir(tmp_path)
+    harness = _harness()
+    asyncio.run(harness.run(sync=True))
+    expected = TrainingReporter(harness, tmp_path / "unused.json", include_complete=True).build().to_dict()
+    if not moves:
+        for block in expected["blocks"]:
+            if block["type"] == "line":
+                for series in block["series"]:
+                    for point in series["points"]:
+                        point.pop("moves", None)
+    loaded = []
+    original_load = ResultTracker.load_game
+
+    def load(self, game_round):
+        assert moves, "the default report rebuild read a game"
+        loaded.append(game_round)
+        return original_load(self, game_round)
+
+    monkeypatch.setattr(ResultTracker, "load_game", load)
+    monkeypatch.setattr(train, "training_from_args", lambda op, args: harness)
+    monkeypatch.setattr(train, "build_op", lambda **kwargs: harness.op)
+    argv = ["plybench-train", "--experiment", "reporting", "--report-only", "rebuilt.json"]
+    monkeypatch.setattr(sys, "argv", [*argv, *(["--report-moves"] if moves else [])])
+    train.main()
+    actual = json.loads((tmp_path / "rebuilt.json").read_text())
+    assert actual["finished"]
+    assert actual["items"] == expected["items"] and actual["progress"] == expected["progress"]
+    assert actual["blocks"] == expected["blocks"]
+    assert bool(loaded) == moves
+
+
+def test_report_moves_requires_a_report_rebuild(monkeypatch):
+    monkeypatch.setattr(sys, "argv", ["plybench-train", "--report-moves"])
+    with pytest.raises(SystemExit) as error:
+        train.main()
+    assert error.value.code == 2

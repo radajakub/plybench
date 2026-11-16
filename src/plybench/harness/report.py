@@ -121,8 +121,9 @@ class BenchmarkReporter:
 
 
 class TrainingReporter:
-    def __init__(self, harness: TrainingHarness, path: Path, *, include_complete: bool = False, item_keys: set[str] | None = None) -> None:
+    def __init__(self, harness: TrainingHarness, path: Path, *, include_complete: bool = False, item_keys: set[str] | None = None, include_moves: bool = True) -> None:
         self.harness = harness
+        self.include_moves = include_moves
         self.testers = [harness.op.registry.player_config(tester).to_string() for tester in harness.tester_configs]
         # the runs with games left, each with its epochs as the metadata says now; a phase's own tracker replaces its entry once the phase starts
         self.runs: list[tuple[TrainingRun, list[EpochResults]]] = []
@@ -259,7 +260,10 @@ class TrainingReporter:
             tracker = self._tracker(tracker) if tracker is not None else None
             value = _estimate(tracker, metric, interval) if tracker is not None else None
             if tracker is not None and value is not None and value["value"] is not None:
-                points.append({"x": epoch.epoch.index, **{name: entry for name, entry in value.items() if entry is not None}, "moves": self._moves(tracker)})
+                point = {"x": epoch.epoch.index, **{name: entry for name, entry in value.items() if entry is not None}}
+                if self.include_moves:
+                    point["moves"] = self._moves(tracker)
+                points.append(point)
         return {"item": key, "points": points}
 
     def _moves(self, tracker: ResultTracker) -> list[dict[str, Any]]:

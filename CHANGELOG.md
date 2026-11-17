@@ -6,6 +6,8 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+## [4.18.1] - 2026-11-17
+
 ### Added
 
 - Training report rebuilds use saved phase summaries by default. Add `--report-moves` to

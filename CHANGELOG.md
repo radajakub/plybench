@@ -6,6 +6,8 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+## [4.19.0] - 2026-11-17
+
 ### Fixed
 
 - A training job's live report (`--job-report`) no longer keeps every played game in memory: a complete phase is kept as a copy

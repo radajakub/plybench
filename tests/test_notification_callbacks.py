@@ -1,5 +1,5 @@
 """Notifications: an epoch or a matchup is reported when it played a round in this run; one whose rounds were all on disk (a resumed experiment)
-ends silently, while still counting towards the progress."""
+ends silently, while still counting towards the progress. Progress is pushed at most every PUSH_INTERVAL."""
 
 from __future__ import annotations
 
@@ -64,3 +64,24 @@ def test_a_matchup_whose_rounds_were_all_on_disk_is_not_reported(sent: list[str]
         callbacks.matchup_end_callback(tracker)
     assert len(sent) == 1 and "mcts" in sent[0]
     assert describe() == "2/2 matchups, 1/1 rounds"
+
+
+def test_progress_is_pushed_at_most_every_interval(sent: list[str], monkeypatch: pytest.MonkeyPatch) -> None:
+    now = [1000.0]
+    monkeypatch.setattr(notification_callbacks.time, "monotonic", lambda: now[0])
+    callbacks, describe = notification_benchmark_callbacks("exp")
+    assert callbacks.benchmark_start_callback is not None and callbacks.matchup_start_callback is not None
+    assert callbacks.round_complete_callback is not None and callbacks.matchup_end_callback is not None
+    players = ["random:", "mcts:", "random:distribution=normal"]
+    callbacks.benchmark_start_callback(["tic_tac_toe:"], players, ["random:"])
+    # the first matchup is pushed at once, the second a minute later is held back, the third after the interval is pushed with the progress so far
+    for player, at in zip(players, (0.0, 60.0, notification_callbacks.PUSH_INTERVAL), strict=True):
+        now[0] = 1000.0 + at
+        tracker = _tracker(1, set(), player)
+        callbacks.matchup_start_callback(tracker, tracker.game, tracker.i, tracker.o)
+        callbacks.round_complete_callback(tracker.game, tracker.i, tracker.o, 1)
+        callbacks.matchup_end_callback(tracker)
+    assert len(sent) == 2 and "1/3 matchups" in sent[0] and "3/3 matchups" in sent[1]
+    # the second push counts the matchup it held back
+    assert "since the last push" not in sent[0] and "2 matchups done since the last push" in sent[1]
+    assert describe() == "3/3 matchups, 3/3 rounds"

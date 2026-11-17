@@ -16,6 +16,31 @@ from plybench.configs.player_config import PlayerConfig
 from plybench.configs.training_run import Epoch, EpochPhase, TrainingRun, TrainingRunKey
 from plybench.trackers.result_tracker import ResultTracker
 
+# a progress push (a matchup or an epoch done) at most this often: an experiment of many short runs (480 tabular runs of 11 epochs) would send
+# thousands, and ntfy refuses them (429). The first one is sent at once, and the push of the end or a crash (clankers.Engage) is never held back
+PUSH_INTERVAL = 600.0
+
+
+@dataclass
+class _Pushes:
+    # when the last progress push was sent (time.monotonic), None before the first; how many units (matchups, epochs) ended since, the one ending
+    # now included
+    last: float | None = None
+    ended: int = 0
+
+    def due(self, now: float) -> int:
+        # the units the push now carries (0: none is due; this unit is counted for the next one)
+        self.ended += 1
+        if self.last is not None and now - self.last < PUSH_INTERVAL:
+            return 0
+        self.last, ended, self.ended = now, self.ended, 0
+        return ended
+
+
+def _since(ended: int, unit: str) -> list[str]:
+    # the units a push carries beyond the one it names: those held back since the last push
+    return [f"{ended} {unit} done since the last push"] if ended > 1 else []
+
 
 @dataclass
 class _NotificationProgress:
@@ -28,6 +53,7 @@ class _NotificationProgress:
     preexisting: dict[tuple[str, str, str], set[int]] = field(default_factory=dict)
     # rounds played this run per matchup: a matchup whose rounds were all on disk ends without a notification
     fresh: Counter[tuple[str, str, str]] = field(default_factory=Counter)
+    pushes: _Pushes = field(default_factory=_Pushes)
 
     def eta(self, elapsed: float) -> float | None:
         rounds_left = self.fresh_rounds_total - self.fresh_rounds_done
@@ -43,7 +69,7 @@ class _NotificationProgress:
 
 
 def notification_benchmark_callbacks(experiment: str) -> tuple[BenchmarkCallbacks, MessageBuilder]:
-    # push a neutral notification as each matchup finishes; the returned builder renders the progress so far, so the
+    # push a neutral notification as a matchup finishes, at most every PUSH_INTERVAL; the returned builder renders the progress so far, so the
     # `clankers.Engage` wrapper in run.py can report it on success *and* on a crash. matchups all share the per-provider
     # LLM-call semaphore and finish clustered near the end, so the ETA is derived from *round* throughput
     # (rounds drain through that pipe steadily) rather than from matchup completions.
@@ -76,9 +102,12 @@ def notification_benchmark_callbacks(experiment: str) -> tuple[BenchmarkCallback
         state.done_matchups += 1
         if not state.fresh[key(result_tracker.game, result_tracker.i, result_tracker.o)]:
             return  # every round was on disk: nothing new to report
+        ended = state.pushes.due(time.monotonic())
+        if not ended:
+            return  # pushed less than PUSH_INTERVAL ago: the next one counts this matchup
         elapsed = time.monotonic() - state.start
         label = f"{result_tracker.game.path}: {result_tracker.i.path} vs {result_tracker.o.path}"
-        parts = [f"[{experiment}] matchup done ({state.describe()}): {label}"]
+        parts = [f"[{experiment}] matchup done ({state.describe()}): {label}", *_since(ended, "matchups")]
         eta = state.eta(elapsed)
         if eta is not None:
             parts.append(f"est. {format_duration(eta)} left")
@@ -107,6 +136,7 @@ class _TrainingProgress:
     preexisting: dict[PhaseKey, set[int]] = field(default_factory=dict)
     # rounds played this run per (run, epoch): an epoch whose rounds were all on disk ends without a notification
     fresh: Counter[tuple[TrainingRunKey, int]] = field(default_factory=Counter)
+    pushes: _Pushes = field(default_factory=_Pushes)
 
     @property
     def playable(self) -> int:
@@ -123,7 +153,7 @@ class _TrainingProgress:
 
 
 def notification_training_callbacks(experiment: str) -> tuple[TrainingCallbacks, MessageBuilder]:
-    # push a notification as each epoch finishes -- the unit a training run makes progress in, and the
+    # push a notification as an epoch finishes, at most every PUSH_INTERVAL -- the unit a training run makes progress in, and the
     # point at which a checkpoint exists to resume from. Unlike a benchmark the denominator is exact:
     # a run's schedule says how many rounds it will ever play, so the ETA is honest from the first epoch
     state = _TrainingProgress()
@@ -164,10 +194,13 @@ def notification_training_callbacks(experiment: str) -> tuple[TrainingCallbacks,
         state.epochs_done += 1
         if not state.fresh[epoch.run.key, epoch.index]:
             return  # every round was on disk (a resumed run): nothing new to report
+        ended = state.pushes.due(time.monotonic())
+        if not ended:
+            return  # pushed less than PUSH_INTERVAL ago: the next one counts this epoch
         elapsed = time.monotonic() - state.start
         run = epoch.run
         label = f"{run.game.path}: {run.trainee.path} vs {run.trainer.path} rep{run.replicate} epoch {epoch.index}/{run.training_config.num_epochs}"
-        parts = [f"[{experiment}] epoch done ({state.describe()}): {label}"]
+        parts = [f"[{experiment}] epoch done ({state.describe()}): {label}", *_since(ended, "epochs")]
         eta = state.eta(elapsed)
         if eta is not None:
             parts.append(f"est. {format_duration(eta)} left")

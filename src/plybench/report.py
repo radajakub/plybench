@@ -32,7 +32,7 @@ from plybench.configs.names import item_names
 #          a value is a string, a number, a boolean, null, or {value, lower, upper} (an estimate with its interval); `rate`: values in [0, 1]; `name`:
 #          the column holds an item key, shown as the item's name
 #   line   {type, title, group?, measure?, note?, x: {label}, y: {label, rate}, series: [{item, points: [{x, value, lower?, upper?}]}],
-#           references: [{label, value}]}
+#           references: [{label, value, games?}]}   games: the items' game configs a reference applies to (all without)
 #          blocks with one `group` and different `measure`s are one panel with a choice of measure; series of items with one `group` are replicates.
 #          A series may stand for the replicates of a group instead ({group, replicates, points}, replicate_series): each point the mean over the
 #          replicates with a point there (n), its t interval when n >= 2, and their spread (q10, q90: the 10th and 90th percentiles)

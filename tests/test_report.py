@@ -137,6 +137,10 @@ def test_a_training_report_counts_the_moves_of_each_phase_against_the_game_of_it
         assert all(point["moves"] == [{"move": "<button:red>", "count": games, "optimal": games if point["x"] >= 2 else 0}] for point in series["points"])
         # the optimum of both games the run plays
         assert sorted(reference["value"] for reference in block["references"]) == [0.8, 1.0]
+        # both apply to the run's game: the first before the switch, the second after it
+        assert all(reference["games"] == [report["items"][0]["configs"]["game"]] for reference in block["references"])
+    # the report keeps no game in memory once a phase is complete: each phase a copy with its counts and summary only
+    assert reporter.live and all(tracker.is_complete() and tracker.games.count(None) == tracker.n for tracker in reporter.live.values())
     json.dumps(report, allow_nan=False)
 
 

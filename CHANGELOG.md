@@ -6,6 +6,23 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+### Fixed
+
+- A training job's live report (`--job-report`) no longer keeps every played game in memory: a complete phase is kept as a copy
+  with its counts and summary, its moves counted once. Memory grew by about 9 KB a game (420 MB for 20,640 games, 222 MB now);
+  a 206,400-game job was killed at its end. The report is unchanged.
+
+### Changed
+
+- `--notify`: a progress push (a matchup or an epoch done) at most every 10 minutes (`PUSH_INTERVAL`); the first at once, the
+  push at the end or on a crash as before. An experiment of many short runs sent thousands, which ntfy refused (429). A push
+  names its matchup or epoch and says how many ended since the last push ("18 epochs done since the last push").
+
+### Added
+
+- Training reports: every optimum line of a line block names the runs' games it applies to (`references[].games`), a game
+  that switches at an epoch both of its optima, so a chart of some of the runs draws only their optimum.
+
 ## [4.18.1] - 2026-11-17
 
 ### Added

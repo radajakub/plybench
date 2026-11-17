@@ -162,10 +162,36 @@ class TrainingReporter:
     def _tracker(self, tracker: ResultTracker) -> ResultTracker:
         return self.live.get(tracker.metadata_path, tracker)
 
+    def _settle(self) -> None:
+        # a live phase that is complete is kept as a copy without its games: its moves are counted once (cached in self.moves), and the report keeps
+        # no game in memory after its phase, which grew with every game played (about 9 KB a game: a 206k-game job ran out of memory at its end). The
+        # harness's own tracker is not touched: the learner reads its games when the phase ends
+        for path, tracker in list(self.live.items()):
+            if not tracker.is_complete() or tracker.games.count(None) == len(tracker.games):
+                continue
+            if self.include_moves:
+                self._moves(tracker)
+            light = ResultTracker(
+                tracker.experiment,
+                tracker.i,
+                tracker.o,
+                tracker.game,
+                tracker.n,
+                set(tracker.completed),
+                tracker.parser,
+                tracker.path_builder,
+                save_on_record=False,
+                seed=tracker.seed,
+                summary=tracker.summary,
+                place=tracker.place,
+            )
+            self.live[path] = light
+
     def _key(self, run: TrainingRun) -> str:
         return self.harness.path_builder.run_dir(self.harness.experiment, run).relative_to(self.harness.path_builder.results_dir / self.harness.experiment).as_posix()
 
     def build(self) -> Report:
+        self._settle()
         report = Report(labels=self.harness.labels, prefixes={"opponent": "vs ", "replicate": "rep "})
         for run, epochs in self.runs:
             phases = [self._tracker(tracker) for epoch in epochs for tracker in self._phases(epoch)]
@@ -303,8 +329,16 @@ class TrainingReporter:
         return points
 
     def _references(self, optimal: Callable[[dict[str, float]], float]) -> list[dict[str, Any]]:
-        # the optimal policy's value of the reported runs' games in a measure, one line per distinct value, named by its game only when they differ
+        # the optimal policy's value of the reported runs' games in a measure, one line per distinct value, named by its game only when they differ;
+        # `games`: the runs' games (Item.configs["game"]) it applies to, so a chart of some of the runs draws only theirs (a run that switches its
+        # game at an epoch has the optimum of each game it plays)
         games = self._epoch_games([run for run, _ in self.runs])
+        runs_of: dict[str, list[str]] = {}
+        for run, _ in self.runs:
+            for index in range(run.training_config.num_epochs + 1):
+                played = runs_of.setdefault(Epoch(run, index).game.to_string(), [])
+                if run.game.to_string() not in played:
+                    played.append(run.game.to_string())
         by_value: dict[float, list[str]] = {}
         for game in games:
             if game in self.optimal:
@@ -313,5 +347,6 @@ class TrainingReporter:
         lines = []
         for value, named in by_value.items():
             which = "" if len(by_value) == 1 else f" ({names[named[0]]})" if len(named) == 1 else f" ({len(named)} games)"
-            lines.append({"label": f"optimal {_percent(value)}{which}", "value": value})
+            applies = list(dict.fromkeys(run for game in named for run in runs_of.get(game, [])))
+            lines.append({"label": f"optimal {_percent(value)}{which}", "value": value, "games": applies})
         return lines

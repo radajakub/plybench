@@ -133,8 +133,9 @@ class BanditTransformer(InterfaceTransformer[BanditAction, BanditObservation, []
         return observation.os_observation.state
 
     def _inner_llm_partial_states(self, observation: BanditObservation) -> list[str]:
+        # "in this game": a learner's notes come from earlier games, and without it an LLM read the state as no history at all
         if observation.pressed is None:
-            return ["you have not pressed a button yet"]
+            return ["you have not pressed a button yet in this game"]
         if observation.reward is None:
             return [f"you pressed the {observation.pressed} button"]
         # a Bernoulli button wins (+1) or loses (-1); a family with more rewards would name the reward instead

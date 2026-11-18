@@ -70,7 +70,7 @@ def test_hidden_rules_keep_the_probabilities_out_of_the_prompt():
     stated, hidden = _prompt(_engine("p=0.6;0.4;0.4;0.4;0.4,shift=2")), _prompt(_engine("p=0.6;0.4;0.4;0.4;0.4,shift=2,rules=hidden"))
     assert "The red button wins with probability 2/5" in stated and "the green button wins with probability 3/5" in stated
     assert "probability" in hidden and "2/5" not in hidden and "3/5" not in hidden and "You are not told these probabilities." in hidden
-    assert "Currently, you have not pressed a button yet." in hidden and "<button:red>, <button:blue>, <button:green>, <button:yellow>, <button:purple>" in hidden
+    assert "Currently, you have not pressed a button yet in this game." in hidden and "<button:red>, <button:blue>, <button:green>, <button:yellow>, <button:purple>" in hidden
     # with the probabilities hidden, every instance and shift of K buttons gives the same prompt: what is learned comes from the games
     for params in ("p=3/4;1/4;1/4;1/4;1/4", "p=0.6;0.4;0.4;0.4;0.4,shift=4"):
         assert _prompt(_engine(f"{params},rules=hidden")) == hidden

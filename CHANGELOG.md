@@ -6,6 +6,8 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+## [4.20.0] - 2026-11-18
+
 ### Added
 
 - Training report: per tester an `optimal play` group (optimal move rate, Wilson over moves; regret per game, t over games) and, in the

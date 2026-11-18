@@ -5,6 +5,8 @@ from pathlib import Path
 from typing import Any
 
 from plybench.analysis.replay import ReplayerCache
+from plybench.analysis.statistics.distribution import Distribution
+from plybench.analysis.statistics.intervals import t_ci, wilson_ci
 from plybench.analysis.summary import CONFIDENCE
 from plybench.callbacks.benchmark_callbacks import BenchmarkCallbacks
 from plybench.callbacks.training_callbacks import TrainingCallbacks
@@ -22,7 +24,8 @@ from plybench.trackers.result_tracker import ResultTracker
 # reads one file. A benchmark: the outcomes per matchup and a table of win rate and tokens. A training: a grid of the epochs, the outcome measures of
 # the tests per tester (with their interval) and of the training games (without: the learner changes during them), and the output tokens of the tests.
 # Each point of a training's outcome measures carries the learner's moves in that phase (`moves`), counted over its decisions, with how many of them
-# the solver rates optimal in a solvable game.
+# the solver rates optimal in a solvable game. In a solvable game the same replay also gives the optimal play: per tester the optimal move rate and the
+# regret per game of the tests, and for the training games the optimal move rate and the cumulative regret. Each line block names its `panel`.
 # include_complete also includes finished work when rebuilding a report from saved results.
 
 OUTCOMES = [
@@ -140,8 +143,9 @@ class TrainingReporter:
         # the optimum of every game an epoch plays, which is the run's game unless it changes at an epoch
         self.optimal = optimal_outcomes_of(harness.op, {game: game for game in self._epoch_games([run for run, _ in self.runs])}, [])
         self.replayers = ReplayerCache(harness.op.registry)
-        # the learner's moves of each recorded game, as (move, optimal or None), by the phase's metadata and the round: a game is read and replayed once
-        self.moves: dict[tuple[Path, int], list[tuple[str, bool | None]]] = {}
+        # the learner's moves of each recorded game, as (move, optimal, regret; both None when the solver did not rate it), by the phase's metadata and
+        # the round: a game is read and replayed once
+        self.moves: dict[tuple[Path, int], list[tuple[str, bool | None, float | None]]] = {}
         self.file = ReportFile(path, self.build)
 
     @staticmethod
@@ -249,7 +253,16 @@ class TrainingReporter:
                     group=group,
                     measure=label,
                     note=f"{replicate_note}; single runs: {INTERVAL_NOTE}" if replicated else INTERVAL_NOTE,
+                    panel="tests",
                 )
+            if self.include_moves:
+                pick = self._test_of(tester)
+                rates = [self._optimal_series(item.key, epochs, pick, interval=True) for (_, epochs), item in zip(self.runs, report.items, strict=True)]
+                regrets = [self._regret_series(item.key, epochs, pick) for (_, epochs), item in zip(self.runs, report.items, strict=True)]
+                intervals = "Wilson for the rate (over moves), t for the regret (over games)"
+                note = f"{replicate_note}; single runs: {intervals}" if replicated else f"{round(CONFIDENCE * 100)}% intervals: {intervals}"
+                measures = [("optimal move rate", True, rates), ("regret per game", False, regrets)]
+                self._add_optimal(report, f"optimal play, tests vs {tester_names[tester]}", measures, groups, "optimal", note)
         group = "training games vs the trainer"
         for metric, label, optimal in MEASURES:
             series = [self._series(item.key, epochs, lambda epoch: epoch.train, metric, interval=False) for (_, epochs), item in zip(self.runs, report.items, strict=True)]
@@ -263,7 +276,14 @@ class TrainingReporter:
                 group=group,
                 measure=label,
                 note=f"{replicate_note}; single runs: no within-epoch interval" if replicated else "no interval: the learner changes within the epoch",
+                panel="training",
             )
+        if self.include_moves:
+            rates = [self._optimal_series(item.key, epochs, lambda epoch: epoch.train, interval=False) for (_, epochs), item in zip(self.runs, report.items, strict=True)]
+            regrets = [self._cumulative_regret(item.key, epochs) for (_, epochs), item in zip(self.runs, report.items, strict=True)]
+            regret = "cumulative regret: the sum of V* - Q*(s, a) over the learner's moves in the training games up to the epoch"
+            note = f"{replicate_note}; single runs: no interval; {regret}" if replicated else f"no interval; {regret}"
+            self._add_optimal(report, group, [("optimal move rate", True, rates), ("cumulative regret", False, regrets)], groups, "training", note)
         series = [{"item": item.key, "points": self._pooled(epochs, "output_tokens_per_game")} for (_, epochs), item in zip(self.runs, report.items, strict=True)]
         report.add_line(
             "output tokens per game, tests (all testers)",
@@ -272,8 +292,19 @@ class TrainingReporter:
             False,
             replicate_series(series, groups, False),
             note=replicate_note if replicated else None,
+            panel="tokens",
         )
         return report
+
+    @staticmethod
+    def _add_optimal(report: Report, group: str, measures: list[tuple[str, bool, list[dict[str, Any]]]], groups: dict[str, str | None], panel: str, note: str) -> None:
+        # the measures of the solver's rating as line blocks of one group; none when no run has a rated point (no solvable game, or nothing played yet)
+        if not any(entry["points"] for _, _, series in measures for entry in series):
+            return
+        for label, rate, series in measures:
+            # the optimal policy: every move optimal, no regret
+            reference = {"label": f"optimal {_percent(1.0)}" if rate else "optimal 0", "value": 1.0 if rate else 0.0}
+            report.add_line(f"{label}, {group}", "epoch", label, rate, replicate_series(series, groups, rate), [reference], group=group, measure=label, note=note, panel=panel)
 
     @staticmethod
     def _test_of(tester: str) -> Callable[[EpochResults], ResultTracker | None]:
@@ -292,31 +323,101 @@ class TrainingReporter:
                 points.append(point)
         return {"item": key, "points": points}
 
-    def _moves(self, tracker: ResultTracker) -> list[dict[str, Any]]:
-        # the learner's moves in the phase's recorded games, most frequent first; `optimal` only where the solver rated every one of them
-        counts: dict[str, list[int]] = {}
-        rated = True
+    def _rated(self, tracker: ResultTracker) -> list[list[tuple[str, bool | None, float | None]]]:
+        # the learner's moves of each recorded game of the phase, as (move, optimal, regret), replayed once against the solver in a solvable game;
+        # optimal and regret are None where the solver did not rate the game
+        games = []
         for game_round in sorted(tracker.completed):
             key = (tracker.metadata_path, game_round)
             if key not in self.moves:
                 game = tracker.games[game_round - 1] or tracker.load_game(game_round)
                 if game is None:
                     continue
-                optimal: dict[int, bool] = {}
+                rated: dict[int, tuple[bool, float]] = {}
                 if self.harness.op.registry.solvable(tracker.game.key):
                     try:
-                        optimal = {stats.seq: stats.is_optimal for stats in self.replayers(tracker.game).replay_stats(game, tracker.i)}
+                        rated = {stats.seq: (stats.is_optimal, stats.regret) for stats in self.replayers(tracker.game).replay_stats(game, tracker.i)}
                     except Exception:
                         # any error: the moves are still counted, without the solver's rating
-                        optimal = {}
-                self.moves[key] = [(step.move, optimal.get(step.seq)) for step in game.steps if step.player_hash == tracker.i.hash]
-            for move, is_optimal in self.moves[key]:
+                        rated = {}
+                moves: list[tuple[str, bool | None, float | None]] = []
+                for step in game.steps:
+                    if step.player_hash == tracker.i.hash:
+                        is_optimal, regret = rated.get(step.seq, (None, None))
+                        moves.append((step.move, is_optimal, regret))
+                self.moves[key] = moves
+            games.append(self.moves[key])
+        return games
+
+    def _moves(self, tracker: ResultTracker) -> list[dict[str, Any]]:
+        # the learner's moves in the phase's recorded games, most frequent first; `optimal` only where the solver rated every one of them
+        counts: dict[str, list[int]] = {}
+        rated = True
+        for moves in self._rated(tracker):
+            for move, is_optimal, _ in moves:
                 entry = counts.setdefault(move, [0, 0])
                 entry[0] += 1
                 entry[1] += bool(is_optimal)
                 rated = rated and is_optimal is not None
         ordered = sorted(counts.items(), key=lambda item: (-item[1][0], item[0]))
         return [{"move": move, "count": count, **({"optimal": optimal} if rated else {})} for move, (count, optimal) in ordered]
+
+    def _game_regrets(self, tracker: ResultTracker) -> list[float] | None:
+        # each recorded game's regret (the sum over the learner's moves); None unless the solver rated every move of the phase
+        regrets = []
+        for moves in self._rated(tracker):
+            if any(regret is None for _, _, regret in moves):
+                return None
+            regrets.append(sum(regret for _, _, regret in moves if regret is not None))
+        return regrets
+
+    def _optimal_series(self, key: str, epochs: list[EpochResults], pick: Callable[[EpochResults], ResultTracker | None], interval: bool) -> dict[str, Any]:
+        # per epoch the share of the learner's moves the solver rates optimal (Wilson over the moves), where it rated every move
+        points = []
+        for epoch in epochs:
+            tracker = pick(epoch)
+            if tracker is None:
+                continue
+            tracker = self._tracker(tracker)
+            flags = [is_optimal for moves in self._rated(tracker) for _, is_optimal, _ in moves]
+            if not flags or any(flag is None for flag in flags):
+                continue
+            value, lower, upper = wilson_ci(Distribution(float(bool(flag)) for flag in flags), CONFIDENCE).unwrap()
+            points.append({"x": epoch.epoch.index, "value": value, **({"lower": lower, "upper": upper} if interval else {}), "moves": self._moves(tracker)})
+        return {"item": key, "points": points}
+
+    def _regret_series(self, key: str, epochs: list[EpochResults], pick: Callable[[EpochResults], ResultTracker | None]) -> dict[str, Any]:
+        # per epoch the mean regret per game of the phase (t over the games), where the solver rated every move
+        points = []
+        for epoch in epochs:
+            tracker = pick(epoch)
+            if tracker is None:
+                continue
+            tracker = self._tracker(tracker)
+            regrets = self._game_regrets(tracker)
+            if not regrets:
+                continue
+            value, lower, upper = t_ci(Distribution(regrets), CONFIDENCE).unwrap()
+            points.append({"x": epoch.epoch.index, "value": value, **({"lower": lower, "upper": upper} if len(regrets) > 1 else {}), "moves": self._moves(tracker)})
+        return {"item": key, "points": points}
+
+    def _cumulative_regret(self, key: str, epochs: list[EpochResults]) -> dict[str, Any]:
+        # the regret of the training games summed from the first epoch to the end of each epoch (epoch 0 trains nothing: 0); stops at the first epoch
+        # the solver did not rate, and at an epoch whose training has not started
+        points = []
+        total = 0.0
+        for epoch in epochs:
+            if epoch.train is None:
+                points.append({"x": epoch.epoch.index, "value": total})
+                continue
+            tracker = self._tracker(epoch.train)
+            regrets = self._game_regrets(tracker)
+            if not regrets:
+                break
+            total += sum(regrets)
+            points.append({"x": epoch.epoch.index, "value": total, "moves": self._moves(tracker)})
+        # no rated training game yet (or no solver): no line, not a lone 0 at epoch 0
+        return {"item": key, "points": points if any("moves" in point for point in points) else []}
 
     def _pooled(self, epochs: list[EpochResults], metric: str) -> list[dict[str, Any]]:
         # the tests of an epoch as one mean: each tester's mean weighted by its count (exact for means)

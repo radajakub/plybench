@@ -144,6 +144,57 @@ def test_a_training_report_counts_the_moves_of_each_phase_against_the_game_of_it
     json.dumps(report, allow_nan=False)
 
 
+def test_a_training_report_rates_the_optimal_play_of_tests_and_training(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    _Stub.proposed, _Stub.fail_at, _Stub.nothing_at = [], None, set()
+    # the stub presses red: regret V* - Q*(red) = 1 - (-1) = 2 per game before the switch, 0.6 - 0.6 = 0 after it
+    game = "bandit:p=0;1,switch=4/5;1/5,switch_epoch=2,rules=hidden"
+    harness = TrainingHarness("optimal", _op(), [game], ["stub:"], ["none:"], ["none:"], ["num_epochs=3,num_training_games=3,num_test_games=4"], 1, seed=0)
+    path = tmp_path / "report.json"
+    reporter = TrainingReporter(harness, path)
+    asyncio.run(harness.run(sync=True, training_callbacks=reporter.callbacks()))
+    reporter.file.close(finished=True)
+    report = json.loads(path.read_text())
+
+    lines = {(block["group"], block["measure"]): block for block in _blocks(report, "line") if "group" in block}
+    assert {block.get("panel") for block in _blocks(report, "line")} == {"tests", "optimal", "training", "tokens"}
+    assert lines[("optimal play, tests vs none", "optimal move rate")]["panel"] == "optimal"
+    assert lines[("training games vs the trainer", "cumulative regret")]["panel"] == "training"
+
+    def points(group, measure):
+        [series] = lines[(group, measure)]["series"]
+        return series["points"]
+
+    rate = points("optimal play, tests vs none", "optimal move rate")
+    assert [(point["x"], point["value"]) for point in rate] == [(0, 0.0), (1, 0.0), (2, 1.0), (3, 1.0)]
+    # Wilson over the 4 moves of each test phase
+    assert all(0.0 <= point["lower"] <= point["value"] <= point["upper"] <= 1.0 and point["upper"] > point["lower"] for point in rate)
+    regret = points("optimal play, tests vs none", "regret per game")
+    assert [(point["x"], point["value"]) for point in regret] == [(0, pytest.approx(2.0)), (1, pytest.approx(2.0)), (2, pytest.approx(0.0)), (3, pytest.approx(0.0))]
+    train_rate = points("training games vs the trainer", "optimal move rate")
+    assert [(point["x"], point["value"]) for point in train_rate] == [(1, 0.0), (2, 1.0), (3, 1.0)] and all("lower" not in point for point in train_rate)
+    # epoch 0 trains nothing; epoch 1 trains 3 games of regret 2; after the switch red is optimal
+    cumulative = points("training games vs the trainer", "cumulative regret")
+    assert [(point["x"], point["value"]) for point in cumulative] == [(0, 0.0), (1, pytest.approx(6.0)), (2, pytest.approx(6.0)), (3, pytest.approx(6.0))]
+    assert [reference["value"] for reference in lines[("training games vs the trainer", "cumulative regret")]["references"]] == [0.0]
+    assert [reference["value"] for reference in lines[("optimal play, tests vs none", "optimal move rate")]["references"]] == [1.0]
+    json.dumps(report, allow_nan=False)
+
+
+def test_a_training_report_has_no_optimal_play_without_a_solver(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    _Stub.proposed, _Stub.fail_at, _Stub.nothing_at = [], None, set()
+    harness = TrainingHarness("unsolved", _op(), ["connect_four:"], ["stub:"], [UNIFORM], [UNIFORM], ["num_epochs=1,num_training_games=1,num_test_games=1"], 1, seed=0)
+    path = tmp_path / "report.json"
+    reporter = TrainingReporter(harness, path)
+    asyncio.run(harness.run(sync=True, training_callbacks=reporter.callbacks()))
+    reporter.file.close(finished=True)
+    report = json.loads(path.read_text())
+    measures = {block.get("measure") for block in _blocks(report, "line")}
+    assert "win rate" in measures and not measures & {"optimal move rate", "regret per game", "cumulative regret"}
+    assert {block.get("panel") for block in _blocks(report, "line")} == {"tests", "training", "tokens"}
+
+
 def test_run_writes_the_report_and_a_finished_experiment_reports_nothing(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     base = ["plybench-run", "--name", "cli", "--games", "nim:", "--players", UNIFORM, "--opponents", OPTIMAL, "--quiet", "--seed", "0"]

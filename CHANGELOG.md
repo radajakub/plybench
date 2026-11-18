@@ -6,6 +6,13 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+### Added
+
+- Training report: per tester an `optimal play` group (optimal move rate, Wilson over moves; regret per game, t over games) and, in the
+  training group, the optimal move rate and the cumulative regret (sum of V* - Q*(s, a) over the learner's moves up to each epoch), for
+  solvable games, from the one replay per game the report already makes for its moves. Left out of a rebuild without `--report-moves`.
+- Report line blocks name their `panel` (`tests`, `optimal`, `training`, `tokens`), so a site can place them.
+
 ## [4.19.0] - 2026-11-17
 
 ### Fixed

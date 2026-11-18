@@ -94,6 +94,10 @@ def test_report_rebuild_reads_games_only_when_moves_are_requested(tmp_path, monk
     asyncio.run(harness.run(sync=True))
     expected = TrainingReporter(harness, tmp_path / "unused.json", include_complete=True).build().to_dict()
     if not moves:
+        # the solver's rating (optimal move rate, regret) needs the games replayed, so a rebuild without moves leaves it out
+        rated = {"optimal move rate", "regret per game", "cumulative regret"}
+        expected["blocks"] = [block for block in expected["blocks"] if block.get("measure") not in rated]
+        assert len(expected["blocks"]) < len(TrainingReporter(harness, tmp_path / "unused.json", include_complete=True).build().to_dict()["blocks"])
         for block in expected["blocks"]:
             if block["type"] == "line":
                 for series in block["series"]:

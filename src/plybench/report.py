@@ -44,7 +44,10 @@ from plybench.configs.names import item_names
 
 VERSION = 1
 # at most one write in this many seconds while the process works (a script may pass its own); a change within them is written when they end
-MIN_INTERVAL = 5.0
+MIN_INTERVAL = 30.0
+# and at most one in this many times the last write took: the process spends at most about 1/20 of its time on its report, however large it grows
+# (a build holds the GIL, so the work waits while it runs; a 360-run training's build took 10-15 s on kamino and nearly stopped its games)
+BUILD_SHARE = 20.0
 
 
 def _finite(value: Any) -> Any:
@@ -184,15 +187,18 @@ class Report:
 
 
 class ReportFile:
-    # a report rewritten while a process works: `changed` builds and saves it at most every min_interval seconds, `write` and `close` at once. A change
-    # within the interval is not dropped: a timer writes it when the interval ends (one write for all changes within it), so the file is at most one
-    # interval behind. The timer builds the report on its own thread while the process may change what that reads; a build that fails there is a
-    # warning, and the next change or `close` writes again. A failure to build or write is a warning, never an error: a report must not stop a run
+    # a report rewritten while a process works: `changed` builds and saves it at most every min_interval seconds and every BUILD_SHARE times the last
+    # write's time, `write` and `close` at once. A change within the interval is not dropped: a timer writes it when the interval ends (one write for
+    # all changes within it), so the file is at most one interval behind. The timer builds the report on its own thread while the process may change
+    # what that reads; a build that fails there is a warning, and the next change or `close` writes again. A failure to build or write is a warning,
+    # never an error: a report must not stop a run
     def __init__(self, path: Path, build: Callable[[], Report], min_interval: float = MIN_INTERVAL) -> None:
         self.path = path
         self.build = build
         self.min_interval = min_interval
         self._last = -math.inf
+        # how long the last write took (build and save)
+        self._spent = 0.0
         self._timer: threading.Timer | None = None
         # one write at a time: the timer's and the process's would share the temporary file
         self._lock = threading.Lock()
@@ -201,7 +207,7 @@ class ReportFile:
         with self._lock:
             if self._timer is not None:
                 return
-            wait = self._last + self.min_interval - time.monotonic()
+            wait = self._last + max(self.min_interval, BUILD_SHARE * self._spent) - time.monotonic()
             if wait > 0:
                 self._timer = threading.Timer(wait, self._pending)
                 # a daemon: a timer still waiting never keeps the process alive
@@ -229,6 +235,7 @@ class ReportFile:
             except Exception as error:
                 # any error: the run goes on, and the next change tries again
                 warnings.warn(f"the report {self.path} was not written: {type(error).__name__}: {error}", stacklevel=2)
+            self._spent = time.monotonic() - self._last
 
     def close(self, finished: bool) -> None:
         self.write(finished)

@@ -6,6 +6,13 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+### Fixed
+
+- Job reports no longer slow a long training down: a finished phase's moves, optimal move rate and regrets are counted once (and its
+  games' moves released), the z and t quantiles are cached, and `ReportFile` writes at most every 30 s and every 20 times the last
+  write's time (was every 5 s). A 360-run training's build took 10-15 s and held the GIL, so the games nearly stopped; the same
+  report on 480 runs builds in 0.19 s instead of 1.66 s, with identical JSON.
+
 ## [4.20.0] - 2026-11-18
 
 ### Added

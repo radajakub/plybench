@@ -243,6 +243,24 @@ def test_close_writes_at_once_and_no_change_is_written_after(tmp_path):
     assert json.loads((tmp_path / "report.json").read_text())["finished"]
 
 
+def test_a_slow_build_is_not_repeated_within_build_share_times_its_time(tmp_path):
+    # a write that takes 20 ms waits about BUILD_SHARE * 20 ms before the next, even with no interval: the report never takes most of the process's time
+    done, built = [0], []
+
+    def build():
+        built.append(done[0])
+        time.sleep(0.02)
+        return Report(items=[Item("a", {"player": UNIFORM}, 10, done[0])])
+
+    file = ReportFile(tmp_path / "report.json", build, 0.0)
+    file.changed()
+    done[0] = 1
+    file.changed()
+    assert built == [0]
+    file.close(True)
+    assert built == [0, 1]
+
+
 def test_replicate_series_uses_between_run_intervals_spread_and_pooled_moves():
     entries = [
         {"item": f"rep{index}", "points": [{"x": 0, "value": value, "lower": -100, "upper": 100, "moves": [{"move": "red", "count": index + 1, "optimal": index}]}]}

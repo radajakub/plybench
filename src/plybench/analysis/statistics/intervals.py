@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+from functools import cache
 from typing import Any
 
 import numpy as np
@@ -30,8 +31,15 @@ class ConfidenceInterval(Serializable):
         return {"value": self.value, "lower": self.lower, "upper": self.upper}
 
 
+# cached: a report computes thousands of intervals at a few confidences and sample sizes, and scipy's ppf was most of its time
+@cache
 def z_score(confidence: float) -> float:
     return float(stats.norm.ppf(1 - (1 - confidence) / 2))
+
+
+@cache
+def t_score(confidence: float, df: int) -> float:
+    return float(stats.t.ppf(1 - (1 - confidence) / 2, df=df))
 
 
 def wilson_ci(distribution: Distribution, confidence: float = 0.95) -> ConfidenceInterval:
@@ -68,7 +76,7 @@ def t_ci(distribution: Distribution, confidence: float = 0.95) -> ConfidenceInte
         return ConfidenceInterval(mean, mean, mean)
 
     se = distribution.std(ddof=1) / math.sqrt(n)
-    crit = float(stats.t.ppf(1 - (1 - confidence) / 2, df=n - 1))
+    crit = t_score(confidence, n - 1)
     return ConfidenceInterval(mean, mean - crit * se, mean + crit * se)
 
 

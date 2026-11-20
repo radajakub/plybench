@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -58,6 +59,15 @@ def _estimate(tracker: ResultTracker, name: str, interval: bool = True) -> dict[
 
 def _percent(value: float) -> str:
     return f"{value * 100:.1f}%"
+
+
+@dataclass(frozen=True)
+class PhaseMoves:
+    # the learner's moves in a phase's recorded games (most frequent first), the share the solver rates optimal with its Wilson interval (None unless
+    # it rated every move) and each game's regret (None unless it rated every move)
+    moves: list[dict[str, Any]]
+    optimal: tuple[float, float, float] | None
+    regrets: list[float] | None
 
 
 class BenchmarkReporter:
@@ -140,12 +150,22 @@ class TrainingReporter:
             if missing:
                 raise ValueError(f"report items are absent from the selection: {', '.join(sorted(missing))}")
         self.live: dict[Path, ResultTracker] = {}
+        # the games the runs' epochs play, and per game the runs that play it; the runs are fixed here, so every build reuses them
+        self.games = self._epoch_games([run for run, _ in self.runs])
+        self.runs_of: dict[str, list[str]] = {}
+        for run, _ in self.runs:
+            for index in range(run.training_config.num_epochs + 1):
+                played = self.runs_of.setdefault(Epoch(run, index).game.to_string(), [])
+                if run.game.to_string() not in played:
+                    played.append(run.game.to_string())
         # the optimum of every game an epoch plays, which is the run's game unless it changes at an epoch
-        self.optimal = optimal_outcomes_of(harness.op, {game: game for game in self._epoch_games([run for run, _ in self.runs])}, [])
+        self.optimal = optimal_outcomes_of(harness.op, {game: game for game in self.games}, [])
         self.replayers = ReplayerCache(harness.op.registry)
         # the learner's moves of each recorded game, as (move, optimal, regret; both None when the solver did not rate it), by the phase's metadata and
         # the round: a game is read and replayed once
         self.moves: dict[tuple[Path, int], list[tuple[str, bool | None, float | None]]] = {}
+        # a complete phase's moves, counted once by its metadata: it no longer changes, so a build reuses them, and its games leave self.moves
+        self.finished: dict[Path, PhaseMoves] = {}
         self.file = ReportFile(path, self.build)
 
     @staticmethod
@@ -174,7 +194,7 @@ class TrainingReporter:
             if not tracker.is_complete() or tracker.games.count(None) == len(tracker.games):
                 continue
             if self.include_moves:
-                self._moves(tracker)
+                self._phase(tracker)
             light = ResultTracker(
                 tracker.experiment,
                 tracker.i,
@@ -349,27 +369,44 @@ class TrainingReporter:
             games.append(self.moves[key])
         return games
 
-    def _moves(self, tracker: ResultTracker) -> list[dict[str, Any]]:
-        # the learner's moves in the phase's recorded games, most frequent first; `optimal` only where the solver rated every one of them
+    def _phase(self, tracker: ResultTracker) -> PhaseMoves:
+        # a complete phase's moves from self.finished, counted there the first time; a live phase's counted from its games at every build
+        finished = self.finished.get(tracker.metadata_path)
+        if finished is not None:
+            return finished
         counts: dict[str, list[int]] = {}
         rated = True
+        flags: list[bool | None] = []
+        regrets: list[float] | None = []
         for moves in self._rated(tracker):
             for move, is_optimal, _ in moves:
                 entry = counts.setdefault(move, [0, 0])
                 entry[0] += 1
                 entry[1] += bool(is_optimal)
                 rated = rated and is_optimal is not None
+                flags.append(is_optimal)
+            # a game's regret is the sum over the learner's moves
+            if regrets is not None and any(regret is None for _, _, regret in moves):
+                regrets = None
+            elif regrets is not None:
+                regrets.append(sum(regret for _, _, regret in moves if regret is not None))
         ordered = sorted(counts.items(), key=lambda item: (-item[1][0], item[0]))
-        return [{"move": move, "count": count, **({"optimal": optimal} if rated else {})} for move, (count, optimal) in ordered]
+        counted = [{"move": move, "count": count, **({"optimal": optimal} if rated else {})} for move, (count, optimal) in ordered]
+        optimal_rate = wilson_ci(Distribution(float(bool(flag)) for flag in flags), CONFIDENCE).unwrap() if flags and rated else None
+        phase = PhaseMoves(counted, optimal_rate, regrets)
+        if tracker.is_complete():
+            self.finished[tracker.metadata_path] = phase
+            for game_round in tracker.completed:
+                self.moves.pop((tracker.metadata_path, game_round), None)
+        return phase
+
+    def _moves(self, tracker: ResultTracker) -> list[dict[str, Any]]:
+        # the learner's moves in the phase's recorded games, most frequent first; `optimal` only where the solver rated every one of them
+        return self._phase(tracker).moves
 
     def _game_regrets(self, tracker: ResultTracker) -> list[float] | None:
         # each recorded game's regret (the sum over the learner's moves); None unless the solver rated every move of the phase
-        regrets = []
-        for moves in self._rated(tracker):
-            if any(regret is None for _, _, regret in moves):
-                return None
-            regrets.append(sum(regret for _, _, regret in moves if regret is not None))
-        return regrets
+        return self._phase(tracker).regrets
 
     def _optimal_series(self, key: str, epochs: list[EpochResults], pick: Callable[[EpochResults], ResultTracker | None], interval: bool) -> dict[str, Any]:
         # per epoch the share of the learner's moves the solver rates optimal (Wilson over the moves), where it rated every move
@@ -379,10 +416,10 @@ class TrainingReporter:
             if tracker is None:
                 continue
             tracker = self._tracker(tracker)
-            flags = [is_optimal for moves in self._rated(tracker) for _, is_optimal, _ in moves]
-            if not flags or any(flag is None for flag in flags):
+            optimal_rate = self._phase(tracker).optimal
+            if optimal_rate is None:
                 continue
-            value, lower, upper = wilson_ci(Distribution(float(bool(flag)) for flag in flags), CONFIDENCE).unwrap()
+            value, lower, upper = optimal_rate
             points.append({"x": epoch.epoch.index, "value": value, **({"lower": lower, "upper": upper} if interval else {}), "moves": self._moves(tracker)})
         return {"item": key, "points": points}
 
@@ -433,21 +470,14 @@ class TrainingReporter:
         # the optimal policy's value of the reported runs' games in a measure, one line per distinct value, named by its game only when they differ;
         # `games`: the runs' games (Item.configs["game"]) it applies to, so a chart of some of the runs draws only theirs (a run that switches its
         # game at an epoch has the optimum of each game it plays)
-        games = self._epoch_games([run for run, _ in self.runs])
-        runs_of: dict[str, list[str]] = {}
-        for run, _ in self.runs:
-            for index in range(run.training_config.num_epochs + 1):
-                played = runs_of.setdefault(Epoch(run, index).game.to_string(), [])
-                if run.game.to_string() not in played:
-                    played.append(run.game.to_string())
         by_value: dict[float, list[str]] = {}
-        for game in games:
+        for game in self.games:
             if game in self.optimal:
                 by_value.setdefault(optimal(self.optimal[game]), []).append(game)
-        names, _ = short_names(games)
+        names, _ = short_names(self.games)
         lines = []
         for value, named in by_value.items():
             which = "" if len(by_value) == 1 else f" ({names[named[0]]})" if len(named) == 1 else f" ({len(named)} games)"
-            applies = list(dict.fromkeys(run for game in named for run in runs_of.get(game, [])))
+            applies = list(dict.fromkeys(run for game in named for run in self.runs_of.get(game, [])))
             lines.append({"label": f"optimal {_percent(value)}{which}", "value": value, "games": applies})
         return lines

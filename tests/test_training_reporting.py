@@ -124,6 +124,22 @@ def test_report_rebuild_reads_games_only_when_moves_are_requested(tmp_path, monk
     assert bool(loaded) == moves
 
 
+def test_report_counts_a_finished_phase_once_and_releases_its_games_moves(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    harness = _harness()
+    asyncio.run(harness.run(sync=True))
+    reporter = TrainingReporter(harness, tmp_path / "unused.json", include_complete=True)
+    first = reporter.build().to_dict()
+    assert reporter.finished and not reporter.moves
+
+    def refuse(self, game_round):
+        raise AssertionError("a build read a game of a finished phase again")
+
+    # every phase is complete, so the next build takes their moves from reporter.finished and reads no game
+    monkeypatch.setattr(ResultTracker, "load_game", refuse)
+    assert reporter.build().to_dict()["blocks"] == first["blocks"]
+
+
 def test_report_moves_requires_a_report_rebuild(monkeypatch):
     monkeypatch.setattr(sys, "argv", ["plybench-train", "--report-moves"])
     with pytest.raises(SystemExit) as error:

@@ -6,6 +6,8 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+## [4.20.1] - 2026-11-20
+
 ### Fixed
 
 - Job reports no longer slow a long training down: a finished phase's moves, optimal move rate and regrets are counted once (and its

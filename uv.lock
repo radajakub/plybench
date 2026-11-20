@@ -1705,7 +1705,7 @@ wheels = [
 
 [[package]]
 name = "plybench"
-version = "4.20.1"
+version = "5.0.0"
 source = { editable = "." }
 dependencies = [
     { name = "clankers" },

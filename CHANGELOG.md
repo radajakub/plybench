@@ -6,6 +6,8 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+## [5.0.0] - 2026-11-20
+
 ### Added
 
 - `plybench.common.store`: every result a run writes or reads back (games, matchup metadata and summaries, run manifests, learner

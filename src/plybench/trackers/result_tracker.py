@@ -1,14 +1,13 @@
 from __future__ import annotations
 
-import json
-import os
 import warnings
 from pathlib import Path
 from typing import Any
 
 from plybench.common.paths import BenchmarkPathBuilder, ExperimentPathBuilder
 from plybench.common.provenance import session_changes
-from plybench.common.serializable import Saveable
+from plybench.common.serializable import Serializable
+from plybench.common.store import store
 from plybench.configs.game_config import GameConfig
 from plybench.configs.parser import ConfigParser
 from plybench.configs.player_config import PlayerConfig
@@ -16,7 +15,7 @@ from plybench.trackers.game_tracker import GameTracker
 from plybench.utils.seed import derive_seed
 
 
-class ResultTracker(Saveable[[ConfigParser, ExperimentPathBuilder], Path, [ConfigParser, ExperimentPathBuilder]]):
+class ResultTracker(Serializable[[ConfigParser, ExperimentPathBuilder]]):
     @staticmethod
     def split_games_by_starting_player(games: list[GameTracker], player: PlayerConfig) -> tuple[list[GameTracker], list[GameTracker]]:
         i_games = [game for game in games if game.i_player.hash == player.hash]
@@ -58,8 +57,10 @@ class ResultTracker(Saveable[[ConfigParser, ExperimentPathBuilder], Path, [Confi
 
     @classmethod
     def load_metadata_only(cls, filepath: Path, parser: ConfigParser, path_builder: ExperimentPathBuilder) -> ResultTracker:
-        with open(filepath, "r") as f:
-            return cls.from_dict(json.load(f), parser, path_builder)
+        data = store().get(filepath.as_posix())
+        if data is None:
+            raise FileNotFoundError(f"no metadata at {filepath}")
+        return cls.from_dict(data, parser, path_builder)
 
     @classmethod
     def load(cls, filepath: Path, parser: ConfigParser, path_builder: ExperimentPathBuilder) -> ResultTracker:
@@ -111,7 +112,7 @@ class ResultTracker(Saveable[[ConfigParser, ExperimentPathBuilder], Path, [Confi
 
     def load_if_exists(self, games: bool = True) -> None:
         # the metadata, and with `games` every completed game (without: only what the metadata says, e.g. its summary)
-        if self.metadata_path.exists():
+        if store().exists(self.metadata_path.as_posix()):
             reference = self.load_metadata_only(self.metadata_path, self.parser, self.path_builder)
             self.completed = reference.completed
             self.sessions = reference.sessions
@@ -129,30 +130,21 @@ class ResultTracker(Saveable[[ConfigParser, ExperimentPathBuilder], Path, [Confi
             self.save_game(game_round, game_tracker)
 
     def load_game(self, game_round: int) -> GameTracker | None:
-        game_path = self.path_builder.game_file(self.base_path, game_round)
-        if not game_path.exists():
-            return None
-        with open(game_path, "r") as f:
-            return GameTracker.from_dict(json.load(f), self.parser)
+        data = store().get(self.path_builder.game_file(self.base_path, game_round).as_posix())
+        return None if data is None else GameTracker.from_dict(data, self.parser)
 
     def save_game(self, game_round: int, game_tracker: GameTracker) -> None:
-        self.base_path.mkdir(parents=True, exist_ok=True)
-        game_path = self.path_builder.game_file(self.base_path, game_round)
-        temp_path = game_path.with_suffix(".tmp")
-        try:
-            with open(temp_path, "w") as f:
-                json.dump(game_tracker.to_dict(), f, indent=None)
-                f.flush()
-                os.fsync(f.fileno())
-            os.replace(temp_path, game_path)
-            if game_round not in self.completed:
-                self.completed.add(game_round)
-                if self._session is not None:
-                    self._session["rounds"].append(game_round)
-                self.save(str(self.metadata_path))
-        except Exception:
-            temp_path.unlink(missing_ok=True)
-            raise
+        # a game recorded again (a replayed round whose metadata was not saved) replaces the earlier record, as the file did
+        store().put(self.path_builder.game_file(self.base_path, game_round).as_posix(), game_tracker.to_dict(), replace=True)
+        if game_round not in self.completed:
+            self.completed.add(game_round)
+            if self._session is not None:
+                self._session["rounds"].append(game_round)
+            self.save()
+
+    def save(self) -> None:
+        # the metadata, replaced after every game
+        store().put(self.metadata_path.as_posix(), self.to_dict(), replace=True)
 
     def begin_session(self, provenance: dict[str, Any]) -> None:
         # the rounds this run plays are filed under it, with both players described; stored with the metadata when its first game is recorded.
@@ -170,7 +162,7 @@ class ResultTracker(Saveable[[ConfigParser, ExperimentPathBuilder], Path, [Confi
     def check_seed(self) -> None:
         # a matchup is seeded throughout or not at all, so its metadata says what all its games were played under.
         # Only playing checks it; loading results to analyse them does not need the seed
-        if not self.metadata_path.exists():
+        if not store().exists(self.metadata_path.as_posix()):
             return
         recorded = self.load_metadata_only(self.metadata_path, self.parser, self.path_builder).seed
         if recorded is None:

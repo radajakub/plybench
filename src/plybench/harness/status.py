@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-import json
-import os
 from pathlib import Path
 from typing import Any
 
 from plybench.analysis.summary import CONFIDENCE, Summary, matches, summarize
+from plybench.common.store import store
 from plybench.harness.benchmark.benchmark import Benchmark
 from plybench.harness.training.training import TrainingHarness
 from plybench.trackers.result_tracker import ResultTracker
@@ -100,11 +99,11 @@ def check_summaries(source: Benchmark | TrainingHarness, write: bool = False) ->
 
 
 def _write(path: Path, summary: Summary, place: dict[str, Any] | None) -> None:
-    # the file as it is (its keys in their order), with the summary and the place replaced; written to a temporary file, then renamed over it
-    data = json.loads(path.read_text())
+    # the record as it is (its keys in their order), with the summary and the place replaced
+    data = store().get(path.as_posix())
+    if data is None:
+        raise FileNotFoundError(f"no metadata at {path}")
     data["summary"] = summary
     if place is not None:
         data["place"] = place
-    temporary = path.with_suffix(".summary.tmp")
-    temporary.write_text(json.dumps(data, indent=None))
-    os.replace(temporary, path)
+    store().put(path.as_posix(), data, replace=True)

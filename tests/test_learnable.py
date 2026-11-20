@@ -10,7 +10,7 @@ import random
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
-from typing import ClassVar
+from typing import Any, ClassVar
 
 import pytest
 from plyllm import LLM, LLMConfig, OpenAIProviderConfig
@@ -100,17 +100,17 @@ class _Stub(LearnablePlayer[float]):
         self.total += update
         self.commits += 1
 
-    def save_update(self, update: float, directory: Path) -> None:
-        (directory / "update.json").write_text(json.dumps(update))
+    def save_update(self, update: float) -> dict[str, Any]:
+        return {"update.json": update}
 
-    def load_update(self, directory: Path) -> float:
-        return json.loads((directory / "update.json").read_text())
+    def load_update(self, records: dict[str, Any]) -> float:
+        return records["update.json"]
 
-    def save_checkpoint(self, checkpoint: Path) -> None:
-        (checkpoint / "state.json").write_text(json.dumps({"total": self.total, "commits": self.commits}))
+    def save_checkpoint(self) -> dict[str, Any]:
+        return {"state.json": {"total": self.total, "commits": self.commits}}
 
-    def load_checkpoint(self, checkpoint: Path) -> None:
-        state = json.loads((checkpoint / "state.json").read_text())
+    def load_checkpoint(self, records: dict[str, Any]) -> None:
+        state = records["state.json"]
         self.total, self.commits = state["total"], state["commits"]
 
 
@@ -211,7 +211,7 @@ def test_a_game_that_teaches_nothing_is_cached_and_not_committed(harness):
 
 def test_an_update_that_does_not_load_back_unchanged_is_refused_before_it_is_cached(harness, monkeypatch):
     # stores the update rounded, so a resumed epoch would commit something else than this one did
-    monkeypatch.setattr(_Stub, "save_update", lambda self, update, directory: (directory / "update.json").write_text(json.dumps(round(update, 2))))
+    monkeypatch.setattr(_Stub, "save_update", lambda self, update: {"update.json": round(update, 2)})
 
     with pytest.raises(ValueError, match="load_update does not give back"):
         _run(harness)
@@ -378,11 +378,11 @@ class _Batched(_Stub):
     def commit_batch(self, update: float) -> None:
         self.batched += int(update)
 
-    def save_checkpoint(self, checkpoint: Path) -> None:
-        (checkpoint / "state.json").write_text(json.dumps({"total": self.total, "commits": self.commits, "batched": self.batched}))
+    def save_checkpoint(self) -> dict[str, Any]:
+        return {"state.json": {"total": self.total, "commits": self.commits, "batched": self.batched}}
 
-    def load_checkpoint(self, checkpoint: Path) -> None:
-        state = json.loads((checkpoint / "state.json").read_text())
+    def load_checkpoint(self, records: dict[str, Any]) -> None:
+        state = records["state.json"]
         self.total, self.commits, self.batched = state["total"], state["commits"], state["batched"]
 
 

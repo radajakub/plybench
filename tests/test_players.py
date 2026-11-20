@@ -8,6 +8,7 @@ import fcntl
 import json
 import threading
 from dataclasses import replace
+from pathlib import Path
 
 import pytest
 from plyllm import FailureKind, LLMCallError, LLMConfig, LLMResponse, LLMTokens, Provider
@@ -244,11 +245,12 @@ def _block_records(block_log) -> list[PromptBlock]:
     return [PromptBlock.from_dict(json.loads(line)) for line in block_log.read_text().splitlines()]
 
 
-def test_a_blocked_prompt_is_sent_again_and_recorded(tmp_path):
+def test_a_blocked_prompt_is_sent_again_and_recorded(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)  # the log is a key of the store, relative to the working directory
     """The same Gemini prompt was blocked in one game and answered in another, so a block is retried
     rather than scored as the model's failure, and kept on record to investigate."""
     llm = _ScriptedLLM(_blocked(), _blocked(), _answer('{"action": "C1R1"}'))
-    block_log = tmp_path / "llm_blocks.jsonl"
+    block_log = Path("llm_blocks.jsonl")
 
     out = _llm_move(llm, block_log)
 
@@ -261,9 +263,10 @@ def test_a_blocked_prompt_is_sent_again_and_recorded(tmp_path):
     assert blocks[0].input_tokens == 10 and "C1R1" in blocks[0].prompt_message
 
 
-def test_a_prompt_blocked_on_every_attempt_is_a_failed_move(tmp_path):
+def test_a_prompt_blocked_on_every_attempt_is_a_failed_move(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)  # the log is a key of the store, relative to the working directory
     llm = _ScriptedLLM(*[_blocked() for _ in range(_BLOCK_RETRIES + 1)])
-    block_log = tmp_path / "llm_blocks.jsonl"
+    block_log = Path("llm_blocks.jsonl")
 
     out = _llm_move(llm, block_log)
 
@@ -272,9 +275,10 @@ def test_a_prompt_blocked_on_every_attempt_is_a_failed_move(tmp_path):
     assert [block.attempt for block in _block_records(block_log)] == list(range(1, _BLOCK_RETRIES + 2))
 
 
-def test_a_transport_failure_during_retries_still_aborts_and_keeps_the_blocks(tmp_path):
+def test_a_transport_failure_during_retries_still_aborts_and_keeps_the_blocks(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)  # the log is a key of the store, relative to the working directory
     llm = _ScriptedLLM(_blocked(), LLMCallError(FailureKind.TIMEOUT, "slow"))
-    block_log = tmp_path / "llm_blocks.jsonl"
+    block_log = Path("llm_blocks.jsonl")
 
     with pytest.raises(LLMCallError):
         _llm_move(llm, block_log)
@@ -282,9 +286,10 @@ def test_a_transport_failure_during_retries_still_aborts_and_keeps_the_blocks(tm
     assert [block.attempt for block in _block_records(block_log)] == [1]
 
 
-def test_a_refusal_is_not_retried_or_recorded_as_a_block(tmp_path):
+def test_a_refusal_is_not_retried_or_recorded_as_a_block(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)  # the log is a key of the store, relative to the working directory
     llm = _ScriptedLLM(LLMCallError(FailureKind.REFUSAL, "no", _answer("I won't")), _answer('{"action": "C1R1"}'))
-    block_log = tmp_path / "llm_blocks.jsonl"
+    block_log = Path("llm_blocks.jsonl")
 
     out = _llm_move(llm, block_log)
 
@@ -354,9 +359,10 @@ def test_a_prompt_block_round_trips():
     assert PromptBlock.from_dict(json.loads(json.dumps(_BLOCK.to_dict()))) == _BLOCK
 
 
-def test_appending_a_prompt_block_waits_for_another_writer(tmp_path):
+def test_appending_a_prompt_block_waits_for_another_writer(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)  # the log is a key of the store, relative to the working directory
     # several benchmark processes share one block log; a writer holding the lock must finish its line first
-    block_log = tmp_path / "llm_blocks.jsonl"
+    block_log = Path("llm_blocks.jsonl")
     with open(block_log, "a") as other:
         fcntl.flock(other, fcntl.LOCK_EX)
         writer = threading.Thread(target=_BLOCK.append, args=(block_log,))
@@ -389,8 +395,9 @@ def test_an_illegal_answer_keeps_what_was_read():
     assert out.failure is MoveFailure.ILLEGAL and out.extracted == "<C9R9>"
 
 
-def test_a_move_names_its_blocked_attempts_by_their_ids_in_the_block_log(tmp_path):
-    block_log = tmp_path / "llm_blocks.jsonl"
+def test_a_move_names_its_blocked_attempts_by_their_ids_in_the_block_log(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)  # the log is a key of the store, relative to the working directory
+    block_log = Path("llm_blocks.jsonl")
 
     out = _llm_move(_ScriptedLLM(_blocked(), _blocked(), _answer('{"action": "C1R1"}')), block_log)
 

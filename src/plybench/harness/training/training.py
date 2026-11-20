@@ -2,8 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import os
-import shutil
 from pathlib import Path
 from typing import Any, cast
 
@@ -14,6 +12,7 @@ from plybench.common.enums import Mode
 from plybench.common.paths import TrainingHarnessPathBuilder, saved_games
 from plybench.common.progress import track
 from plybench.common.provenance import package_of, provenance, session_changes
+from plybench.common.store import store
 from plybench.configs.game_config import GameConfig
 from plybench.configs.matchup import Matchup
 from plybench.configs.player_config import PlayerConfig
@@ -24,7 +23,7 @@ from plybench.configs.training_run import Epoch, EpochPhase, TrainingRun
 from plybench.core.game import TurnBasedGame
 from plybench.harness.matchup import first_starts_by_parity, run_matchup_concurrent, run_matchup_sequential
 from plybench.harness.training.results import EpochResults, TrainingResults
-from plybench.player.learnable import LearnablePlayer
+from plybench.player.learnable import LearnablePlayer, write_records
 from plybench.player.player import Player, PlayerIdentifier
 from plybench.trackers.game_tracker import GameTracker
 from plybench.trackers.result_tracker import ResultTracker
@@ -171,7 +170,7 @@ class TrainingHarness:
         # check if there is a checkpoint
         checkpoint = self.path_builder.checkpoint(self.experiment, epoch.run, epoch.index)
         # if there is no checkpoint, we have to learn it
-        if not checkpoint.exists():
+        if not store().keys(checkpoint.as_posix()):
             await self._learn(epoch, checkpoint, game_callbacks, training_callbacks)
         # otherwise test the epoch checkpoint
         await self._test(epoch, sync, concurrency, game_callbacks, training_callbacks)
@@ -188,14 +187,8 @@ class TrainingHarness:
             learner.begin_epoch(self.path_builder.learner_dir(self.experiment, run, epoch.index))
             await self._train(epoch, learner, game_callbacks, training_callbacks)
 
-        # the directory's existence is what marks the epoch done, so stage the write and rename it into
-        # place: a checkpoint appears only once save_checkpoint returned, and an empty one means the
-        # player stores nothing rather than that the epoch died halfway through writing
-        staged = checkpoint.with_name(f"{checkpoint.name}.tmp")
-        shutil.rmtree(staged, ignore_errors=True)
-        staged.mkdir(parents=True, exist_ok=True)
-        learner.save_checkpoint(staged)
-        os.replace(staged, checkpoint)
+        # its records are what marks the epoch done, so they are written all at once: a checkpoint appears only once save_checkpoint returned
+        write_records(checkpoint, learner.save_checkpoint())
 
         training_callbacks.on_checkpoint(epoch, checkpoint)
 
@@ -298,10 +291,9 @@ class TrainingHarness:
                 )
             folders[folder] = run
 
-            manifest = self.path_builder.manifest(self.experiment, run)
-            if not manifest.exists():
+            stored = store().get(self.path_builder.manifest(self.experiment, run).as_posix())
+            if stored is None:
                 continue
-            stored = json.loads(manifest.read_text())
             expected = {**run.to_dict(), "seed": self.seed}
             # a field an older manifest does not have is not compared
             differing = {name: (stored[name], value) for name, value in expected.items() if name in stored and stored[name] != value}
@@ -330,13 +322,11 @@ class TrainingHarness:
 
     def _write_manifest(self, run: TrainingRun) -> None:
         # the paths carry identity only, so the counts behind a run live here
-        manifest = self.path_builder.manifest(self.experiment, run)
-        manifest.parent.mkdir(parents=True, exist_ok=True)
+        manifest = self.path_builder.manifest(self.experiment, run).as_posix()
         # every session that works on the run is added, as each may have run other code; the matchups keep their own
-        sessions = json.loads(manifest.read_text()).get("sessions", []) if manifest.exists() else []
+        sessions = (store().get(manifest) or {}).get("sessions", [])
         sessions.append(self._session(run))
-        with open(manifest, "w") as f:
-            json.dump({**run.to_dict(), "testers": self.tester_configs, "seed": self.seed, "sessions": sessions}, f, indent=2)
+        store().put(manifest, {**run.to_dict(), "testers": self.tester_configs, "seed": self.seed, "sessions": sessions}, replace=True)
 
     def _load_phase(self, phase: EpochPhase, games: bool = True) -> ResultTracker:
         tracker = ResultTracker.new(

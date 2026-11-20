@@ -9,6 +9,8 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Generic, ParamSpec, Self, TypeVar
 
+from plybench.common.store import store
+
 DeserializeArgs = ParamSpec("DeserializeArgs")
 LoadArgs = ParamSpec("LoadArgs")
 LoadPath = TypeVar("LoadPath", str, Path)
@@ -99,11 +101,5 @@ class ThreadSafeSaveable(Serializable[[]]):
 
 class ThreadSafeAppendable(Serializable[[]]):
     def append(self, filepath: Path) -> None:
-        # adds one JSON line. The file is locked while it is written, so lines from processes appending at
-        # the same time are never interleaved
-        filepath.parent.mkdir(parents=True, exist_ok=True)
-        with open(filepath, "a", encoding="utf-8") as file:
-            fcntl.flock(file, fcntl.LOCK_EX)
-            file.write(json.dumps(self.to_dict(), ensure_ascii=False) + "\n")
-            file.flush()
-            fcntl.flock(file, fcntl.LOCK_UN)
+        # adds one record to the log in the store; records from processes appending at the same time are never interleaved
+        store().append(filepath.as_posix(), self.to_dict())

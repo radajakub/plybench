@@ -6,6 +6,23 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+### Added
+
+- `plybench.common.store`: every result a run writes or reads back (games, matchup metadata and summaries, run manifests, learner
+  updates, states and checkpoints, the llm blocks log) goes through one `Store`, by key: the relative path the file has always had.
+  By default the keys are files under the working directory, as before (`FileStore`); `PLYBENCH_STORE=<name>` opens the store of an
+  entry point of the `plybench.stores` group instead (plystore registers `plystore`), so plybench depends on no database.
+
+### Changed
+
+- **Breaking:** a `LearnablePlayer` no longer writes files. `save_update(update)` and `save_checkpoint()` return records by name
+  (`{"update.json": ...}`; a name ending in `.json` holds a JSON value, any other text), and `load_update(records)` and
+  `load_checkpoint(records)` take them back; the harness keeps them in the store, all or none. The folders and file names are as before.
+  A learner that keeps nothing in a checkpoint is refused (its records mark the epoch done).
+- A result holding NaN or an infinity is refused when it is written (it was written as invalid JSON). The run manifest (`run.json`)
+  is compact JSON, as games and metadata already were. The `results/` folders are made when a result is written into them, not when
+  a path builder is created.
+
 ## [4.20.1] - 2026-11-20
 
 ### Fixed

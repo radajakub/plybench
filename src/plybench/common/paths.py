@@ -4,6 +4,7 @@ from abc import ABC
 from pathlib import Path
 from typing import Any
 
+from plybench.common.store import store
 from plybench.configs.game_config import GameConfig
 from plybench.configs.player_config import PlayerConfig
 from plybench.configs.training_run import EpochPhase, TrainingRun
@@ -27,13 +28,14 @@ def _build_dir(dir_name: str | Path) -> Path:
 
 def saved_games(folder: Path) -> int:
     # the game records under a results folder (a matchup's, or a training run's with all its phases)
-    return sum(1 for _ in folder.rglob("game_*.json")) if folder.exists() else 0
+    return sum(1 for key in store().keys(folder.as_posix()) if key.rsplit("/", 1)[-1].startswith("game_") and key.endswith(".json"))
 
 
 class BasePathBuilder(ABC):
     def __init__(self) -> None:
         self.base_experiments_dir = _build_dir("experiments")
-        self.base_results_dir = _build_dir("results")
+        # results are kept in the store (plybench.common.store), which makes a folder only when it writes into one
+        self.base_results_dir = Path("results")
         self.base_plots_dir = _build_dir("plots")
         self.base_analysis_dir = _build_dir("analysis")
         self.base_cache_dir = _build_dir("cache")
@@ -48,7 +50,7 @@ class ExperimentPathBuilder(BasePathBuilder):
         super().__init__()
         self.key = key
         self.experiments_dir = _build_dir(self.base_experiments_dir / self.key)
-        self.results_dir = _build_dir(self.base_results_dir / self.key)
+        self.results_dir = self.base_results_dir / self.key
         self.plots_dir = _build_dir(self.base_plots_dir / self.key)
 
     def experiment_path(self, experiment_name: str) -> Path:

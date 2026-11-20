@@ -11,7 +11,6 @@ never written down -> lower bound on the count itself).
 
 from __future__ import annotations
 
-import json
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -20,6 +19,7 @@ from typing import TypeVar
 from plyllm import LLM, LLMTokens, ModelConfig
 
 from plybench.common.progress import track
+from plybench.common.store import store
 from plybench.configs.game_config import GameConfig
 from plybench.configs.player_config import PlayerConfig
 from plybench.harness.benchmark.results import BenchmarkResults
@@ -127,7 +127,9 @@ def total_cost(llm: LLM, usages: Iterable[MatchupUsage]) -> tuple[float, int]:
 def learning_calls(learner_dir: Path) -> list[LLMCall]:
     # one epoch's calls, as its update cache stores them next to each update (LearnablePlayer.record_call); none for a learner
     # that makes no calls, or an epoch that did not train
-    return [LLMCall.from_dict(call) for path in sorted(learner_dir.glob(f"*/{LEARNER_CALLS}")) for call in json.loads(path.read_text())]
+    prefix = learner_dir.as_posix()
+    keys = [key for key in store().keys(prefix) if key.count("/") == prefix.count("/") + 2 and key.endswith(f"/{LEARNER_CALLS}")]
+    return [LLMCall.from_dict(call) for key in keys for call in store().get(key) or []]
 
 
 def calls_usage(calls: Iterable[LLMCall]) -> dict[str, TokenUsage]:

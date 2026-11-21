@@ -347,10 +347,13 @@ class TrainingReporter:
         # the learner's moves of each recorded game of the phase, as (move, optimal, regret), replayed once against the solver in a solvable game;
         # optimal and regret are None where the solver did not rate the game
         games = []
+        loaded = tracker.load_games(
+            game_round for game_round in tracker.completed if (tracker.metadata_path, game_round) not in self.moves and tracker.games[game_round - 1] is None
+        )
         for game_round in sorted(tracker.completed):
             key = (tracker.metadata_path, game_round)
             if key not in self.moves:
-                game = tracker.games[game_round - 1] or tracker.load_game(game_round)
+                game = tracker.games[game_round - 1] or loaded.get(game_round)
                 if game is None:
                     continue
                 rated: dict[int, tuple[bool, float]] = {}

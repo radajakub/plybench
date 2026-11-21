@@ -7,7 +7,7 @@ import os
 import posixpath
 import shutil
 import uuid
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -36,6 +36,10 @@ class Store(Protocol):
 
     def get(self, key: str) -> Any | None:
         # the record, None when there is none
+        ...
+
+    def get_many(self, keys: Sequence[str]) -> dict[str, Any]:
+        # the records of those keys that exist, in one call (a whole matchup for a report); missing keys are left out
         ...
 
     def exists(self, key: str) -> bool: ...
@@ -147,6 +151,9 @@ class FileStore:
     def get(self, key: str) -> Any | None:
         path = self.root / _check(key)
         return _decode(key, path.read_text(encoding="utf-8")) if path.is_file() else None
+
+    def get_many(self, keys: Sequence[str]) -> dict[str, Any]:
+        return {key: value for key in keys if (value := self.get(key)) is not None}
 
     def exists(self, key: str) -> bool:
         return (self.root / _check(key)).is_file()

@@ -6,6 +6,25 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+### Added
+
+- `Store.get_many(keys)`: the records of several keys in one call. `ResultTracker` reads a matchup's games with it
+  (`load_games`), so a report on a database store reads each matchup in one call instead of one per game.
+- `plybench-trace --list <folder>`: the keys of the saved games under a folder, as JSON.
+- Extra `store` (`plybench[store]`, also in `all` and the dev group): plystore's PostgreSQL backend, so
+  `PLYBENCH_STORE=plystore` keeps results in its database.
+- `plybench-experiment list|show|put|edit`: experiments in the store. A new version is checked as the harness would load it,
+  and cannot remove an item of an experiment that has results (disable it with `enabled: false`).
+
+### Changed
+
+- plybench-trace and `plybench.trace.load` read games, metadata and learner records through the store, by key; a path given from
+  another folder (`../plydata/plybench/results/...`) is read from the folder that holds its `results`. `TraceContext.learned` and
+  `resolve` give keys (the paths a run recorded), to read with `store()`.
+- `discover_matchups` (plot comparisons) finds the matchups' metadata through the store.
+- Experiments are read through the store (`experiments/<kind>/<name>.json`; by default the same files as before):
+  `Benchmark.load_experiment`, `TrainingHarness.load_experiment` and `plybench-plot --experiment`.
+
 ## [5.0.0] - 2026-11-20
 
 ### Added

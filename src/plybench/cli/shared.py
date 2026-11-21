@@ -15,6 +15,7 @@ import clankers
 from plybench.app import PlyBench
 from plybench.cli.limits import LIMITS_ENV, PROVIDER_WIDE, Limits, limits_path, load_limits
 from plybench.common.paths import BenchmarkPathBuilder
+from plybench.common.store import store
 from plybench.harness.benchmark.benchmark import Benchmark
 from plybench.harness.benchmark.results import BenchmarkResults
 from plybench.harness.training.training import TrainingHarness
@@ -157,14 +158,20 @@ def discover_matchups(op: PlyBench, experiment: str, game_str: str, paths: Bench
     models: set[str] = set()
     opponents: set[str] = set()
     num_games = 0
-    for metadata in (paths.results_dir / experiment).glob(f"{game.path}_*/*/metadata.json"):
-        data = json.loads(metadata.read_text())
+    folder = (paths.results_dir / experiment).as_posix()
+    found = [key for key in store().keys(folder) if _matchup_metadata(key.removeprefix(folder + "/").split("/"), game.path)]
+    for data in store().get_many(found).values():
         if data.get("game_config") != game.to_string():
             continue  # a different game whose path shares the prefix
         models.add(data["i_config"])
         opponents.add(data["o_config"])
         num_games = max(num_games, data.get("n_games", 0))
     return models, opponents, num_games
+
+
+def _matchup_metadata(parts: list[str], game_path: str) -> bool:
+    # <game path>_<params>/<players>/metadata.json under the experiment's results
+    return len(parts) == 3 and parts[0].startswith(f"{game_path}_") and parts[2] == "metadata.json"
 
 
 def load_paired_results(op: PlyBench, experiment: str, game_a: str, game_b: str, paths: BenchmarkPathBuilder) -> BenchmarkResults:

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import json
 
 from plybench.app import PlyBench
 from plybench.callbacks.benchmark_callbacks import BenchmarkCallbacks
@@ -11,6 +10,7 @@ from plybench.common.progress import track
 from plybench.configs.benchmark_config import BenchmarkConfig
 from plybench.configs.matchup import Matchup
 from plybench.harness.benchmark.results import BenchmarkResults
+from plybench.harness.experiments import experiment_key, load_experiment
 from plybench.harness.matchup import COLOUR_RULES, ColourRule, first_starts, run_matchup_concurrent
 from plybench.trackers.result_tracker import ResultTracker
 
@@ -21,16 +21,13 @@ class Benchmark:
         cls, op: PlyBench, filename: str, game_override: list[str] | None = None, player_override: list[str] | None = None, opponent_override: list[str] | None = None
     ) -> Benchmark:
         path_builder = BenchmarkPathBuilder()
-        path = path_builder.experiment_path(filename)
-
-        with open(path) as f:
-            config = BenchmarkConfig.from_dict(json.load(f))
+        config = BenchmarkConfig.from_dict(load_experiment(path_builder.key, filename))
 
         if config.colour_rule not in COLOUR_RULES:
-            raise ValueError(f"{path}: unknown colour_rule {config.colour_rule!r}; expected one of {sorted(COLOUR_RULES)}")
+            raise ValueError(f"{experiment_key(path_builder.key, filename)}: unknown colour_rule {config.colour_rule!r}; expected one of {sorted(COLOUR_RULES)}")
 
         return cls(
-            path.stem,
+            filename,
             op,
             game_override if game_override is not None else config.get_game_configs(),
             player_override if player_override is not None else config.get_player_configs(),

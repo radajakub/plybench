@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import warnings
+from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
@@ -65,8 +66,8 @@ class ResultTracker(Serializable[[ConfigParser, ExperimentPathBuilder]]):
     @classmethod
     def load(cls, filepath: Path, parser: ConfigParser, path_builder: ExperimentPathBuilder) -> ResultTracker:
         tracker = cls.load_metadata_only(filepath, parser, path_builder)
-        for game_round in tracker.completed:
-            tracker.games[game_round - 1] = tracker.load_game(game_round)
+        for game_round, game in tracker.load_games(tracker.completed).items():
+            tracker.games[game_round - 1] = game
         return tracker
 
     def __init__(
@@ -119,8 +120,8 @@ class ResultTracker(Serializable[[ConfigParser, ExperimentPathBuilder]]):
             self.summary = reference.summary
             self.place = reference.place
             self.games = [None for _ in range(self.n)]
-            for game_round in self.completed if games else ():
-                self.games[game_round - 1] = self.load_game(game_round)
+            for game_round, game in self.load_games(self.completed if games else ()).items():
+                self.games[game_round - 1] = game
 
     def record_game(self, game_round: int, game_tracker: GameTracker) -> None:
         if self.games[game_round - 1] is not None:
@@ -132,6 +133,11 @@ class ResultTracker(Serializable[[ConfigParser, ExperimentPathBuilder]]):
     def load_game(self, game_round: int) -> GameTracker | None:
         data = store().get(self.path_builder.game_file(self.base_path, game_round).as_posix())
         return None if data is None else GameTracker.from_dict(data, self.parser)
+
+    def load_games(self, rounds: Iterable[int]) -> dict[int, GameTracker]:
+        # the recorded games of these rounds, read in one call (a database store answers it at once, not round by round); missing ones left out
+        keys = {self.path_builder.game_file(self.base_path, game_round).as_posix(): game_round for game_round in sorted(rounds)}
+        return {keys[key]: GameTracker.from_dict(data, self.parser) for key, data in store().get_many(list(keys)).items()}
 
     def save_game(self, game_round: int, game_tracker: GameTracker) -> None:
         # a game recorded again (a replayed round whose metadata was not saved) replaces the earlier record, as the file did

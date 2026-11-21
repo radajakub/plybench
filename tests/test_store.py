@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import math
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -38,6 +38,9 @@ class _MemoryStore:
 
     def get(self, key: str) -> Any | None:
         return self.records.get(key)
+
+    def get_many(self, keys: Sequence[str]) -> dict[str, Any]:
+        return {key: self.records[key] for key in keys if key in self.records}
 
     def exists(self, key: str) -> bool:
         return key in self.records

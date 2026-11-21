@@ -52,7 +52,9 @@ huggingface = ["plyllm[huggingface]"]
 # every remote provider, without the local HuggingFace models (torch, transformers): for machines that only call APIs or served models
 api = ["plyllm[openai,gemini,grok,anthropic,mistral,metacentrum,vllm,ollama]"]
 viz = ["matplotlib>=3.10.0"]
-all = ["plyllm[all]", "matplotlib>=3.10.0"]
+# results in plystore's PostgreSQL (PLYBENCH_STORE=plystore); without it they are files
+store = ["plystore[postgres]>=0.1.0,<1"]
+all = ["plyllm[all]", "matplotlib>=3.10.0", "plystore[postgres]>=0.1.0,<1"]
 
 [project.scripts]
 plybench-run = "plybench.cli.run:main"
@@ -62,6 +64,7 @@ plybench-analyze = "plybench.cli.analyze:main"
 plybench-plot = "plybench.cli.plot:main"
 plybench-plot-training = "plybench.cli.plot_training:main"
 plybench-trace = "plybench.cli.trace:main"
+plybench-experiment = "plybench.cli.experiment:main"
 
 [project.urls]
 Homepage = "https://plybench.jakubrada.com"
@@ -102,5 +105,6 @@ dev = [
     "ruff>=0.16.0",
     "plyllm[openai,gemini,anthropic,mistral]",
     "matplotlib>=3.10.0",
+    "plystore[postgres]>=0.1.0,<1",
     "pyright>=1.1.414",
 ]

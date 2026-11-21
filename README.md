@@ -289,7 +289,9 @@ run continues where it left off.
 An experiment is a JSON file under `experiments/benchmarks/<name>.json`. Start from
 [`templates/benchmark.json`](templates/benchmark.json): it declares the sweep — the games, the players,
 the opponents (`random`, `mcts`, `optimal`), and the number of rounds — with per-item `enabled` toggles
-so you can narrow a run without editing the sweep. The template runs offline as it stands.
+so you can narrow a run without editing the sweep. The template runs offline as it stands. Once an
+experiment has results, disable an item instead of removing it; `uv run plybench-experiment put benchmarks/<name> <file>`
+(or `edit`) saves a new version and refuses one that removes an item of an experiment with results.
 
 ```bash
 git clone https://github.com/radajakub/plybench.git

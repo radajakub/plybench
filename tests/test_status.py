@@ -100,10 +100,12 @@ def test_every_recorded_game_updates_the_summary_and_the_status_reads_only_it(tm
     with_games = benchmark_status(benchmark)
 
     # the status from the summaries alone: not one game is loaded
-    def refuse(self, game_round):
-        raise AssertionError("a game was loaded")
+    def refuse(self, rounds):
+        if list(rounds):
+            raise AssertionError("a game was loaded")
+        return {}
 
-    monkeypatch.setattr(ResultTracker, "load_game", refuse)
+    monkeypatch.setattr(ResultTracker, "load_games", refuse)
     assert benchmark_status(benchmark) == with_games
 
 

@@ -125,9 +125,10 @@ class GameTrace:
 
 @dataclass(frozen=True)
 class TraceContext:
-    # what a reader of one player's part of a game is given: the game, its file, the player and its seat, its steps in order, its description from
+    # what a reader of one player's part of a game is given: the game, its key, the player and its seat, its steps in order, its description from
     # the session that played the round, what it kept at the end, and its learner folder for this game (update.json, llm_calls.json, state/; None
-    # outside training). `resolve` turns a recorded path (relative to the working directory of the run) into one under the results being read
+    # outside training). Paths here are store keys (plybench.common.store): read them with store(). `resolve` turns a path the run recorded (relative
+    # to its working directory, "results/...") into its key
     game: GameTracker
     game_file: Path
     player: PlayerConfig

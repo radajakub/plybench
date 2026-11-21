@@ -60,10 +60,12 @@ def test_training_cli_finalizes_without_loading_all_games(tmp_path, monkeypatch,
         assert games is False
         with monkeypatch.context() as context:
 
-            def refuse(self, game_round):
-                raise AssertionError("finalization loaded a game")
+            def refuse(self, rounds):
+                if list(rounds):
+                    raise AssertionError("finalization loaded a game")
+                return {}
 
-            context.setattr(ResultTracker, "load_game", refuse)
+            context.setattr(ResultTracker, "load_games", refuse)
             return original_get_results(progress=progress, games=games)
 
     original_callbacks = train.console_training_callbacks
@@ -104,14 +106,15 @@ def test_report_rebuild_reads_games_only_when_moves_are_requested(tmp_path, monk
                     for point in series["points"]:
                         point.pop("moves", None)
     loaded = []
-    original_load = ResultTracker.load_game
+    original_load = ResultTracker.load_games
 
-    def load(self, game_round):
-        assert moves, "the default report rebuild read a game"
-        loaded.append(game_round)
-        return original_load(self, game_round)
+    def load(self, rounds):
+        rounds = list(rounds)
+        assert moves or not rounds, "the default report rebuild read a game"
+        loaded.extend(rounds)
+        return original_load(self, rounds)
 
-    monkeypatch.setattr(ResultTracker, "load_game", load)
+    monkeypatch.setattr(ResultTracker, "load_games", load)
     monkeypatch.setattr(train, "training_from_args", lambda op, args: harness)
     monkeypatch.setattr(train, "build_op", lambda **kwargs: harness.op)
     argv = ["plybench-train", "--experiment", "reporting", "--report-only", "rebuilt.json"]
@@ -132,11 +135,13 @@ def test_report_counts_a_finished_phase_once_and_releases_its_games_moves(tmp_pa
     first = reporter.build().to_dict()
     assert reporter.finished and not reporter.moves
 
-    def refuse(self, game_round):
-        raise AssertionError("a build read a game of a finished phase again")
+    def refuse(self, rounds):
+        if list(rounds):
+            raise AssertionError("a build read a game of a finished phase again")
+        return {}
 
     # every phase is complete, so the next build takes their moves from reporter.finished and reads no game
-    monkeypatch.setattr(ResultTracker, "load_game", refuse)
+    monkeypatch.setattr(ResultTracker, "load_games", refuse)
     assert reporter.build().to_dict()["blocks"] == first["blocks"]
 
 

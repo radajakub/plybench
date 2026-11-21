@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import json
 from pathlib import Path
 from typing import Any, cast
 
@@ -21,6 +20,7 @@ from plybench.configs.training_config import TrainingConfig
 from plybench.configs.training_harness_config import TrainingHarnessConfig
 from plybench.configs.training_run import Epoch, EpochPhase, TrainingRun
 from plybench.core.game import TurnBasedGame
+from plybench.harness.experiments import load_experiment
 from plybench.harness.matchup import first_starts_by_parity, run_matchup_concurrent, run_matchup_sequential
 from plybench.harness.training.results import EpochResults, TrainingResults
 from plybench.player.learnable import LearnablePlayer, write_records
@@ -42,13 +42,10 @@ class TrainingHarness:
         training_override: list[str] | None = None,
     ) -> TrainingHarness:
         path_builder = TrainingHarnessPathBuilder()
-        path = path_builder.experiment_path(filename)
-
-        with open(path) as f:
-            config = TrainingHarnessConfig.from_dict(json.load(f))
+        config = TrainingHarnessConfig.from_dict(load_experiment(path_builder.key, filename))
 
         return cls(
-            path.stem,
+            filename,
             op,
             game_override if game_override is not None else config.get_game_configs(),
             player_override if player_override is not None else config.get_player_configs(),

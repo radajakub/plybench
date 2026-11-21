@@ -34,7 +34,6 @@ Examples:
 from __future__ import annotations
 
 import argparse
-import json
 from pathlib import Path
 from typing import TypeVar, cast
 
@@ -65,6 +64,7 @@ from plybench.common.paths import BenchmarkPathBuilder
 from plybench.configs.benchmark_config import BenchmarkConfig
 from plybench.configs.player_config import PlayerConfig
 from plybench.harness.benchmark.results import BenchmarkResults
+from plybench.harness.experiments import load_experiment
 from plybench.registry import Registry
 from plybench.utils.enums import ExtendedEnum
 
@@ -121,8 +121,7 @@ def _series_groups(
 def _palette_players(op: PlyBench, args: argparse.Namespace, results: BenchmarkResults, color_by: ColorBy) -> list[PlayerConfig]:
     if color_by is ColorBy.PLAYER or not args.experiment:
         return results.player_configs
-    with open(BenchmarkPathBuilder().experiment_path(args.experiment)) as handle:
-        config = BenchmarkConfig.from_dict(json.load(handle))
+    config = BenchmarkConfig.from_dict(load_experiment(BenchmarkPathBuilder().key, args.experiment))
     return [op.registry.player_config(value) for value in config.get_player_configs()]
 
 

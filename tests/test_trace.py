@@ -8,9 +8,13 @@ import asyncio
 import json
 
 from plyllm import LLMConfig
+from test_store import _MemoryStore
 
 from plybench.app import PlyBench
 from plybench.cli import trace as trace_cli
+from plybench.cli.shared import discover_matchups
+from plybench.common.paths import BenchmarkPathBuilder
+from plybench.common.store import STORE_ENV, use_store
 from plybench.configs.matchup import Matchup
 from plybench.harness.matchup import run_matchup_concurrent
 from plybench.trace.load import load_game, move_event
@@ -126,3 +130,50 @@ def test_a_folder_of_games_reads_as_played_without_the_players(tmp_path, monkeyp
     assert [game["round"] for game in games] == list(range(1, MATCHUP.num_games + 1))
     played = load_game(tracker.path_builder.game_file(tracker.base_path, 1), registry)
     assert games[0]["players"] == {} and games[0]["steps"] == json.loads(json.dumps(played.to_dict()))["steps"] and games[0]["final"] == played.final
+
+
+def test_games_are_listed_and_read_from_anywhere_by_their_results_folder(tmp_path, monkeypatch, capsys):
+    (tmp_path / "data").mkdir()
+    monkeypatch.chdir(tmp_path / "data")
+    tracker = asyncio.run(run_matchup_concurrent(op, MATCHUP, experiment="exp", max_concurrent=1, seed=3))
+    experiment = tracker.path_builder.results_dir / "exp"
+    expected = [tracker.path_builder.game_file(tracker.base_path, game_round).as_posix() for game_round in range(1, MATCHUP.num_games + 1)]
+    monkeypatch.chdir(tmp_path)
+
+    # from another folder: the path finds its results folder, and the keys are named from it on, as runs record them
+    monkeypatch.setattr("sys.argv", ["plybench-trace", str(tmp_path / "data" / experiment), "--list"])
+    trace_cli.main()
+    assert json.loads(capsys.readouterr().out) == {"games": expected}
+    monkeypatch.setattr("sys.argv", ["plybench-trace", f"data/../data/{expected[0]}", "--json"])
+    trace_cli.main()
+    assert json.loads(capsys.readouterr().out)["round"] == 1
+
+
+def test_a_game_reads_back_from_another_store(tmp_path, monkeypatch, capsys):
+    monkeypatch.chdir(tmp_path)
+    memory = _MemoryStore()
+    use_store(memory)
+    try:
+        tracker = asyncio.run(run_matchup_concurrent(op, MATCHUP, experiment="exp", max_concurrent=1, seed=3))
+        assert not (tmp_path / "results").exists()
+        game_file = tracker.path_builder.game_file(tracker.base_path, 1)
+        assert load_game(game_file, registry).players["o"].config == "random:distribution=normal"
+        monkeypatch.setenv(STORE_ENV, "memory")
+        monkeypatch.setattr("sys.argv", ["plybench-trace", str(game_file.parent), "--steps"])
+        trace_cli.main()
+        assert [game["round"] for game in json.loads(capsys.readouterr().out)["games"]] == list(range(1, MATCHUP.num_games + 1))
+    finally:
+        use_store(None)
+
+
+def test_the_recorded_matchups_of_a_game_are_found_in_the_store(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    memory = _MemoryStore()
+    use_store(memory)
+    try:
+        asyncio.run(run_matchup_concurrent(op, MATCHUP, experiment="exp", max_concurrent=1, seed=3))
+        found = discover_matchups(op, "exp", "tic_tac_toe:", BenchmarkPathBuilder())
+        assert found == ({MATCHUP.i.to_string()}, {MATCHUP.o.to_string()}, MATCHUP.num_games)
+        assert discover_matchups(op, "exp", "nim:", BenchmarkPathBuilder()) == (set(), set(), 0)
+    finally:
+        use_store(None)

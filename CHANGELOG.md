@@ -6,6 +6,8 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+## [5.1.0] - 2026-11-21
+
 ### Added
 
 - `Store.get_many(keys)`: the records of several keys in one call. `ResultTracker` reads a matchup's games with it

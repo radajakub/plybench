@@ -6,6 +6,8 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+## [5.2.0] - 2026-11-22
+
 ### Added
 
 - `plybench-experiment put --expect <file>` saves only if the store holds that version now, `--new` only if the experiment

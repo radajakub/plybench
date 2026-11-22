@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from types import EllipsisType
 from typing import Any
 
 from plybench.common.store import store
@@ -61,11 +62,14 @@ def check_experiment(kind: str, data: Any) -> None:
         raise ValueError(f"unknown colour_rule {config.colour_rule!r}; expected one of {sorted(COLOUR_RULES)}")
 
 
-def save_experiment(kind: str, name: str, data: dict[str, Any]) -> None:
-    # a new experiment, or a new version of one; refused when it removes an item of an experiment that has results
+def save_experiment(kind: str, name: str, data: dict[str, Any], expected: dict[str, Any] | None | EllipsisType = ...) -> None:
+    # a new experiment, or a new version of one; refused when it removes an item of an experiment that has results. `expected`: the version it must
+    # replace (None: it must be new), refused when the store holds another, so a version decided on elsewhere never overwrites a newer one
     key = experiment_key(kind, name)
     check_experiment(kind, data)
     old = store().get(key)
+    if expected is not ... and old != expected:
+        raise ValueError(f"{key} is not the version expected: {'it does not exist' if old is None else 'it exists' if expected is None else 'it changed'}")
     if old is not None:
         new = _items(data)
         removed = sorted(f"{field}: {value}" for field, values in _items(old).items() for value in values - new.get(field, set()))

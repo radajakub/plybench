@@ -6,6 +6,14 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+### Added
+
+- `plybench-experiment put --expect <file>` saves only if the store holds that version now, `--new` only if the experiment
+  does not exist (`save_experiment(..., expected)`): a version decided on elsewhere (plyservice's proposals) is checked and
+  saved in one process, and never overwrites a newer one.
+- A game's trace names the player in each seat (`seats`, also with `plybench-trace --steps`): its `result` is seat i's, and
+  a game's seats need not be its matchup's.
+
 ## [5.1.0] - 2026-11-21
 
 ### Added

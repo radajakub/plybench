@@ -112,6 +112,9 @@ class GameTrace:
     # the result for seat i ("win", "loss", "draw", "my_fail", "opponent_fail"); None for a game without an ending
     result: str | None
     players: dict[str, PlayerTrace] = field(default_factory=dict)
+    # the config of the player in each seat ("i", "o"), also without the players read: a game's seats need not be its matchup's (a colour rule or a
+    # training phase alternates who starts), so `result` is read for the player whose seat this names
+    seats: dict[str, str] = field(default_factory=dict)
     # the game as played, for a view of its states: every move of both players in order, the observation it ended in (None without an ending), the
     # instance's params (e.g. the doors of Monty Hall) and its other params (e.g. the Magic Square layout)
     steps: tuple[TraceStep, ...] = ()

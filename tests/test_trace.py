@@ -51,6 +51,8 @@ def test_a_benchmark_game_reads_back_with_both_players_described(tmp_path, monke
         ("i" if step["player_hash"] == MATCHUP.i.hash else "o", step["observation"], step["move"]) for step in steps
     ]
     assert {step.seat for step in trace.steps} == {"i", "o"} and trace.final is not None and trace.final.startswith("State:")
+    # whose seat is whose, as `result` is seat i's
+    assert trace.seats == {"i": MATCHUP.i.to_string(), "o": MATCHUP.o.to_string()}
     assert trace.instance_params is not None and trace.other_params is not None
 
 
@@ -130,6 +132,8 @@ def test_a_folder_of_games_reads_as_played_without_the_players(tmp_path, monkeyp
     assert [game["round"] for game in games] == list(range(1, MATCHUP.num_games + 1))
     played = load_game(tracker.path_builder.game_file(tracker.base_path, 1), registry)
     assert games[0]["players"] == {} and games[0]["steps"] == json.loads(json.dumps(played.to_dict()))["steps"] and games[0]["final"] == played.final
+    # without the players, still whose seat is whose
+    assert games[0]["seats"] == played.seats and set(played.seats) == {"i", "o"}
 
 
 def test_games_are_listed_and_read_from_anywhere_by_their_results_folder(tmp_path, monkeypatch, capsys):

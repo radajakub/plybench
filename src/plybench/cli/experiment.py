@@ -5,6 +5,7 @@ Examples:
     uv run plybench-experiment list --json                           # every experiment with its config, as JSON
     uv run plybench-experiment show benchmarks/ttt                   # one experiment, as JSON
     uv run plybench-experiment put benchmarks/ttt ttt.json           # a new experiment, or a new version of one (- reads standard input)
+    uv run plybench-experiment put benchmarks/ttt ttt.json --expect old.json   # only if the store holds old.json now (--new: only if it holds none)
     uv run plybench-experiment edit benchmarks/ttt                   # the current version in $EDITOR, saved when the editor closes
 
 A new version is checked as the harness would load it. It cannot remove an item of an experiment that has results: disable it (enabled: false).
@@ -49,6 +50,9 @@ def main() -> None:
     put = commands.add_parser("put", help="save a new experiment or a new version of one")
     put.add_argument("experiment", type=_named, help="<kind>/<name>")
     put.add_argument("file", help="the JSON file, - for standard input")
+    expected = put.add_mutually_exclusive_group()
+    expected.add_argument("--expect", metavar="FILE", help="save only if the store holds this version now (a JSON file)")
+    expected.add_argument("--new", action="store_true", help="save only if the experiment does not exist yet")
     commands.add_parser("edit", help="edit the current version in $EDITOR and save it").add_argument("experiment", type=_named, help="<kind>/<name>")
     args = parser.parse_args()
 
@@ -64,7 +68,7 @@ def main() -> None:
         if args.command == "show":
             print(json.dumps(load_experiment(kind, name), ensure_ascii=False, indent=2))
         elif args.command == "put":
-            save_experiment(kind, name, _read(args.file))
+            save_experiment(kind, name, _read(args.file), None if args.new else _read(args.expect) if args.expect else ...)
             print(f"saved {experiment_key(kind, name)}")
         else:
             _edit(kind, name)

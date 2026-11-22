@@ -52,7 +52,10 @@ def load_game(game_file: Path, registry: Registry, players: bool = True) -> Game
     seats = {game.i_player.hash: "i", game.o_player.hash: "o"} if game.i_player.hash != game.o_player.hash else {}
     steps = tuple(TraceStep(seats.get(step.player_hash), step.observation, step.move) for step in game.steps)
     final = game.ending.observation if game.ending is not None else None
-    return GameTrace(game_file.as_posix(), metadata.get("game_config"), game.game_round, game.seed, place, result, read, steps, final, game.instance_params, game.other_params)
+    configs = {"i": game.i_player.to_string(), "o": game.o_player.to_string()}
+    return GameTrace(
+        game_file.as_posix(), metadata.get("game_config"), game.game_round, game.seed, place, result, read, configs, steps, final, game.instance_params, game.other_params
+    )
 
 
 def game_files(folder: Path, nested: bool = False) -> list[Path]:

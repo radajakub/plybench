@@ -100,6 +100,30 @@ def test_the_command_lists_shows_and_saves_experiments(memory, tmp_path, monkeyp
     assert list_experiments("benchmarks") == {"ttt": _config(ToggleItem(UNIFORM, True))}
 
 
+def test_a_version_is_saved_only_over_the_version_expected(memory, tmp_path, monkeypatch, capsys):
+    first, second = _config(ToggleItem(UNIFORM, True)), _config(ToggleItem(UNIFORM, True), ToggleItem(NORMAL, True))
+    with pytest.raises(ValueError, match="is not the version expected: it does not exist"):
+        save_experiment("benchmarks", "ttt", first, first)
+    save_experiment("benchmarks", "ttt", first, None)
+    with pytest.raises(ValueError, match="is not the version expected: it exists"):
+        save_experiment("benchmarks", "ttt", second, None)
+    with pytest.raises(ValueError, match="is not the version expected: it changed"):
+        save_experiment("benchmarks", "ttt", second, second)
+    save_experiment("benchmarks", "ttt", second, first)
+    assert load_experiment("benchmarks", "ttt") == second
+    # the command: --expect a file of the version, --new
+    file, old = tmp_path / "new.json", tmp_path / "old.json"
+    file.write_text(json.dumps(first))
+    old.write_text(json.dumps(first))
+    code, _, err = _run(monkeypatch, capsys, "put", "benchmarks/ttt", str(file), "--expect", str(old))
+    assert code == 1 and "is not the version expected: it changed" in err
+    old.write_text(json.dumps(second))
+    assert _run(monkeypatch, capsys, "put", "benchmarks/ttt", str(file), "--expect", str(old))[:2] == (0, "saved experiments/benchmarks/ttt.json\n")
+    assert _run(monkeypatch, capsys, "put", "benchmarks/ttt", str(file), "--new")[0] == 1
+    assert _run(monkeypatch, capsys, "put", "benchmarks/fresh", str(file), "--new")[0] == 0
+    assert load_experiment("benchmarks", "ttt") == first and load_experiment("benchmarks", "fresh") == first
+
+
 def test_an_edit_the_store_refuses_is_kept(memory, tmp_path, monkeypatch, capsys):
     save_experiment("benchmarks", "ttt", _config(ToggleItem(UNIFORM, True), ToggleItem(NORMAL, True)))
     memory.put("results/benchmarks/ttt/game_1.json", {})

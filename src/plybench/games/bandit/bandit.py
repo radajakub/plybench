@@ -13,7 +13,7 @@ from plybench.core.interface import InterfaceAction, InterfaceObservation, Inter
 from plybench.core.llm_interface import LLMObservation
 from plybench.core.prompt_adapter import SinglePlayerPromptAdapter
 from plybench.games.bandit.spiel import _DEFAULT_PARAMS, COLOURS, GAME_NAME, check_shift, parse_p, shifted
-from plybench.utils.text import extract_params
+from plybench.utils.text import extract_params, to_bool
 
 
 def _fractions(p: tuple[Fraction, ...]) -> str:
@@ -34,6 +34,8 @@ class BanditGameParams(GameParams):
     switch_epoch: int | None = None
     # `omitted`: the prompt does not say that the probabilities never change, which a switch makes false
     stationarity: str = "stated"
+    # false: the output format names no example move, which for the bandit is a colour (red) and so may bias the choice
+    example: bool = True
 
     @classmethod
     def from_string(cls, params_string: str) -> BanditGameParams:
@@ -54,26 +56,29 @@ class BanditGameParams(GameParams):
         # epoch 0 only tests the untrained player, so the first epoch a switch can change is 1
         if switch_epoch is not None and switch_epoch < 1:
             raise ValueError(f"The switch epoch must be at least 1, not {switch_epoch}")
-        return cls(p=p, shift=shift, rules=rules, switch=switch, switch_epoch=switch_epoch, stationarity=stationarity)
+        example = to_bool(params.get("example", True))
+        return cls(p=p, shift=shift, rules=rules, switch=switch, switch_epoch=switch_epoch, stationarity=stationarity, example=example)
 
     def to_string(self) -> str:
-        # the probabilities as exact fractions, so a decimal and a fraction are one game; the switch and the stationarity only when set, so the strings
-        # of the games before them are unchanged
+        # the probabilities as exact fractions, so a decimal and a fraction are one game; the switch, the stationarity and the example only when set,
+        # so the strings of the games before them are unchanged
         switch = f",switch={_fractions(self.switch)},switch_epoch={self.switch_epoch}" if self.switch is not None else ""
         stationarity = f",stationarity={self.stationarity}" if self.stationarity != "stated" else ""
-        return f"p={_fractions(self.p)},shift={self.shift},rules={self.rules}{switch}{stationarity}"
+        example = ",example=false" if not self.example else ""
+        return f"p={_fractions(self.p)},shift={self.shift},rules={self.rules}{switch}{stationarity}{example}"
 
     @property
     def path_suffix(self) -> str:
         switch = f"_switch_{_path_fractions(self.switch)}_epoch_{self.switch_epoch}" if self.switch is not None else ""
         stationarity = f"_stationarity_{self.stationarity}" if self.stationarity != "stated" else ""
-        return f"{len(self.p)}_buttons_p_{_path_fractions(self.p)}_shift_{self.shift}_{self.rules}{switch}{stationarity}"
+        example = "_no_example" if not self.example else ""
+        return f"{len(self.p)}_buttons_p_{_path_fractions(self.p)}_shift_{self.shift}_{self.rules}{switch}{stationarity}{example}"
 
     def at_epoch(self, epoch: int) -> BanditGameParams:
         # before the switch the run's own params; from it on a game without a switch that plays the new probabilities
         if self.switch is None or self.switch_epoch is None or epoch < self.switch_epoch:
             return self
-        return BanditGameParams(p=self.switch, shift=self.shift, rules=self.rules, stationarity=self.stationarity)
+        return BanditGameParams(p=self.switch, shift=self.shift, rules=self.rules, stationarity=self.stationarity, example=self.example)
 
     @property
     def chances(self) -> tuple[Fraction, ...]:
@@ -180,12 +185,16 @@ def _chance_rule(chances: tuple[Fraction, ...]) -> str:
 class BanditPromptAdapter(SinglePlayerPromptAdapter[[BanditGameParams]]):
     def __init__(self) -> None:
         super().__init__(head_prompt_template=BANDIT_HEAD_PROMPT, use_partial_state=True, position_name="")
+        self.example = True
 
     def action_format(self) -> str:
-        return "<button:colour>, e.g., <button:red>"
+        if self.example:
+            return "<button:colour>, e.g., <button:red>"
+        return "<button:colour>"
 
     def restart_prompt(self, params: BanditGameParams) -> None:
         chance_rule = _HIDDEN_CHANCE_RULE if params.rules == "hidden" else _chance_rule(params.chances)
+        self.example = params.example
         buttons = ", ".join(COLOURS[: len(params.p)])
         self.head_prompt = self.head_prompt_template.format(num_buttons=len(params.p), buttons=buttons, stationarity=_STATIONARITY[params.stationarity], chance_rule=chance_rule)
 

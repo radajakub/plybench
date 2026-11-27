@@ -169,6 +169,21 @@ def test_the_stationarity_sentence_can_be_omitted():
     assert omitted.replace("its own probability.", "its own fixed probability, which does not change between games.") == stated
 
 
+def test_the_example_move_can_be_left_out():
+    config = registry.game_config("bandit:p=0.6;0.4,rules=hidden,example=false")
+    assert config.to_string() == "bandit:p=3/5;2/5,shift=0,rules=hidden,example=false"
+    assert config.path == "bandit_2_buttons_p_3-5_2-5_shift_0_hidden_no_example"
+    assert registry.game_config(config.to_string()) == config
+    # the default keeps the example, and the strings of the games before the option
+    assert registry.game_config("bandit:p=0.6;0.4,rules=hidden").to_string() == "bandit:p=3/5;2/5,shift=0,rules=hidden"
+    shown, left_out = _prompt(_engine("p=0.6;0.4,rules=hidden")), _prompt(_engine("p=0.6;0.4,rules=hidden,example=false"))
+    assert "<button:colour>, e.g., <button:red>" in shown
+    assert "e.g." not in left_out and left_out == shown.replace(", e.g., <button:red>", "")
+    # a switch keeps it
+    switched = registry.game_config("bandit:p=0;1,switch=1;0,switch_epoch=2,example=false").params
+    assert isinstance(switched, BanditGameParams) and not switched.at_epoch(2).example
+
+
 def test_invalid_switches_are_refused():
     with pytest.raises(ValueError, match="needs both"):
         registry.game_config("bandit:p=0;1,switch=1;0")

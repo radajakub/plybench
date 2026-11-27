@@ -10,7 +10,7 @@ from plybench.configs.game_params import GameParams
 from plybench.core.engine import TurnBasedEngine
 from plybench.core.game import OpenSpielAction, OpenSpielObservation, TurnBasedGame
 from plybench.core.interface import InterfaceAction, InterfaceObservation, InterfaceTransformer
-from plybench.core.llm_interface import LLMObservation
+from plybench.core.llm_interface import LLMAction, LLMObservation
 from plybench.core.prompt_adapter import SinglePlayerPromptAdapter
 from plybench.games.bandit.spiel import _DEFAULT_PARAMS, COLOURS, GAME_NAME, check_shift, parse_p, shifted
 from plybench.utils.text import extract_params, to_bool
@@ -36,6 +36,8 @@ class BanditGameParams(GameParams):
     stationarity: str = "stated"
     # false: the output format names no example move, which for the bandit is a colour (red) and so may bias the choice
     example: bool = True
+    # `reversed`: the prompt lists the buttons, the legal moves and the example in reverse order (blue before red); only the prompt changes, not the game
+    order: str = "listed"
 
     @classmethod
     def from_string(cls, params_string: str) -> BanditGameParams:
@@ -56,8 +58,10 @@ class BanditGameParams(GameParams):
         # epoch 0 only tests the untrained player, so the first epoch a switch can change is 1
         if switch_epoch is not None and switch_epoch < 1:
             raise ValueError(f"The switch epoch must be at least 1, not {switch_epoch}")
-        example = to_bool(params.get("example", True))
-        return cls(p=p, shift=shift, rules=rules, switch=switch, switch_epoch=switch_epoch, stationarity=stationarity, example=example)
+        example, order = to_bool(params.get("example", True)), params.get("order", "listed")
+        if order not in _ORDERS:
+            raise ValueError(f"Invalid order: {order}; expected one of {', '.join(_ORDERS)}")
+        return cls(p=p, shift=shift, rules=rules, switch=switch, switch_epoch=switch_epoch, stationarity=stationarity, example=example, order=order)
 
     def to_string(self) -> str:
         # the probabilities as exact fractions, so a decimal and a fraction are one game; the switch, the stationarity and the example only when set,
@@ -65,20 +69,22 @@ class BanditGameParams(GameParams):
         switch = f",switch={_fractions(self.switch)},switch_epoch={self.switch_epoch}" if self.switch is not None else ""
         stationarity = f",stationarity={self.stationarity}" if self.stationarity != "stated" else ""
         example = ",example=false" if not self.example else ""
-        return f"p={_fractions(self.p)},shift={self.shift},rules={self.rules}{switch}{stationarity}{example}"
+        order = f",order={self.order}" if self.order != "listed" else ""
+        return f"p={_fractions(self.p)},shift={self.shift},rules={self.rules}{switch}{stationarity}{example}{order}"
 
     @property
     def path_suffix(self) -> str:
         switch = f"_switch_{_path_fractions(self.switch)}_epoch_{self.switch_epoch}" if self.switch is not None else ""
         stationarity = f"_stationarity_{self.stationarity}" if self.stationarity != "stated" else ""
         example = "_no_example" if not self.example else ""
-        return f"{len(self.p)}_buttons_p_{_path_fractions(self.p)}_shift_{self.shift}_{self.rules}{switch}{stationarity}{example}"
+        order = f"_order_{self.order}" if self.order != "listed" else ""
+        return f"{len(self.p)}_buttons_p_{_path_fractions(self.p)}_shift_{self.shift}_{self.rules}{switch}{stationarity}{example}{order}"
 
     def at_epoch(self, epoch: int) -> BanditGameParams:
         # before the switch the run's own params; from it on a game without a switch that plays the new probabilities
         if self.switch is None or self.switch_epoch is None or epoch < self.switch_epoch:
             return self
-        return BanditGameParams(p=self.switch, shift=self.shift, rules=self.rules, stationarity=self.stationarity, example=self.example)
+        return BanditGameParams(p=self.switch, shift=self.shift, rules=self.rules, stationarity=self.stationarity, example=self.example, order=self.order)
 
     @property
     def chances(self) -> tuple[Fraction, ...]:
@@ -173,29 +179,40 @@ _HIDDEN_CHANCE_RULE = "You are not told these probabilities."
 # which rules the prompt hides: none, or the win probabilities
 _RULES = ("stated", "hidden")
 
+# the order the prompt lists the buttons in: as the actions are numbered (red first), or reversed
+_ORDERS = ("listed", "reversed")
+
 # whether the prompt says that the probabilities never change
 _STATIONARITY = {"stated": "Each button wins with its own fixed probability, which does not change between games.", "omitted": "Each button wins with its own probability."}
 
 
-def _chance_rule(chances: tuple[Fraction, ...]) -> str:
+def _chance_rule(chances: tuple[Fraction, ...], reverse: bool) -> str:
     # the probabilities, stated per button in the listed order; exact fractions
-    return "The " + ", the ".join(f"{colour} button wins with probability {chance}" for colour, chance in zip(COLOURS, chances)) + "."
+    pairs = list(zip(COLOURS, chances))
+    return "The " + ", the ".join(f"{colour} button wins with probability {chance}" for colour, chance in (pairs[::-1] if reverse else pairs)) + "."
 
 
 class BanditPromptAdapter(SinglePlayerPromptAdapter[[BanditGameParams]]):
     def __init__(self) -> None:
         super().__init__(head_prompt_template=BANDIT_HEAD_PROMPT, use_partial_state=True, position_name="")
-        self.example = True
+        self.example, self.reverse, self.first = True, False, COLOURS[0]
 
     def action_format(self) -> str:
+        # the example is the first button listed, so a reversed prompt is the mirror of the listed one
         if self.example:
-            return "<button:colour>, e.g., <button:red>"
+            return f"<button:colour>, e.g., <button:{self.first}>"
         return "<button:colour>"
 
+    def format_legal_actions(self, legal_actions: list[InterfaceAction]) -> list[LLMAction]:
+        actions = super().format_legal_actions(legal_actions)
+        return actions[::-1] if self.reverse else actions
+
     def restart_prompt(self, params: BanditGameParams) -> None:
-        chance_rule = _HIDDEN_CHANCE_RULE if params.rules == "hidden" else _chance_rule(params.chances)
-        self.example = params.example
-        buttons = ", ".join(COLOURS[: len(params.p)])
+        self.example, self.reverse = params.example, params.order == "reversed"
+        chance_rule = _HIDDEN_CHANCE_RULE if params.rules == "hidden" else _chance_rule(params.chances, self.reverse)
+        colours = COLOURS[: len(params.p)][::-1] if self.reverse else COLOURS[: len(params.p)]
+        self.first = colours[0]
+        buttons = ", ".join(colours)
         self.head_prompt = self.head_prompt_template.format(num_buttons=len(params.p), buttons=buttons, stationarity=_STATIONARITY[params.stationarity], chance_rule=chance_rule)
 
     def observation_prompt(self, observation: LLMObservation) -> str:

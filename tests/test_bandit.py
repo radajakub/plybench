@@ -184,6 +184,26 @@ def test_the_example_move_can_be_left_out():
     assert isinstance(switched, BanditGameParams) and not switched.at_epoch(2).example
 
 
+def test_the_buttons_can_be_listed_in_reverse_order():
+    config = registry.game_config("bandit:p=0.6;0.4,rules=hidden,order=reversed")
+    assert config.to_string() == "bandit:p=3/5;2/5,shift=0,rules=hidden,order=reversed"
+    assert config.path == "bandit_2_buttons_p_3-5_2-5_shift_0_hidden_order_reversed"
+    assert registry.game_config(config.to_string()) == config
+    listed, reverse = _prompt(_engine("p=0.6;0.4,rules=hidden")), _prompt(_engine("p=0.6;0.4,rules=hidden,order=reversed"))
+    # the mirror: the buttons, the legal moves and the example in reverse order, nothing else
+    mirrored = listed.replace("red, blue", "blue, red").replace("<button:red>, <button:blue>", "<button:blue>, <button:red>").replace("e.g., <button:red>", "e.g., <button:blue>")
+    assert reverse == mirrored and reverse != listed
+    stated = _prompt(_engine("p=0.6;0.4,order=reversed"))
+    assert "The blue button wins with probability 2/5, the red button wins with probability 3/5." in stated
+    # the game is the same: an answer names the same action as in the listed order
+    engine = _engine("p=1;0,order=reversed")
+    engine.reset()
+    legal = [engine.action_class.from_openspiel(move, engine.interface_transformer) for move in engine.game.get_legal_moves(0)]
+    assert engine.prompt_adapter.lookup_move(legal, "<button:blue>") is legal[1] and engine.prompt_adapter.lookup_move(legal, "<button:red>") is legal[0]
+    with pytest.raises(ValueError, match="Invalid order"):
+        registry.game_config("bandit:order=shuffled")
+
+
 def test_invalid_switches_are_refused():
     with pytest.raises(ValueError, match="needs both"):
         registry.game_config("bandit:p=0;1,switch=1;0")
